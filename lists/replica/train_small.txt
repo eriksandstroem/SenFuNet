@@ -1,0 +1,3 @@
+room_0/2/left_depth_gt room_0/2/left_depth_noise_5.0 room_0/2/left_bts_depth room_0/2/left_psmnet_depth room_0/2/left_oracle_depth room_0/2/left_rgb room_0/2/left_camera_matrix
+room_0/1/left_depth_gt room_0/1/left_depth_noise_5.0 room_0/1/left_bts_depth room_0/1/left_psmnet_depth room_0/1/left_oracle_depth room_0/1/left_rgb room_0/1/left_camera_matrix
+room_0/3/left_depth_gt room_0/3/left_depth_noise_5.0 room_0/3/left_bts_depth room_0/3/left_psmnet_depth room_0/3/left_oracle_depth room_0/3/left_rgb room_0/3/left_camera_matrix

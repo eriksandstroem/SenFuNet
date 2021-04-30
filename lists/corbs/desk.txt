@@ -1,0 +1,1 @@
+desk/colmap/dense/stereo/depth_maps desk/data/D1_pre_registereddata desk/data/D1_pre_registereddata/rgb.txt desk/data/D1_pre_registereddata/depth.txt desk/data/D1_Trajectory/groundtruth.txt

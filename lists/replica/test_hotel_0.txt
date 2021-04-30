@@ -1,0 +1,1 @@
+hotel_0/3/left_depth_gt hotel_0/3/left_depth_noise_5.0 hotel_0/3/left_bts_depth hotel_0/3/left_psmnet_depth hotel_0/3/left_oracle_depth hotel_0/3/left_rgb hotel_0/3/left_camera_matrix

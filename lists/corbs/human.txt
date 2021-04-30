@@ -1,0 +1,1 @@
+human/colmap/dense/stereo/depth_maps human/data/H1_pre_registereddata human/data/H1_pre_registereddata/rgb.txt human/data/H1_pre_registereddata/depth.txt human/data/H1_Trajectory/groundtruth.txt
