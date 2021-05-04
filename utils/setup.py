@@ -52,6 +52,8 @@ def get_database(dataset, config, mode='train'):
     database_config.transform = transform.ToTensor()
     database_config.erosion = config.FILTERING_MODEL.erosion
     database_config.n_features = config.FEATURE_MODEL.n_features
+    database_config.w_features = config.FILTERING_MODEL.w_features
+    database_config.test_mode = config.SETTINGS.test_mode
     database_config.scene_list = eval('config.DATA.{}_scene_list'.format(mode))
 
     return Database(dataset, database_config)
@@ -138,8 +140,8 @@ class Workspace(object):
         print('Saving config to ', self.workspace_path)
         save_config_to_json(self.workspace_path, config)
 
-    def save_model_state(self, state, is_best=False, is_best_tof=False, is_best_stereo=False):
-        save_checkpoint(state, is_best, is_best_tof, is_best_stereo, self.model_path)
+    def save_model_state(self, state, is_best_filt, is_best):
+        save_checkpoint(state, is_best_filt, is_best, self.model_path)
 
     def save_tsdf_data(self, file, data):
         tsdf_file = os.path.join(self.output_path, file)

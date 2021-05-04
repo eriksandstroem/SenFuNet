@@ -2,10 +2,10 @@ import torch
 
 import numpy as np
 
-class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
+class Fusion_TranslationLoss(torch.nn.Module):
 
 	def __init__(self, config, reduction='none'):
-		super(Fusion_TranslationFuseSensorsLoss, self).__init__()
+		super(Fusion_TranslationLoss, self).__init__()
 
 		self.l1_weight = config.LOSS.l1_weight
 		self.l2_weight = config.LOSS.l2_weight
@@ -13,6 +13,11 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 		self.fixed_fusion_net = config.FUSION_MODEL.fixed
 		self.gt_loss = config.LOSS.gt_loss
 		self.grid_weight_gt = config.LOSS.grid_weight_gt
+		self.multisensor = len(config.DATA.input) > 1 and not (config.FILTERING_MODEL.setting == 'avg' and config.FILTERING_MODEL.model == 'mlp')
+		self.occ_head = config.FILTERING_MODEL.model == 'mlp' and config.FILTERING_MODEL.setting == 'translate' \
+		 					and config.FILTERING_MODEL.MLP_MODEL.occ_head
+		self.occ_weight = config.LOSS.occ_weight
+
 
 		self.l1 = torch.nn.L1Loss(reduction=reduction)
 		self.l2 = torch.nn.MSELoss(reduction=reduction)
@@ -23,13 +28,20 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 	def forward(self, output):
 
 		est_grid = output['filtered_output']['tsdf_filtered_grid']['tsdf']
-		est_grid_tof = output['filtered_output']['tsdf_filtered_grid']['tsdf_tof']
-		est_grid_stereo = output['filtered_output']['tsdf_filtered_grid']['tsdf_stereo']
-		init_tof = output['filtered_output']['tsdf_filtered_grid']['tof_init']
-		init_stereo = output['filtered_output']['tsdf_filtered_grid']['stereo_init']
+		if self.multisensor:
+			est_grid_tof = output['filtered_output']['tsdf_filtered_grid']['tsdf_tof']
+			est_grid_stereo = output['filtered_output']['tsdf_filtered_grid']['tsdf_stereo']
+			init_tof = output['filtered_output']['tsdf_filtered_grid']['tof_init']
+			init_stereo = output['filtered_output']['tsdf_filtered_grid']['stereo_init']
+			if self.occ_head:
+				occ_tof = output['filtered_output']['tsdf_filtered_grid']['occ_tof']
+				occ_stereo = output['filtered_output']['tsdf_filtered_grid']['occ_stereo']
+		elif self.occ_head:
+			occ = output['filtered_output']['tsdf_filtered_grid']['occ']
 		if self.gt_loss:
 			raise NotImplementedError
 			est_gt_grid = output['filtered_output']['tsdf_gt_filtered_grid']['tsdf']
+
 		target_grid = output['filtered_output']['tsdf_target_grid']
 		est_interm = output['tsdf_fused']
 		target_interm = output['tsdf_target']
@@ -43,19 +55,7 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 		# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
 		l = self.grid_weight * l1_grid
 
-		# print('est_grid_tof.shape ', est_grid_tof.shape)
-		# print('target_grid.shape: ', target_grid.shape)
-		# print('init_tof sum', init_tof.sum())
-		# when fusing both sensors, we could have a situation where only 1 sensor integrates for the full 64 cube region
-		# then we need to have an if statement here to avoid an error
-		# print('est shape: ', est_grid_tof.shape)
-		# print('est shape tof init ', est_grid_tof[init_tof].shape)
-		# print('init shape', init_tof.shape)
-		# print('target  ', target_grid.shape)
-		# print('target init ', target_grid[init_tof].shape)
-		if est_grid_tof.shape[0] == 0: # should not be needed since I have a check for when no valid indices are passed - then I return None
-			l1_grid_tof = None
-		else:
+		if self.multisensor:
 			l1_grid_tof = self.l1.forward(est_grid_tof[init_tof], target_grid[init_tof])
 			if l1_grid_tof.shape[0] == 0:
 				l1_grid_tof = None
@@ -66,9 +66,7 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 				# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
 				l += self.grid_weight/2 * l1_grid_tof
 
-		if est_grid_stereo.shape[0] == 0:
-			l1_grid_stereo = None
-		else:
+
 			l1_grid_stereo = self.l1.forward(est_grid_stereo[init_stereo] , target_grid[init_stereo])
 			if l1_grid_stereo.shape[0] == 0:
 				l1_grid_stereo = None
@@ -78,6 +76,9 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 				# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
 				# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
 				l += self.grid_weight/2 * l1_grid_stereo
+		else:
+			l1_grid_tof = None
+			l1_grid_stereo = None
 
 		if not self.fixed_fusion_net:
 			l1_interm = self.l1.forward(est_interm, target_interm)
@@ -97,6 +98,38 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 			l += self.grid_weight_gt * l1_gt_grid
 		else:
 			l1_gt_grid = None
+
+		if self.occ_head:
+			occ_target_grid = target_grid.clone()
+			occ_target_grid[target_grid >= 0.] = 0.
+			occ_target_grid[target_grid < 0.] = 1.
+			if self.multisensor:
+				l_grid_occ_tof = torch.mean(self.occ.forward(occ_tof[init_tof], occ_target_grid[init_tof]))
+				if l_grid_occ_tof.isnan(): # to prevent nan loss for the first frame integration or when no valid indices exist for the opposite sensor
+					l_grid_occ_tof = None
+				else:
+					l += self.occ_weight/2 * l_grid_occ_tof
+				
+				l_grid_occ_stereo = torch.mean(self.occ.forward(occ_stereo[init_stereo], occ_target_grid[init_stereo]))
+				if l_grid_occ_stereo.isnan():
+					l_grid_occ_stereo = None
+				else:
+					l += self.occ_weight/2 * l_grid_occ_stereo
+
+				l_grid_occ = None
+			else:
+				l_grid_occ = torch.mean(self.occ.forward(occ, occ_target_grid))
+				if l_grid_occ.isnan(): # to prevent nan loss for the first frame integration or when no valid indices exist for the opposite sensor
+					l_grid_occ = None
+				else:
+					l += self.occ_weight * l_grid_occ
+
+				l_grid_occ_tof = None
+				l_grid_occ_stereo = None
+		else:
+			l_grid_occ_tof = None
+			l_grid_occ_stereo = None
+			l_grid_occ = None
 
 		output = dict()
 		output['loss'] = l
@@ -105,92 +138,11 @@ class Fusion_TranslationFuseSensorsLoss(torch.nn.Module):
 		output['l1_grid_tof'] = l1_grid_tof
 		output['l1_grid_stereo'] = l1_grid_stereo
 		output['l1_gt_grid'] = l1_gt_grid
+		output['l_occ_tof'] = l_grid_occ_tof
+		output['l_occ_stereo'] = l_grid_occ_stereo
+		output['l_occ'] = l_grid_occ
 
 		return output
-
-class Fusion_TranslationLoss(torch.nn.Module):
-
-	def __init__(self, config, reduction='none'):
-		super(Fusion_TranslationLoss, self).__init__()
-
-		self.l1_weight = config.LOSS.l1_weight
-		self.l2_weight = config.LOSS.l2_weight
-		self.grid_weight = config.LOSS.grid_weight
-		self.fixed_fusion_net = config.FUSION_MODEL.fixed
-		self.gt_loss = config.LOSS.gt_loss
-		self.grid_weight_gt = config.LOSS.grid_weight_gt
-
-		self.l1 = torch.nn.L1Loss(reduction=reduction)
-		self.l2 = torch.nn.MSELoss(reduction=reduction)
-		self.bce = torch.nn.BCEWithLogitsLoss(reduction=reduction) #, pos_weight=self.focus_outliers_weight)
-		self.occ = torch.nn.BCELoss(reduction=reduction)
-
-
-	def forward(self, output):
-
-		est_grid = output['filtered_output']['tsdf_filtered_grid']['tsdf']
-		if self.gt_loss:
-			est_gt_grid = output['filtered_output']['tsdf_gt_filtered_grid']['tsdf']
-		target_grid = output['filtered_output']['tsdf_target_grid']
-		est_interm = output['tsdf_fused']
-		target_interm = output['tsdf_target']
-
-
-		l1_grid = self.l1.forward(est_grid, target_grid)
-
-		normalization = torch.ones_like(l1_grid).sum()
-		l1_grid = l1_grid.sum() / normalization
-
-		# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
-		# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
-		l = self.grid_weight * l1_grid
-
-		if not self.fixed_fusion_net:
-			l1_interm = self.l1.forward(est_interm, target_interm)
-
-			normalization = torch.ones_like(l1_interm).sum()
-
-			l1_interm = l1_interm.sum() / normalization
-			l += l1_interm
-		else:
-			l1_interm = None
-
-		if self.gt_loss:
-			l1_gt_grid = self.l1.forward(est_gt_grid, target_grid)
-
-			normalization = torch.ones_like(l1_gt_grid).sum()
-			l1_gt_grid = l1_gt_grid.sum() / normalization
-			l += self.grid_weight_gt * l1_gt_grid
-		else:
-			l1_gt_grid = None
-
-		# if est_grid.isnan().sum():
-		# 	print('est_grid nan: ', est_grid.isnan().sum())
-		# if est_grid.isinf().sum():
-		# 	print('est_grid inf: ', est_grid.isinf().sum())
-		# if est_gt_grid.isnan().sum():
-		# 	print('est_gt_grid nan: ', est_gt_grid.isnan().sum())
-		# if est_gt_grid.isinf().sum():
-		# 	print('est_gt_grid inf: ', est_gt_grid.isinf().sum())
-		# if l1_grid.isnan().sum():
-		# 	print('l1_grid nan: ', l1_grid.isnan().sum())
-		# 	print('est_grid shape: ', est_grid.shape)
-		# if l1_grid.isinf().sum():
-		# 	print('l1_grid inf: ', l1_grid.isinf().sum())
-		# if l1_gt_grid.isnan().sum():
-		# 	print('l1_gt_grid nan: ', l1_gt_grid.isnan().sum())
-		# 	print('est_gt_grid shape: ', est_gt_grid.shape)
-		# if l1_gt_grid.isinf().sum():
-		# 	print('l1_gt_grid inf: ', l1_gt_grid.isinf().sum())
-		output = dict()
-		output['loss'] = l
-		output['l1_interm'] = l1_interm
-		output['l1_grid'] = l1_grid
-		output['l1_gt_grid'] = l1_gt_grid
-
-		return output
-
-
 
 class FusionLoss(torch.nn.Module):
 

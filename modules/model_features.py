@@ -8,16 +8,22 @@ from torch.nn.functional import normalize
 class EncoderBlock(nn.Module):
     '''Encoder block for the fusion network in NeuralFusion'''
 
-    def __init__(self, c_in, c_out, activation, resolution):
+    def __init__(self, c_in, c_out, activation, resolution, layernorm):
 
         super(EncoderBlock, self).__init__()
 
-        self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
-                                   # nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                   activation,
-                                   nn.Conv2d(c_out, c_out, (3, 3), padding=1),
-                                   # nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                   activation)
+        if layernorm:
+            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                                       activation,
+                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                                       activation)
+        else:
+            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                                       activation,
+                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                                       activation)
 
     def forward(self, x):
         return self.block(x)
@@ -26,16 +32,22 @@ class EncoderBlock(nn.Module):
 class DecoderBlock(nn.Module):
     '''Decoder block for the fusion network in NeuralFusion'''
 
-    def __init__(self, c_in, c_out, activation, resolution):
+    def __init__(self, c_in, c_out, activation, resolution, layernorm):
 
         super(DecoderBlock, self).__init__()
 
-        self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
-                                   # nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                   activation,
-                                   nn.Conv2d(c_out, c_out, (3, 3), padding=1),
-                                   # nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                   activation)
+        if layernorm:
+            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                                       activation,
+                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                                       activation)
+        else:
+            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                                       activation,
+                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                                       activation)
 
     def forward(self, x):
         return self.block(x)
@@ -54,6 +66,7 @@ class FeatureNet(nn.Module):
         self.w_rgb = config.w_rgb
         self.w_intensity_gradient = config.w_intensity_gradient
 
+
         # layer settings
         n_channels_input = self.n_features 
         n_channels_output = self.n_features
@@ -61,8 +74,10 @@ class FeatureNet(nn.Module):
         self.height = config.resy
         self.width = config.resx
         resolution = (self.height, self.width)
-        activation = eval(config.activation)
+        enc_activation = eval(config.enc_activation)
+        dec_activation = eval(config.dec_activation)
         self.tsdf_out = self.n_points
+        layernorm = config.layernorm
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
@@ -73,25 +88,29 @@ class FeatureNet(nn.Module):
         # add first encoder block
         self.encoder.append(EncoderBlock(n_channels_first,
                                          n_channels_input,
-                                         activation,
-                                         resolution))
+                                         enc_activation,
+                                         resolution,
+                                         layernorm))
         # add first decoder block
         self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient),
                                          self.n_layers * n_channels_output,
-                                         activation,
-                                         resolution))
+                                         dec_activation,
+                                         resolution,
+                                         layernorm))
 
         # adding model layers
         for l in range(1, self.n_layers):
             self.encoder.append(EncoderBlock(n_channels_first + l * n_channels_input,
                                              n_channels_input,
-                                             activation,
-                                             resolution))
+                                             enc_activation,
+                                             resolution,
+                                             layernorm))
 
             self.decoder.append(DecoderBlock(((self.n_layers + 1) - l) * n_channels_output,
                                              ((self.n_layers + 1) - (l + 1)) * n_channels_output,
-                                             activation,
-                                             resolution))
+                                             dec_activation,
+                                             resolution,
+                                             layernorm))
 
         self.tanh = nn.Tanh()
 

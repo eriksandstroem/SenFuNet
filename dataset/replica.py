@@ -68,10 +68,8 @@ class Replica(Dataset):
         self._load_color()
         self._load_depth_gt()
         self._load_cameras()
-        if self.input == 'multidepth':
-            self._load_depths()
-        else:
-            self._load_depth()
+
+        self._load_depths()
 
         
 
@@ -128,7 +126,7 @@ class Replica(Dataset):
 
 
 
-    def _load_depth(self): # loads the paths of the noisy depth images to a list
+    def _load_depth(self): # loads the paths of the noisy depth images to a list. Loads only one sensor
         self.depth_images = []
         if self.scenedir is not None:
             modality = ['left_depth_gt', 'left_depth_noise_5.0', 'left_bts_depth', 'left_psmnet_depth']
@@ -409,111 +407,46 @@ class Replica(Dataset):
         grad = (grad_x**2 + grad_y**2)**(1/2)
         sample['gradient'] = np.asarray(grad).astype(np.float32)
 
-        if self.input == 'multidepth':
-            # load noisy depth maps
-            file_tof = self.depth_images_tof[item]
-            # file_mono = self.depth_images_mono[item]
-            file_stereo = self.depth_images_stereo[item]
+        # load noisy depth maps
+        file_tof = self.depth_images_tof[item]
+        # file_mono = self.depth_images_mono[item]
+        file_stereo = self.depth_images_stereo[item]
 
-            depth_tof = io.imread(file_tof).astype(np.float32)
-            # depth_mono = io.imread(file_mono).astype(np.float32)
-            depth_stereo = io.imread(file_stereo).astype(np.float32)
+        depth_tof = io.imread(file_tof).astype(np.float32)
+        # depth_mono = io.imread(file_mono).astype(np.float32)
+        depth_stereo = io.imread(file_stereo).astype(np.float32)
 
-            step_x = depth_tof.shape[0] / self.resolution_tof[0]
-            step_y = depth_tof.shape[1] / self.resolution_tof[1]
+        step_x = depth_tof.shape[0] / self.resolution_tof[0]
+        step_y = depth_tof.shape[1] / self.resolution_tof[1]
 
-            index_y = [int(step_y * i) for i in
-                       range(0, int(depth_tof.shape[1] / step_y))]
-            index_x = [int(step_x * i) for i in
-                       range(0, int(depth_tof.shape[0] / step_x))]
+        index_y = [int(step_y * i) for i in
+                   range(0, int(depth_tof.shape[1] / step_y))]
+        index_x = [int(step_x * i) for i in
+                   range(0, int(depth_tof.shape[0] / step_x))]
 
-            depth_tof = depth_tof[:, index_y]
-            depth_tof = depth_tof[index_x, :]
+        depth_tof = depth_tof[:, index_y]
+        depth_tof = depth_tof[index_x, :]
 
-            step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
-            step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
+        step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
+        step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
 
-            index_y = [int(step_y * i) for i in
-                       range(0, int(depth_stereo.shape[1] / step_y))]
-            index_x = [int(step_x * i) for i in
-                       range(0, int(depth_stereo.shape[0] / step_x))]
+        index_y = [int(step_y * i) for i in
+                   range(0, int(depth_stereo.shape[1] / step_y))]
+        index_x = [int(step_x * i) for i in
+                   range(0, int(depth_stereo.shape[0] / step_x))]
 
-            depth_stereo = depth_stereo[:, index_y]
-            depth_stereo = depth_stereo[index_x, :]
+        depth_stereo = depth_stereo[:, index_y]
+        depth_stereo = depth_stereo[index_x, :]
 
-            depth_tof /= 1000.
-            # depth_mono /= 1000
-            depth_stereo /= 1000.
+        depth_tof /= 1000.
+        # depth_mono /= 1000
+        depth_stereo /= 1000.
 
-            # define mask
-            if self.fusion_strategy == 'routingNet':
-                mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
-                mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
-                # remove strong artifacts coming from pixels close to missing pixels
-                # the routing network computes bad depths for these pixels that are
-                # not missing in the original image due to the convolutions over
-                # zero-valued pixels.
-                # for i in range(10):
-                #     mask = binary_erosion(mask)
-
-                # do not integrate depth values close to the image boundary
-                # this is relevant for the stereo modality. 
-                mask[0:10, :] = 0
-                mask[-10:-1, :] = 0
-                mask[:, 0:10] = 0
-                mask[:, -10:-1] = 0
-
-                sample['mask'] = mask
-
-            elif self.fusion_strategy == 'fusionNet' or self.fusion_strategy == 'two_fusionNet' or self.fusion_strategy == 'fusionNet_conditioned':
-                mask = (depth_stereo > self.min_depth_stereo)
-                mask = np.logical_and(mask, depth_stereo < self.max_depth_stereo)
-
-                # do not integrate depth values close to the image boundary
-                # this is relevant for the stereo modality. 
-                mask[0:self.mask_stereo_height, :] = 0
-                mask[-self.mask_stereo_height:-1, :] = 0
-                mask[:, 0:self.mask_stereo_width] = 0
-                mask[:, -self.mask_stereo_width:-1] = 0
-                sample['stereo_mask'] = mask
-                mask = (depth_tof > self.min_depth_tof)
-                mask = np.logical_and(mask, depth_tof < self.max_depth_tof)
-
-                # do not integrate depth values close to the image boundary
-                # this is relevant for the stereo modality. 
-                mask[0:self.mask_tof_height, :] = 0
-                mask[-self.mask_tof_height:-1, :] = 0
-                mask[:, 0:self.mask_tof_width] = 0
-                mask[:, -self.mask_tof_width:-1] = 0
-                sample['tof_mask'] = mask
-
-            sample['tof_depth'] = np.asarray(depth_tof)
-            # sample['mono_depth'] = np.asarray(depth_mono)
-            sample['stereo_depth'] = np.asarray(depth_stereo)
-
-        else:
-            # load noisy depth map
-            file = self.depth_images[item]
-            # print(file)
-            depth = io.imread(file).astype(np.float32)
-
-            step_x = depth.shape[0] / self.resolution[0]
-            step_y = depth.shape[1] / self.resolution[1]
-
-            index_y = [int(step_y * i) for i in
-                       range(0, int(depth.shape[1] / step_y))]
-            index_x = [int(step_x * i) for i in
-                       range(0, int(depth.shape[0] / step_x))]
-
-            depth = depth[:, index_y]
-            depth = depth[index_x, :]
-
-            depth /= 1000.
-
-            # define mask
-            mask = (depth > self.min_depth)
-            mask = np.logical_and(mask, depth < self.max_depth)
-
+        # define mask
+        if self.fusion_strategy == 'routingNet':
+            raise NotImplementedError
+            mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
+            mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
             # remove strong artifacts coming from pixels close to missing pixels
             # the routing network computes bad depths for these pixels that are
             # not missing in the original image due to the convolutions over
@@ -530,7 +463,32 @@ class Replica(Dataset):
 
             sample['mask'] = mask
 
-            sample[self.input] = np.asarray(depth)
+        else:
+            mask = (depth_stereo > self.min_depth_stereo)
+            mask = np.logical_and(mask, depth_stereo < self.max_depth_stereo)
+
+            # do not integrate depth values close to the image boundary
+            # this is relevant for the stereo modality. 
+            mask[0:self.mask_stereo_height, :] = 0
+            mask[-self.mask_stereo_height:-1, :] = 0
+            mask[:, 0:self.mask_stereo_width] = 0
+            mask[:, -self.mask_stereo_width:-1] = 0
+            sample['stereo_mask'] = mask
+            mask = (depth_tof > self.min_depth_tof)
+            mask = np.logical_and(mask, depth_tof < self.max_depth_tof)
+
+            # do not integrate depth values close to the image boundary
+            # this is relevant for the stereo modality. 
+            mask[0:self.mask_tof_height, :] = 0
+            mask[-self.mask_tof_height:-1, :] = 0
+            mask[:, 0:self.mask_tof_width] = 0
+            mask[:, -self.mask_tof_width:-1] = 0
+            sample['tof_mask'] = mask
+
+            sample['tof_depth'] = np.asarray(depth_tof)
+            # sample['mono_depth'] = np.asarray(depth_mono)
+            sample['stereo_depth'] = np.asarray(depth_stereo)
+
 
         # load ground truth depth map
         file = self.depth_images_gt[item]

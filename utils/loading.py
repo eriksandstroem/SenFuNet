@@ -93,7 +93,7 @@ def load_model(file, model):
 #         model.state_dict().update(pretrained_dict)
 #         model.load_state_dict(model.state_dict())
 
-def load_filtering(file, model): # loads all paramters though that can be loaded in the checkpoint!
+def load_pipeline(file, model): # loads all paramters that can be loaded in the checkpoint!
 
     checkpoint = file
 
@@ -106,11 +106,7 @@ def load_filtering(file, model): # loads all paramters though that can be loaded
             checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
         # print(checkpoint['pipeline_state_dict'].keys())
         model.load_state_dict(checkpoint['pipeline_state_dict'])
-        print('loading full')
-        for key in model.state_dict().keys():
-            if key.startswith('_filtering'):
-                print(key)
-                print(model.state_dict()[key].shape)
+        print('loading full model')
     except:
         print('loading model partly')
         print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
@@ -126,6 +122,8 @@ def load_filtering(file, model): # loads all paramters though that can be loaded
         for key in checkpoint['pipeline_state_dict'].keys():
             if key not in model.state_dict().keys():
                 print(key)
+
+
         # print(pretrained_dict.keys())
         # print(model.state_dict().keys())
         model.state_dict().update(pretrained_dict)
@@ -137,8 +135,41 @@ def load_filtering(file, model): # loads all paramters though that can be loaded
                 # print(key)
 
          # model.load_state_dict(pretrained_dict, False)
+def load_net(file, model, sensor): # to load fusion net weights from model that was trained with the old setup i.e. pipeline._fusion_net_tof.etc...
 
-def load_pipeline(file, model, sensor):
+    checkpoint = file
+
+    if not os.path.exists(checkpoint):
+        raise FileNotFoundError("File doesn't exist {}".format(checkpoint))
+
+    if torch.cuda.is_available():
+        checkpoint = torch.load(checkpoint)
+    else:
+        checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
+
+    print('loading model partly')
+    # print(model.state_dict().keys())
+    # print(checkpoint['pipeline_state_dict'].keys())
+    print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
+    # only load the model parameters in checkpoint related to the sensor
+    sensor_specific_checkpoint = {'.'.join(k.split('.')[1:]): v for k, v in checkpoint['pipeline_state_dict'].items() if k.split('.')[0].endswith(sensor)} # and k.split('.')[0].startswith('_fusion')}
+    print('nbr of entries in sensor specific checkpoint model: ', len(sensor_specific_checkpoint .keys()))
+    # check so that the sensor specific checkpoint weight names are in the model
+    pretrained_dict = {k: v for k, v in sensor_specific_checkpoint.items() if k in model.state_dict()}
+    print('nbr of entries found in created model: ', len(model.state_dict().keys()))
+    print('nbr of entries found in created model and sensor specific checkpoint model: ', len(pretrained_dict.keys()))
+        # for key in model.state_dict().keys():
+        #     if key not in pretrained_dict.keys():
+        #         print(key)
+
+        # print(pretrained_dict.keys())
+        # print(checkpoint['pipeline_state_dict'].keys())
+        # print(model.state_dict().keys())
+        # model.state_dict().update(pretrained_dict)
+        # model.load_state_dict(model.state_dict())
+    model.load_state_dict(pretrained_dict, False)
+
+def load_net_old(file, model, sensor):
 
     checkpoint = file
 

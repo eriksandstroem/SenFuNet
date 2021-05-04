@@ -167,13 +167,13 @@ class Integrator(torch.nn.Module):
         insert_values(value_update, indices_insert, values_volume)
         insert_values(weight_update, indices_insert, weights_volume)
 
+        # print(feature_volume.sum(dim))
         # insert features and feature weights
         insert_values(feature_update, feature_indices_insert, features_volume) 
         insert_values(weight_update_features, feature_indices_insert, feature_weights_volume) 
 
         insert_values(value_update_empty, indices_empty_insert, values_volume)
         insert_values(weight_update_empty, indices_empty_insert, weights_volume)
-
 
         # I don't need to threshold the behind the surface online outlier filter wrt to the weights
         # because I don't update the weights at all. But we should not update these indices if they

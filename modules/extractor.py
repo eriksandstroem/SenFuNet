@@ -95,6 +95,7 @@ class Extractor(nn.Module):
         feature_indices = feature_indices.view(n1, n2, n3, 1, 3)
         feature_weights = feature_weights.view(n1, n2, n3, 1)
 
+        # feature_indices and indices are identical! One can be removed!
 
         # packing
         values = dict(fusion_values=fusion_values,

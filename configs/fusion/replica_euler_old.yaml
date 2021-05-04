@@ -1,9 +1,9 @@
 SETTINGS:
   gpu: True
   experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion # path where the logging is done and the models are saved.
-  test_mode: False # make sure this is set to "test" when using test_fusion.py. This makes sure that we visualize the alpha weighting between the sensors if we use more than one sensor
+  save_mode: test # make sure this is set to "test" when using test_fusion.py. Other options: ply or tsdf depending on what you want to save
   eval_freq: 1000 # how many global steps before evaluation and saving the model
-  log_freq: 3 # how many global steps before logging the training loss
+  log_freq: 500 # how many global steps before logging the training loss
   seed: 52
 FUSION_MODEL:
   fixed: True
@@ -18,44 +18,51 @@ FUSION_MODEL:
   max_weight: 500
   extraction_strategy: 'nearest_neighbor' # nearest_neighbor or trilinear_interpolation
 FEATURE_MODEL:
-  w_rgb: False
+  w_rgb: True
   w_intensity_gradient: False
   normalize: False
   fixed: False
   n_features: 6
   n_layers: 2
-  enc_activation: torch.nn.ReLU()
-  dec_activation: torch.nn.Tanh()
+  activation: torch.nn.ReLU()
   depth: True
   resx: 256
   resy: 256
   layernorm: False
+# TRANSLATION_MODEL:
+#   fixed: False
+#   train_on_border_voxels: False
+#   erosion: False
+#   neighborhood: 3 # side length of voxel neighborhood cube, needs to be an odd number
+#   count: absolute
+#   superresolve: False
+#   activation: torch.nn.Tanh()
+#   occ_head: True
+#   output_scale: 1.0
+#   mode: float
 ROUTING_MODEL:
   contraction: 64
   depth: 1
   n_output_channels: 2
   normalization: True
 FILTERING_MODEL:
-  model: mlp # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
-  setting: avg # or avg (relevant only for the mlp model)
+  fuse_sensors: True
   w_features: True
   output_scale: 0.12
+  chunk_size: 64 # this size determines the size of the window used during training and testing that is fed to the 3D convnet
   fixed: False
-  erosion: False 
   tanh_weight: True
-  MLP_MODEL:
-    occ_head: True # only used when setting: translate
-    activation: torch.nn.Tanh() # only used when setting: translate
-    neighborhood: 3
-    train_on_border_voxels: False
-    neighborhood_out: 3 # only relevant for setting: avg
-    attend_to_uninit: False
-  3DCONV_MODEL:
-    chunk_size: 64 # this size determines the size of the window used during training and testing that is fed to the 3D convnet
-    activation: torch.nn.ReLU()
-    nbr_groups: 2
-    grouping_strategy: 'absolute'
-    network_depth: 3
+  activation: torch.nn.ReLU()
+  nbr_groups: 2
+  grouping_strategy: 'absolute'
+  network_depth: 1
+  train_on_border_voxels: False
+  erosion: False # faq hur blir det mer erosion med neighborhood 7 som input...? I need to make the tail subtraction
+  # more aggressive. Now it is 2, but I need to make it 3. The image erosion should be fine since it is 6 now. But what 
+  # about during validation? I would ideally have to erode 3 times in order to get rid of those outliers... I cannot afford that.
+  # The only solutions is to make the tail longer and pad more if that is required or hope that the filtering network can handle it with 
+  # only 1 erosion step. Needs more investigation. Since we extract a larger grid and predict for a smaller one, we actually will not include the tsdf 
+  # values of those uninit voxels at the border so we are still safe with one erosion, but it might make the predictions fukked, I am not sure.
 LOSS:
   gt_loss: False
   l1_weight: 1.0 # not used now
@@ -83,7 +90,7 @@ TESTING:
   test_batch_size: 1
   test_shuffle: False
   pretrain_filtering_net: False
-  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210429-094916/model/best.pth.tar # 210330-231415
+  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210429-095350/model/best.pth.tar # 210330-231415
   weight_thresholds: [0.0]
 ROUTING:
   do: False
@@ -126,8 +133,8 @@ DATA:
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
   root_dir: /cluster/work/cvl/esandstroem/data/replica/manual #TMPDIR #/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
   dataset: Replica
-  input: [tof] # , 'stereo'] # list of sensors to fuse: mono, stereo, tof, gt, 
-  target: gt
+  input: multidepth # list of sensors to fuse: mono, stereo, tof, gt, 
+  target: depth_gt
   resx_stereo: 256
   resy_stereo: 256
   resx_tof: 256 # a tof camera has typically half the resolution of an rgb camera

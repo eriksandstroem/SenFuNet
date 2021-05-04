@@ -30,26 +30,7 @@ class FusionNet(nn.Module):
                                       nn.BatchNorm2d(self.n_channels - 1),
                                       nn.Tanh(),
                                       nn.Dropout2d(p=0.2))
-          
-          # self.block_extract_fusion1 = nn.Sequential(nn.Conv2d(input_channels, input_channels, (3, 3), padding=1),
-          #                             nn.BatchNorm2d(input_channels),
-          #                             nn.LeakyReLU(),
-          #                             nn.Dropout2d(p=0.2),
-          #                             nn.Conv2d(input_channels, input_channels, (3, 3), padding=1),
-          #                             nn.BatchNorm2d(input_channels),
-          #                             nn.LeakyReLU(),
-          #                             nn.Dropout2d(p=0.2))
 
-          # self.block_extract_fusion2 = nn.Sequential(nn.Conv2d(input_channels, input_channels, (3, 3), padding=1),
-          #                             nn.BatchNorm2d(input_channels),
-          #                             nn.LeakyReLU(),
-          #                             nn.Dropout2d(p=0.2),
-          #                             nn.Conv2d(input_channels, int(input_channels/2), (3, 3), padding=1),
-          #                             nn.BatchNorm2d(int(input_channels/2)),
-          #                             nn.LeakyReLU(),
-          #                             nn.Dropout2d(p=0.2))
-
-        # self.conv2d = nn.Conv2d(self.n_channels, 18, (3, 3), padding=1)
         self.block1 = nn.Sequential(nn.Conv2d(self.n_channels, self.n_channels, (3, 3), padding=1),
                                     nn.BatchNorm2d(self.n_channels),
                                     nn.LeakyReLU(),
@@ -135,10 +116,11 @@ class FusionNet(nn.Module):
             old = x[:, 1:, :, :] 
 
           old = self.block_extract_fusion1.forward(old)
-          # old = self.block_extract_fusion2.forward(old)
 
           x = torch.cat((depth, old), dim=1)
+        # print('x', x.sum())
         x1 = self.block1.forward(x)
+        # print('x1', x1.sum())
         # y = self.conv2d.forward(x)
         # print('y: ', y)
         x1 = torch.cat([x, x1], dim=1)

@@ -11,7 +11,7 @@ def save_config_to_json(path, config):
     with open(os.path.join(path, 'config.json'), 'w') as file:
         json.dump(config, file)
 
-def save_checkpoint(state, is_best, is_best_tof, is_best_stereo, checkpoint):
+def save_checkpoint(state, is_best_filt, is_best, checkpoint):
     """Saves model and training parameters
     at checkpoint + 'last.pth.tar'.
     If is_best==True, also saves
@@ -30,8 +30,8 @@ def save_checkpoint(state, is_best, is_best_tof, is_best_stereo, checkpoint):
     torch.save(state, filepath)
     if is_best:
       shutil.copyfile(filepath, os.path.join(checkpoint, 'best.pth.tar'))
-    if is_best_tof:
-      shutil.copyfile(filepath, os.path.join(checkpoint, 'best_tof.pth.tar'))
-    if is_best_stereo:
-      shutil.copyfile(filepath, os.path.join(checkpoint, 'best_stereo.pth.tar'))
+
+    for sensor in is_best.keys():
+      if is_best[sensor]:
+        shutil.copyfile(filepath, os.path.join(checkpoint, 'best_' +  sensor + '.pth.tar'))
 
