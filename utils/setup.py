@@ -2,14 +2,14 @@ import torch
 import os
 import logging
 from dataset import ShapeNet
-from dataset import Replica
+from dataset import Replica # core dumped
 from dataset import CoRBS
-
+ 
 from torch.utils.tensorboard import SummaryWriter
 import trimesh
 import skimage.measure
-
-from modules.database import Database
+# 
+from modules.database import Database # core dumped
 
 from utils import transform
 
@@ -52,7 +52,8 @@ def get_database(dataset, config, mode='train'):
     database_config.transform = transform.ToTensor()
     database_config.erosion = config.FILTERING_MODEL.erosion
     database_config.n_features = config.FEATURE_MODEL.n_features
-    database_config.w_features = config.FILTERING_MODEL.w_features
+    database_config.features_to_sdf_enc = config.FILTERING_MODEL.features_to_sdf_enc
+    database_config.features_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
     database_config.test_mode = config.SETTINGS.test_mode
     database_config.scene_list = eval('config.DATA.{}_scene_list'.format(mode))
 
