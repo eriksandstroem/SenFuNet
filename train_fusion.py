@@ -33,7 +33,7 @@ def train_fusion(args):
 
     config = load_config_from_yaml(args['config'])
 
-    assert not (config.LOSS.gt_loss and config.FILTERING_MODEL.w_features), "You can only use gt loss when not using features"
+    # assert not (config.LOSS.gt_loss and config.FILTERING_MODEL.w_features), "You can only use gt loss when not using features"
 
     config.TIMESTAMP = datetime.datetime.now().strftime('%y%m%d-%H%M%S')
 
@@ -70,6 +70,13 @@ def train_fusion(args):
     val_dataset = get_data(config.DATA.dataset, val_data_config)
     val_loader = torch.utils.data.DataLoader(val_dataset,
                                              config.TRAINING.val_batch_size, config.TRAINING.val_shuffle)
+
+
+    # specify number of features
+    if config.FEATURE_MODEL.learned_features:
+        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.n_features + config.FEATURE_MODEL.append_depth
+    else:
+        config.FEATURE_MODEL.n_features = 1 + config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
 
     # get database
     # get train database
@@ -113,9 +120,17 @@ def train_fusion(args):
 
     if config.TRAINING.pretraining:
         for sensor in config.DATA.input:
-            load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+            if sensor == 'tof' or sensor == 'stereo':
+                load_net_old(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+            else:
+                load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+        
+            # load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+            # loading gt depth model fusion net
+            # load_net('/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210507-093251/model/best.pth.tar', pipeline.fuse_pipeline._fusion_network[sensor], 'left_depth_gt_2')
+        
 
-    if config.FILTERING_MODEL.w_features:
+    if config.FILTERING_MODEL.features_to_sdf_enc or config.FILTERING_MODEL.features_to_weight_head:
         feature_params = []
         for sensor in config.DATA.input:
             feature_params += list(pipeline.fuse_pipeline._feature_network[sensor].parameters())
@@ -175,7 +190,6 @@ def train_fusion(args):
 
     # when using fuse sensors true make sure we use both sensors here in variable sensors
     sensors = config.DATA.input
-    sensor_opposite = {'tof': 'stereo', 'stereo': 'tof'}
 
     for epoch in range(0, config.TRAINING.n_epochs):
 
@@ -200,15 +214,19 @@ def train_fusion(args):
         # functionality in the workspace so that it can do the writing of the appropriate properties
         train_loss = 0
         grad_norm = 0
+        grad_norm_feature = 0
         val_norm = 0
         l1_interm = 0
         l1_grid = 0
-        l1_grid_tof = 0
-        l1_grid_stereo = 0
+        l1_grid_dict = dict()
+        l_occ_dict = dict()
+        for sensor_ in config.DATA.input:
+            l1_grid_dict[sensor_] = 0
+            l_occ_dict[sensor_] = 0
+
         l1_gt_grid = 0
         l_feat = 0
-        l_occ_tof = 0
-        l_occ_stereo = 0
+        
         l_occ = 0 # single sensor training
 
         for i, batch in tqdm(enumerate(train_loader), total=len(train_dataset)):
@@ -234,8 +252,9 @@ def train_fusion(args):
             # randomly integrate the selected sensors
             random.shuffle(sensors)
             for sensor in sensors:
+                # print(sensor)
                 batch['depth'] = batch[sensor + '_depth']
-                batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) 
+                # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
                 batch['mask'] = batch[sensor + '_mask']
                 batch['sensor'] = sensor
                 output = pipeline(batch, train_database, device)
@@ -243,7 +262,16 @@ def train_fusion(args):
                 # optimization
                 if output is None: # output is None when no valid indices were found for the filtering net within the random
                 # bbox within the bounding volume of the integrated indices
+                    print('output None from pipeline')
+                    # break
                     continue
+
+                if output == 'save_and_exit':
+                    print('Found alpha nan. Save and exit')
+                    workspace.save_model_state({'pipeline_state_dict': pipeline.state_dict(),
+                                'epoch': epoch},
+                               is_best_filt=is_best_filt, is_best=is_best)
+                    return
 
                 output = criterion(output)
 
@@ -258,66 +286,80 @@ def train_fusion(args):
                     l1_gt_grid += output['l1_gt_grid'].item() 
 
                 if len(config.DATA.input) > 0:
-                    if output['l1_grid_tof'] is not None:
-                        l1_grid_tof += output['l1_grid_tof'].item() 
-                    if output['l1_grid_stereo'] is not None:
-                        l1_grid_stereo += output['l1_grid_stereo'].item() 
+                    for sensor_ in config.DATA.input:
+                        if output['l1_grid_' + sensor_] is not None:
+                            l1_grid_dict[sensor_] += output['l1_grid_' + sensor_].item() 
                 if config.FILTERING_MODEL.model == 'mlp' and config.FILTERING_MODEL.setting == 'translate'  \
                             and config.FILTERING_MODEL.MLP_MODEL.occ_head:
-                    if output['l_occ_tof'] is not None:
-                        l_occ_tof += output['l_occ_tof'].item() 
-                    if output['l_occ_stereo'] is not None:
-                        l_occ_stereo += output['l_occ_stereo'].item()
+                    for sensor_ in config.DATA.input:
+                        if output['l_occ_' + sensor_] is not None:
+                            l_occ_dict[sensor_] += output['l_occ_' + sensor_].item() 
                     if output['l_occ'] is not None:
                         l_occ += output['l_occ'].item() 
 
                 output['loss'].backward()
+                # break
 
             del batch
 
             for name, param in pipeline.named_parameters():
                 if param.grad is not None:
                     if (i + 1) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
-                        grad_norm += torch.norm(
+                        if name.startswith('fuse_pipeline._feature'):
+                            grad_norm_feature += torch.norm(
+                            param.grad)
+                        else:
+                            grad_norm += torch.norm(
                             param.grad)
                         # print(torch.norm(param.grad))
                     # optimizer.zero_grad() # REMOVE LATER!
-                    # val_norm += torch.norm(param)
+                    val_norm += torch.norm(param)
                     # print('grad norm: ', torch.norm(param.grad))
                     # print('val norm: ' , torch.norm(param))
-                # if name.startswith('_feature'):
-                # print(name)
-                # if param.grad is None:
-                #     print('None')
+                # if name.startswith('fuse_pipeline._feature'):
+                #     # print(name)
+                #     if param.isnan().sum() > 0:
+                #         print(name)
+                #         print(param)
+                #     # print('isnan sum: ', param.isnan().sum())
+                #     if param.grad is None:
+                #         print('None')   
+
+                    # Note, gradients that have been not None at one time, will never
+                    # be none again since the zero_Grad option just makes them zero again.
+                    # In pytorch 1.7.1 there is the option to set the gradients to none again
 
 
-
+            # optimizer_feature.zero_grad(set_to_none=True) 
+            
                 # print(name, param.grad)
 
             if (i + 1) % config.SETTINGS.log_freq == 0:
-
+# 
                 # if config.DATA.fusion_strategy == 'two_fusionNet': # TODO: split plotting into tof and stereo
                 #     divide = 2*config.SETTINGS.log_freq
                 # else:
                 divide = config.SETTINGS.log_freq
                 train_loss /= divide
                 grad_norm /= divide
+                grad_norm_feature /= divide
                 val_norm /= divide
                 # print('averaged grad norm: ', grad_norm)
                 # print('averaged val norm: ', val_norm)
                 l1_interm /= divide
                 l1_grid /= divide
                 l1_gt_grid /= divide
-                l1_grid_tof /= divide
-                l1_grid_stereo /= divide
-                l_occ_tof /= divide
-                l_occ_stereo /= divide
+                for sensor_ in config.DATA.input:
+                    l1_grid_dict[sensor_] /= divide
+                    l_occ_dict[sensor_] /= divide
+
                 l_occ /= divide
 
                 # l_occ /= divide
                 # l_feat /= divide
                 workspace.writer.add_scalar('Train/loss', train_loss, global_step=i + 1 + epoch*n_batches)
                 workspace.writer.add_scalar('Train/grad_norm', grad_norm, global_step=i + 1 + epoch*n_batches)
+                workspace.writer.add_scalar('Train/grad_norm_feature', grad_norm_feature, global_step=i + 1 + epoch*n_batches)
                 workspace.writer.add_scalar('Train/val_norm', val_norm, global_step=i + 1 + epoch*n_batches)
                 # workspace.writer.add_scalar('Train/lr_filt', get_lr(optimizer_filt), global_step=i + 1 + epoch*n_batches)
                 # workspace.writer.add_scalar('Train/lr_fusion', get_lr(optimizer_fusion), global_step=i + 1 + epoch*n_batches)
@@ -325,26 +367,28 @@ def train_fusion(args):
                 workspace.writer.add_scalar('Train/l1_interm', l1_interm, global_step=i + 1 + epoch*n_batches)
                 workspace.writer.add_scalar('Train/l1_translation', l1_grid, global_step=i + 1 + epoch*n_batches)
                 workspace.writer.add_scalar('Train/l1_gt_translation', l1_gt_grid, global_step=i + 1 + epoch*n_batches)
-                workspace.writer.add_scalar('Train/l1_gt_tof', l1_grid_tof, global_step=i + 1 + epoch*n_batches)
-                workspace.writer.add_scalar('Train/l1_gt_stereo', l1_grid_stereo, global_step=i + 1 + epoch*n_batches)
-                # workspace.writer.add_scalar('Train/l1_gt_translation', l1_gt_grid_tof, global_step=i + 1 + epoch*n_batches)
-                # workspace.writer.add_scalar('Train/l1_gt_translation', l1_gt_grid_stereo, global_step=i + 1 + epoch*n_batches)
-                workspace.writer.add_scalar('Train/occ_loss_tof', l_occ_tof, global_step=i + 1 + epoch*n_batches)
-                workspace.writer.add_scalar('Train/occ_loss_stereo', l_occ_stereo, global_step=i + 1 + epoch*n_batches)
+                for sensor_ in config.DATA.input:
+                    workspace.writer.add_scalar('Train/l1_' + sensor_, l1_grid_dict[sensor_], global_step=i + 1 + epoch*n_batches)
+                    workspace.writer.add_scalar('Train/occ_loss_' + sensor_, l_occ_dict[sensor_], global_step=i + 1 + epoch*n_batches)
+
                 workspace.writer.add_scalar('Train/occ_loss', l_occ, global_step=i + 1 + epoch*n_batches)
                 # workspace.writer.add_scalar('Train/feat_loss', l_feat, global_step=i + 1 + epoch*n_batches)
                 train_loss = 0
                 grad_norm = 0
+                grad_norm_feature = 0
                 val_norm = 0
                 l1_interm = 0
                 l1_grid = 0
-                l1_grid_tof = 0
-                l1_grid_stereo = 0
+                l1_grid_dict = dict()
+                l_occ_dict = dict()
+                for sensor_ in config.DATA.input:
+                    l1_grid_dict[sensor_] = 0
+                    l_occ_dict[sensor_] = 0
+
+
                 l1_gt_grid = 0
-                l_occ_tof = 0
-                l_occ_stereo = 0
-                l_occ = 0
                 l_feat = 0
+                l_occ = 0 # single sensor training
 
             if config.TRAINING.gradient_clipping:
                 torch.nn.utils.clip_grad_norm_(pipeline.parameters(),
@@ -352,7 +396,7 @@ def train_fusion(args):
                                                    norm_type=2)
 
             if (i + 1) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
-                if config.FILTERING_MODEL.w_features:
+                if config.FILTERING_MODEL.features_to_sdf_enc or config.FILTERING_MODEL.features_to_weight_head:
                     optimizer_feature.step()
                     optimizer_feature.zero_grad()
                     scheduler_feature.step()
@@ -366,12 +410,12 @@ def train_fusion(args):
                     optimizer_fusion.zero_grad()
                     scheduler_fusion.step()
 
-            if (i + 1) % config.SETTINGS.eval_freq == 0 or i == n_batches - 1 or i == 6:  # evaluate after 20 steps wince then we have integrated at least one frame for each scene
+            if (i + 1) % config.SETTINGS.eval_freq == 0 or i == n_batches - 1 or i == 20:  # evaluate after 20 steps wince then we have integrated at least one frame for each scene
             # if epoch % 2 == 0 and i == 0:
                 # print(i)
                 val_database.reset()     
                 # zero out all grads
-                if config.FILTERING_MODEL.w_features:
+                if config.FILTERING_MODEL.features_to_sdf_enc or config.FILTERING_MODEL.features_to_weight_head:
                     optimizer_feature.zero_grad()
                 if not config.FILTERING_MODEL.fixed:
                     optimizer_filt.zero_grad()
@@ -444,5 +488,6 @@ def train_fusion(args):
         
 
 if __name__ == '__main__':
+
     args = arg_parser()
     train_fusion(args)
