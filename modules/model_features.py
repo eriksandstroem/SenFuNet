@@ -26,6 +26,9 @@ class EncoderBlock(nn.Module):
                                        activation)
 
     def forward(self, x):
+        # print('input enc: ', x.isnan().sum())
+        # print(self.block[0].weight)
+        # print('output enc: ', self.block(x).isnan().sum())
         return self.block(x)
 
 
@@ -60,8 +63,11 @@ class FeatureNet(nn.Module):
 
         super(FeatureNet, self).__init__()
 
-        self.n_points = eval('config.n_points_' + sensor)
-        self.n_features = config.n_features
+        try:
+            self.n_points = eval('config.n_points_' + sensor)
+        except:
+            self.n_points = config.n_points
+        self.n_features = config.n_features - config.append_depth
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
         self.w_intensity_gradient = config.w_intensity_gradient
@@ -78,6 +84,7 @@ class FeatureNet(nn.Module):
         dec_activation = eval(config.dec_activation)
         self.tsdf_out = self.n_points
         layernorm = config.layernorm
+        self.append_depth = config.append_depth
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
@@ -115,25 +122,35 @@ class FeatureNet(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, x):
-
+        if self.append_depth:
+            d = x
         # encoding
+
         for enc in self.encoder:
             xmid = enc(x)
+            # print(xmid)
+            if xmid.isnan().sum() > 0 or xmid.isinf().sum() > 0:
+                print('xmid nan: ', xmid.isnan().sum())
+                print('xmid inf: ', xmid.isinf().sum())
+            # print('enc: ', xmid.isnan().sum())
             x = torch.cat([x, xmid], dim=1)
+
+        # print('enc isnan: ', x.isnan().sum())
 
         # decoding
         for dec in self.decoder:
-            # print(x.shape)
-            # print(dec)
             x = dec(x)
 
-        # print(x.shape)
-        # normalization
-        if self.normalize:
-            # x = x.view(1, self.n_features, self.n_points, self.height, self.width)
-            x = normalize(x, p=2, dim=1)
-            # x = x.view(1, self.n_features * self.n_points, self.height, self.width)
+        # print('dec isnan: ', x.isnan().sum())
 
+        if self.normalize:
+            x = normalize(x, p=2, dim=1)
+
+
+
+        if self.append_depth:
+            x = torch.cat([x, d], dim=1)
+  
         return x
 
 
