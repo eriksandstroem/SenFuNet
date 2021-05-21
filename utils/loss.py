@@ -7,6 +7,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
 	def __init__(self, config, reduction='none'):
 		super(Fusion_TranslationLoss, self).__init__()
 
+		self.sensors = config.DATA.input
 		self.l1_weight = config.LOSS.l1_weight
 		self.l2_weight = config.LOSS.l2_weight
 		self.grid_weight = config.LOSS.grid_weight
@@ -29,13 +30,16 @@ class Fusion_TranslationLoss(torch.nn.Module):
 
 		est_grid = output['filtered_output']['tsdf_filtered_grid']['tsdf']
 		if self.multisensor:
-			est_grid_tof = output['filtered_output']['tsdf_filtered_grid']['tsdf_tof']
-			est_grid_stereo = output['filtered_output']['tsdf_filtered_grid']['tsdf_stereo']
-			init_tof = output['filtered_output']['tsdf_filtered_grid']['tof_init']
-			init_stereo = output['filtered_output']['tsdf_filtered_grid']['stereo_init']
-			if self.occ_head:
-				occ_tof = output['filtered_output']['tsdf_filtered_grid']['occ_tof']
-				occ_stereo = output['filtered_output']['tsdf_filtered_grid']['occ_stereo']
+			est_grid_dict = dict()
+			init = dict()
+			for sensor_ in self.sensors:
+				est_grid_dict[sensor_] = output['filtered_output']['tsdf_filtered_grid']['tsdf_' + sensor_]
+				init[sensor_] = output['filtered_output']['tsdf_filtered_grid'][sensor_ + '_init']
+				if self.occ_head:
+					occ_dict = dict()
+					for sensor_ in self.sensors:
+						occ_dict[sensor_] = output['filtered_output']['tsdf_filtered_grid']['occ_' + sensor_]
+
 		elif self.occ_head:
 			occ = output['filtered_output']['tsdf_filtered_grid']['occ']
 		if self.gt_loss:
@@ -46,7 +50,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
 		est_interm = output['tsdf_fused']
 		target_interm = output['tsdf_target']
 
-
 		l1_grid = self.l1.forward(est_grid, target_grid)
 		normalization = torch.ones_like(l1_grid).sum()
 		l1_grid = l1_grid.sum() / normalization
@@ -54,31 +57,38 @@ class Fusion_TranslationLoss(torch.nn.Module):
 		# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
 		# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
 		l = self.grid_weight * l1_grid
+		if l.isnan() > 0 or l.isinf():
+			print('1est_grid: ', est_grid.isnan().sum())
+			print('1target_grid: ', target_grid.isnan().sum())
+			print('1est_grid inf: ', est_grid.isinf().sum())
+			print('1target_grid inf: ', target_grid.isinf().sum())
+			print('1loss nan:', l.isnan())
+			print('1loss inf: ', l.isinf())
+			print('normalization factor: ', normalization)
+			print('l1_grid.shape:', l1_grid.shape)
 
 		if self.multisensor:
-			l1_grid_tof = self.l1.forward(est_grid_tof[init_tof], target_grid[init_tof])
-			if l1_grid_tof.shape[0] == 0:
-				l1_grid_tof = None
-			else:
-				normalization = torch.ones_like(l1_grid_tof).sum()
-				l1_grid_tof = l1_grid_tof.sum() / normalization
-				# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
-				# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
-				l += self.grid_weight/2 * l1_grid_tof
+			l1_grid_dict = dict()
+			for sensor_ in self.sensors:
+				l1_grid_dict[sensor_] = self.l1.forward(est_grid_dict[sensor_][init[sensor_]], target_grid[init[sensor_]])
+				if l1_grid_dict[sensor_].shape[0] == 0:
+					l1_grid_dict[sensor_] = None
+				else:
+					normalization = torch.ones_like(l1_grid_dict[sensor_]).sum()
+					l1_grid_dict[sensor_] = l1_grid_dict[sensor_].sum() / normalization
+					# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
+					# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
+					l += self.grid_weight/2 * l1_grid_dict[sensor_]
+					if l1_grid_dict[sensor_].isnan() > 0 or l1_grid_dict[sensor_].isinf():
+						print(sensor_ + 'loss nan:', l1_grid_dict[sensor_].isnan())
+						print(sensor_ + 'loss inf: ', l1_grid_dict[sensor_].isinf())
+						print('normalization factor: ', normalization)
+						print('l1_grid_dict[sensor_].shape:', l1_grid_dict[sensor_].shape)
 
-
-			l1_grid_stereo = self.l1.forward(est_grid_stereo[init_stereo] , target_grid[init_stereo])
-			if l1_grid_stereo.shape[0] == 0:
-				l1_grid_stereo = None
-			else:
-				normalization = torch.ones_like(l1_grid_stereo).sum()
-				l1_grid_stereo = l1_grid_stereo.sum() / normalization
-				# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
-				# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
-				l += self.grid_weight/2 * l1_grid_stereo
 		else:
-			l1_grid_tof = None
-			l1_grid_stereo = None
+			l1_grid_dict = dict()
+			for sensor_ in self.sensors:
+				l1_grid_dict[sensor_] = None
 
 		if not self.fixed_fusion_net:
 			l1_interm = self.l1.forward(est_interm, target_interm)
@@ -104,18 +114,14 @@ class Fusion_TranslationLoss(torch.nn.Module):
 			occ_target_grid[target_grid >= 0.] = 0.
 			occ_target_grid[target_grid < 0.] = 1.
 			if self.multisensor:
-				l_grid_occ_tof = torch.mean(self.occ.forward(occ_tof[init_tof], occ_target_grid[init_tof]))
-				if l_grid_occ_tof.isnan(): # to prevent nan loss for the first frame integration or when no valid indices exist for the opposite sensor
-					l_grid_occ_tof = None
-				else:
-					l += self.occ_weight/2 * l_grid_occ_tof
+				l_grid_occ_dict = dict()
+				for sensor_ in self.sensors:
+					l_grid_occ_dict[sensor_] = torch.mean(self.occ.forward(occ_dict[sensor_][init[sensor_]], occ_target_grid[init[sensor_]]))
+					if l_grid_occ_dict[sensor_].isnan(): # to prevent nan loss for the first frame integration or when no valid indices exist for the opposite sensor
+						l_grid_occ_dict[sensor_] = None
+					else:
+						l += self.occ_weight/2 * l_grid_occ_dict[sensor_]
 				
-				l_grid_occ_stereo = torch.mean(self.occ.forward(occ_stereo[init_stereo], occ_target_grid[init_stereo]))
-				if l_grid_occ_stereo.isnan():
-					l_grid_occ_stereo = None
-				else:
-					l += self.occ_weight/2 * l_grid_occ_stereo
-
 				l_grid_occ = None
 			else:
 				l_grid_occ = torch.mean(self.occ.forward(occ, occ_target_grid))
@@ -124,23 +130,24 @@ class Fusion_TranslationLoss(torch.nn.Module):
 				else:
 					l += self.occ_weight * l_grid_occ
 
-				l_grid_occ_tof = None
-				l_grid_occ_stereo = None
+				for sensor_ in self.sensors:
+					l_grid_occ_dict[sensor_] = None
 		else:
-			l_grid_occ_tof = None
-			l_grid_occ_stereo = None
+			l_grid_occ_dict = dict()
+			for sensor_ in self.sensors:
+				l_grid_occ_dict[sensor_] = None
+
 			l_grid_occ = None
 
 		output = dict()
 		output['loss'] = l
 		output['l1_interm'] = l1_interm
 		output['l1_grid'] = l1_grid
-		output['l1_grid_tof'] = l1_grid_tof
-		output['l1_grid_stereo'] = l1_grid_stereo
-		output['l1_gt_grid'] = l1_gt_grid
-		output['l_occ_tof'] = l_grid_occ_tof
-		output['l_occ_stereo'] = l_grid_occ_stereo
 		output['l_occ'] = l_grid_occ
+		output['l1_gt_grid'] = l1_gt_grid
+		for sensor_ in self.sensors:
+			output['l1_grid_' + sensor_] = l1_grid_dict[sensor_]
+			output['l_occ_' + sensor_] = l_grid_occ_dict[sensor_]
 
 		return output
 
