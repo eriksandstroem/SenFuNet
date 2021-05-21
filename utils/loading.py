@@ -109,6 +109,7 @@ def load_pipeline(file, model): # loads all paramters that can be loaded in the 
         print('loading full model')
     except:
         print('loading model partly')
+        # print(model.state_dict().keys())
         print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
         pretrained_dict = {k: v for k, v in checkpoint['pipeline_state_dict'].items() if k in model.state_dict()}
         print('nbr of entries found in created model: ', len(model.state_dict().keys()))
@@ -135,7 +136,7 @@ def load_pipeline(file, model): # loads all paramters that can be loaded in the 
                 # print(key)
 
          # model.load_state_dict(pretrained_dict, False)
-def load_net(file, model, sensor): # to load fusion net weights from model that was trained with the old setup i.e. pipeline._fusion_net_tof.etc...
+def load_net_old(file, model, sensor): # to load fusion net weights from model that was trained with the old setup i.e. pipeline._fusion_net_tof.etc...
 
     checkpoint = file
 
@@ -169,7 +170,7 @@ def load_net(file, model, sensor): # to load fusion net weights from model that 
         # model.load_state_dict(model.state_dict())
     model.load_state_dict(pretrained_dict, False)
 
-def load_net_old(file, model, sensor):
+def load_net(file, model, sensor):
 
     checkpoint = file
 
@@ -183,9 +184,11 @@ def load_net_old(file, model, sensor):
 
     print('loading model partly')
     # print(checkpoint['pipeline_state_dict'].keys())
+    # print(model.state_dict().keys())
     print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
     # only load the model parameters in checkpoint related to the sensor
-    sensor_specific_checkpoint = {k: v for k, v in checkpoint['pipeline_state_dict'].items() if k.split('.')[0].endswith(sensor) and k.split('.')[0].startswith('_fusion')}
+    sensor_specific_checkpoint = {'.'.join(k.split('.')[3:]): v for k, v in checkpoint['pipeline_state_dict'].items() if k.split('.')[2].endswith(sensor)} # and k.split('.')[0].startswith('_fusion')}
+    # print(sensor_specific_checkpoint.keys())
     print('nbr of entries in sensor specific checkpoint model: ', len(sensor_specific_checkpoint .keys()))
     # check so that the sensor specific checkpoint weight names are in the model
     pretrained_dict = {k: v for k, v in sensor_specific_checkpoint.items() if k in model.state_dict()}
