@@ -34,6 +34,9 @@ class Pipeline(torch.nn.Module):
         fused_output = self.fuse_pipeline.fuse_training(batch, database, device)
         filtered_output = self.filter_pipeline.filter_training(fused_output, database, scene_id, batch['sensor'], device)
         
+        if filtered_output == 'save_and_exit':
+            return 'save_and_exit'
+
         if filtered_output is not None:
             fused_output['filtered_output'] = filtered_output
         else:
@@ -48,8 +51,9 @@ class Pipeline(torch.nn.Module):
             # randomly integrate the selected sensors
             # random.shuffle(sensors)
             for sensor_ in sensors:
+                # print(sensor_)
                 batch['depth'] = batch[sensor_ + '_depth']
-                batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
+                # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
                 batch['routing_net'] = 'self._routing_network_' + sensor_
                 batch['mask'] = batch[sensor_ + '_mask']
                 batch['sensor'] = sensor_
