@@ -214,7 +214,7 @@ class Filter_Pipeline_mlp(torch.nn.Module):
                         neighborhood_indices[:, 1, :] + pad*np.ones_like(neighborhood_indices[:, 0, :]),
                         neighborhood_indices[:, 2, :] + pad*np.ones_like(neighborhood_indices[:, 0, :])] # shape (X, 27)
                     sensor_neighborhood = torch.cat((sensor_neighborhood, n_hood.unsqueeze(-1)), dim=2)
-            if self.config.FILTERING_MODEL.w_features:
+            if self.config.FILTERING_MODEL.features_to_sdf_enc:
                 vol = torch.transpose(volume['features_' + sensor_], 0, 3)
                 vol = torch.nn.functional.pad(vol, (pad,pad,pad,pad,pad,pad), 'constant', 0.0)
                 vol = torch.transpose(vol, 0, 3)
@@ -306,12 +306,12 @@ class Filter_Pipeline_mlp(torch.nn.Module):
             if sensor_ == sensor: 
                 in_dir = {'tsdf': input_dir['tsdf'],
                             'weights': input_dir['weights']}
-                if self.config.FILTERING_MODEL.w_features:
+                if self.config.FILTERING_MODEL.features_to_sdf_enc:
                     in_dir['features'] = input_dir['features']
             else:
                 in_dir = {'tsdf': database[scene_id]['tsdf_' + sensor_].to(device),
                             'weights': database[scene_id]['weights_' + sensor_].to(device)}
-                if self.config.FILTERING_MODEL.w_features:
+                if self.config.FILTERING_MODEL.features_to_sdf_enc:
                     in_dir['features'] = database[scene_id]['features_' + sensor_].to(device)
             neighborhood[sensor_] = self._prepare_input_training(in_dir, indices) 
  
