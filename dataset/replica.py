@@ -29,22 +29,24 @@ class Replica(Dataset):
         self.sampling_density_tof = config_data.sampling_density_tof
 
         self.resolution_stereo = (config_data.resy_stereo, config_data.resx_stereo)
-        # self.resx_stereo = self.resolution_stereo[0]/512
-        # self.resy_stereo = self.resolution_stereo[1]/512
 
         self.resolution_tof = (config_data.resy_tof, config_data.resx_tof)
-        # self.resx_tof = self.resolution_tof[0]/512
-        # self.resy_tof = self.resolution_tof[1]/512
+
+        self.resolution = (config_data.resy, config_data.resx)
 
         self.mask_stereo_width = config_data.mask_stereo_width
         self.mask_stereo_height = config_data.mask_stereo_height
         self.mask_tof_width = config_data.mask_tof_width
         self.mask_tof_height = config_data.mask_tof_height
+        self.mask_height = config_data.mask_height
+        self.mask_width = config_data.mask_width
 
         self.min_depth_stereo = config_data.min_depth_stereo
         self.max_depth_stereo = config_data.max_depth_stereo
         self.min_depth_tof = config_data.min_depth_tof
         self.max_depth_tof = config_data.max_depth_tof
+        self.min_depth = config_data.min_depth
+        self.max_depth = config_data.max_depth
 
         self.transform = config_data.transform
         self.pad = config_data.pad
@@ -58,6 +60,11 @@ class Replica(Dataset):
         self.fusion_strategy = config_data.fusion_strategy
 
         self._scenes = []
+
+        self.sensor_line_mapping = {'left_depth_gt': 0, 'left_depth_gt_2': 0, 'left_rgb': -2, 'left_camera_matrix': -1,
+                                    'tof': 1, 'mono': 2, 'stereo': 3, 'gauss_close_thresh': 4,
+                                    'gauss_far_thresh': 5, 'gauss_close_cont': 6,
+                                    'gauss_far_cont': 7}
 
         if config_data.data_load_strategy == 'hybrid':
             self.nbr_load_scenes = config_data.load_scenes_at_once
@@ -126,111 +133,133 @@ class Replica(Dataset):
 
 
 
-    def _load_depth(self): # loads the paths of the noisy depth images to a list. Loads only one sensor
-        self.depth_images = []
-        if self.scenedir is not None:
-            modality = ['left_depth_gt', 'left_depth_noise_5.0', 'left_bts_depth', 'left_psmnet_depth']
-            # create the full lists for each key in scenedir
-            tmp_dict = dict()
-            for key in self.scenedir:
-                tmp_list = list()
-                for trajectory in self.scenedir[key]:
-                    if self.input == 'tof_depth':
-                        files = glob.glob(os.path.join(self.root_dir, trajectory, modality[1], '*.png'))
-                        # sort the list accoring to the indices. Here is where I could also invert the trajectory
-                        files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-                        for file in files:
-                            tmp_list.append(file)
-                    elif self.input == 'mono_depth':
-                        files = glob.glob(os.path.join(self.root_dir, trajectory, modality[2], '*.png'))
-                        files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-                        for file in files:
-                            tmp_list.append(file)
-                    elif self.input == 'stereo_depth':
-                        files = glob.glob(os.path.join(self.root_dir, trajectory, modality[3], '*.png'))
-                        files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-                        for file in files:
-                            tmp_list.append(file)
-                    elif self.input == 'depth_gt':
-                        files = glob.glob(os.path.join(self.root_dir, trajectory, modality[0], '*.png'))
-                        files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-                        for file in files:
-                            tmp_list.append(file)
-                # replace the short list with the long list including all file paths
-                tmp_dict[key] = tmp_list
+    # def _load_depth(self): # loads the paths of the noisy depth images to a list. Loads only one sensor
+    #     self.depth_images = []
+    #     if self.scenedir is not None:
+    #         modality = ['left_depth_gt', 'left_depth_noise_5.0', 'left_bts_depth', 'left_psmnet_depth']
+    #         # create the full lists for each key in scenedir
+    #         tmp_dict = dict()
+    #         for key in self.scenedir:
+    #             tmp_list = list()
+    #             for trajectory in self.scenedir[key]:
+    #                 if self.input == 'tof_depth':
+    #                     files = glob.glob(os.path.join(self.root_dir, trajectory, modality[1], '*.png'))
+    #                     # sort the list accoring to the indices. Here is where I could also invert the trajectory
+    #                     files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #                     for file in files:
+    #                         tmp_list.append(file)
+    #                 elif self.input == 'mono_depth':
+    #                     files = glob.glob(os.path.join(self.root_dir, trajectory, modality[2], '*.png'))
+    #                     files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #                     for file in files:
+    #                         tmp_list.append(file)
+    #                 elif self.input == 'stereo_depth':
+    #                     files = glob.glob(os.path.join(self.root_dir, trajectory, modality[3], '*.png'))
+    #                     files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #                     for file in files:
+    #                         tmp_list.append(file)
+    #                 elif self.input == 'depth_gt':
+    #                     files = glob.glob(os.path.join(self.root_dir, trajectory, modality[0], '*.png'))
+    #                     files = sorted(files, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #                     for file in files:
+    #                         tmp_list.append(file)
+    #             # replace the short list with the long list including all file paths
+    #             tmp_dict[key] = tmp_list
             
-            # fuse the lists into one
-            # find key with longest list
-            max_key = max(tmp_dict, key = lambda x: len(tmp_dict[x]))
-            idx = 0
-            while idx < len(tmp_dict[max_key]):
-                for key in tmp_dict:
-                    if idx < len(tmp_dict[key]):
-                        self.depth_images.append(tmp_dict[key][idx])
-                idx += 1
+    #         # fuse the lists into one
+    #         # find key with longest list
+    #         max_key = max(tmp_dict, key = lambda x: len(tmp_dict[x]))
+    #         idx = 0
+    #         while idx < len(tmp_dict[max_key]):
+    #             for key in tmp_dict:
+    #                 if idx < len(tmp_dict[key]):
+    #                     self.depth_images.append(tmp_dict[key][idx])
+    #             idx += 1
 
-            del tmp_dict
+    #         del tmp_dict
 
-        else:
-            # reading files from list
-            with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
-                for line in file:
-                    line = line.split(' ')
-                    if self.input == 'tof_depth':
-                        files = glob.glob(os.path.join(self.root_dir, line[1], '*.png'))
-                        for file in files:
-                            self.depth_images.append(file)
-                    elif self.input == 'mono_depth':
-                        files = glob.glob(os.path.join(self.root_dir, line[2], '*.png'))
-                        for file in files:
-                            self.depth_images.append(file)
-                    elif self.input == 'stereo_depth':
-                        files = glob.glob(os.path.join(self.root_dir, line[3], '*.png'))
-                        for file in files:
-                            self.depth_images.append(file)
-                    elif self.input == 'depth_gt':
-                        files = glob.glob(os.path.join(self.root_dir, line[0], '*.png'))
-                        for file in files:
-                            self.depth_images.append(file)
+    #     else:
+    #         # reading files from list
+    #         with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
+    #             for line in file:
+    #                 line = line.split(' ')
+    #                 if self.input == 'tof_depth':
+    #                     files = glob.glob(os.path.join(self.root_dir, line[1], '*.png'))
+    #                     for file in files:
+    #                         self.depth_images.append(file)
+    #                 elif self.input == 'mono_depth':
+    #                     files = glob.glob(os.path.join(self.root_dir, line[2], '*.png'))
+    #                     for file in files:
+    #                         self.depth_images.append(file)
+    #                 elif self.input == 'stereo_depth':
+    #                     files = glob.glob(os.path.join(self.root_dir, line[3], '*.png'))
+    #                     for file in files:
+    #                         self.depth_images.append(file)
+    #                 elif self.input == 'depth_gt':
+    #                     files = glob.glob(os.path.join(self.root_dir, line[0], '*.png'))
+    #                     for file in files:
+    #                         self.depth_images.append(file)
 
 
-            # perhaps it will be important to order the frames for testing and training the fusion network.
-            self.depth_images = sorted(self.depth_images, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-        if self.mode == 'val':
-            self.depth_images = self.depth_images[::4]
-
+    #         # perhaps it will be important to order the frames for testing and training the fusion network.
+    #         self.depth_images = sorted(self.depth_images, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #     if self.mode == 'val':
+    #         self.depth_images = self.depth_images[::4]
 
     def _load_depths(self): # loads the paths of the noisy depth images to a list
 
-        if self.scenedir is not None:
-            raise NotImplementedError
+        # reading files from list
+        self.depth_images = dict()
+        for sensor_ in self.input: # initialize empty lists
+            self.depth_images[sensor_] = []
 
-        else:
-            # reading files from list
-            self.depth_images_tof = []
-            self.depth_images_mono = []
-            self.depth_images_stereo = []
-            with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
-                for line in file:
-                    line = line.split(' ')
-                    files = glob.glob(os.path.join(self.root_dir, line[1], '*.png'))
+        with open(os.path.join(self.root_dir, self.scene_list), 'r') as scene_list:
+            for line in scene_list:
+                line = line.split(' ')
+                for sensor_ in self.input:
+                    files = glob.glob(os.path.join(self.root_dir, line[self.sensor_line_mapping[sensor_]], '*.png'))
                     for file in files:
-                        self.depth_images_tof.append(file)
-                    files = glob.glob(os.path.join(self.root_dir, line[2], '*.png'))
-                    for file in files:
-                        self.depth_images_mono.append(file)
-                    files = glob.glob(os.path.join(self.root_dir, line[3], '*.png'))
-                    for file in files:
-                        self.depth_images_stereo.append(file)
+                        self.depth_images[sensor_].append(file)
 
         # perhaps it will be important to order the frames for testing and training the fusion network.
-        self.depth_images_tof = sorted(self.depth_images_tof, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-        self.depth_images_mono = sorted(self.depth_images_mono, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
-        self.depth_images_stereo = sorted(self.depth_images_stereo, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+        for sensor_ in self.depth_images.keys():
+            self.depth_images[sensor_]  = sorted(self.depth_images[sensor_] , key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+
         if self.mode == 'val':
-            self.depth_images_tof = self.depth_images_tof[::4]
-            self.depth_images_mono = self.depth_images_mono[::4]
-            self.depth_images_stereo = self.depth_images_stereo[::4]
+            for sensor_ in self.depth_images.keys():
+                self.depth_images[sensor_]  = self.depth_images[sensor_][::4]
+
+    # def _load_depths(self): # loads the paths of the noisy depth images to a list
+
+    #     if self.scenedir is not None:
+    #         raise NotImplementedError
+
+    #     else:
+    #         # reading files from list
+    #         self.depth_images_tof = []
+    #         self.depth_images_mono = []
+    #         self.depth_images_stereo = []
+    #         with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
+    #             for line in file:
+    #                 line = line.split(' ')
+    #                 files = glob.glob(os.path.join(self.root_dir, line[1], '*.png'))
+    #                 for file in files:
+    #                     self.depth_images_tof.append(file)
+    #                 files = glob.glob(os.path.join(self.root_dir, line[2], '*.png'))
+    #                 for file in files:
+    #                     self.depth_images_mono.append(file)
+    #                 files = glob.glob(os.path.join(self.root_dir, line[3], '*.png'))
+    #                 for file in files:
+    #                     self.depth_images_stereo.append(file)
+
+    #     # perhaps it will be important to order the frames for testing and training the fusion network.
+    #     self.depth_images_tof = sorted(self.depth_images_tof, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #     self.depth_images_mono = sorted(self.depth_images_mono, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #     self.depth_images_stereo = sorted(self.depth_images_stereo, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
+    #     if self.mode == 'val':
+    #         self.depth_images_tof = self.depth_images_tof[::4]
+    #         self.depth_images_mono = self.depth_images_mono[::4]
+    #         self.depth_images_stereo = self.depth_images_stereo[::4]
 
     def _load_depth_gt(self): # loads the paths of the ground truth depth images to a list
         self.depth_images_gt = []
@@ -265,9 +294,9 @@ class Replica(Dataset):
             with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
                 for line in file:
                     line = line.split(' ')
-                    if line[0].split('/')[0] not in self._scenes:
-                        self._scenes.append(line[0].split('/')[0])
-                    files = glob.glob(os.path.join(self.root_dir, line[0], '*.png'))
+                    if line[self.sensor_line_mapping['left_depth_gt']].split('/')[0] not in self._scenes:
+                        self._scenes.append(line[self.sensor_line_mapping['left_depth_gt']].split('/')[0])
+                    files = glob.glob(os.path.join(self.root_dir, line[self.sensor_line_mapping['left_depth_gt']], '*.png'))
                     for file in files:
                         self.depth_images_gt.append(file)
 
@@ -310,7 +339,7 @@ class Replica(Dataset):
             with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
                 for line in file:
                     line = line.split(' ')
-                    files = glob.glob(os.path.join(self.root_dir, line[-2], '*.png'))
+                    files = glob.glob(os.path.join(self.root_dir, line[self.sensor_line_mapping['left_rgb']], '*.png'))
                     for file in files:
                         self.color_images.append(file)
 
@@ -386,8 +415,8 @@ class Replica(Dataset):
 
         image = io.imread(file)
 
-        step_x = image.shape[0] / self.resolution_stereo[0]
-        step_y = image.shape[1] / self.resolution_stereo[0]
+        step_x = image.shape[0] / self.resolution[0]
+        step_y = image.shape[1] / self.resolution[0]
 
         index_y = [int(step_y * i) for i in
                    range(0, int(image.shape[1] / step_y))]
@@ -408,86 +437,75 @@ class Replica(Dataset):
         sample['gradient'] = np.asarray(grad).astype(np.float32)
 
         # load noisy depth maps
-        file_tof = self.depth_images_tof[item]
-        # file_mono = self.depth_images_mono[item]
-        file_stereo = self.depth_images_stereo[item]
+        for sensor_ in self.input:
+            file = self.depth_images[sensor_][item]
 
-        depth_tof = io.imread(file_tof).astype(np.float32)
-        # depth_mono = io.imread(file_mono).astype(np.float32)
-        depth_stereo = io.imread(file_stereo).astype(np.float32)
+            depth = io.imread(file).astype(np.float32)
+            try:
+                step_x = depth.shape[0] / eval('self.resolution_' + sensor_ + '[0]')
+                step_y = depth.shape[1] / eval('self.resolution_' + sensor_ + '[1]')
+            except: # default values used in case sensor specific parameters do not exist
+                step_x = depth.shape[0] / self.resolution[0]
+                step_y = depth.shape[1] / self.resolution[1]
 
-        step_x = depth_tof.shape[0] / self.resolution_tof[0]
-        step_y = depth_tof.shape[1] / self.resolution_tof[1]
+            index_y = [int(step_y * i) for i in
+                       range(0, int(depth.shape[1] / step_y))]
+            index_x = [int(step_x * i) for i in
+                       range(0, int(depth.shape[0] / step_x))]
 
-        index_y = [int(step_y * i) for i in
-                   range(0, int(depth_tof.shape[1] / step_y))]
-        index_x = [int(step_x * i) for i in
-                   range(0, int(depth_tof.shape[0] / step_x))]
+            depth = depth[:, index_y]
+            depth = depth[index_x, :]
 
-        depth_tof = depth_tof[:, index_y]
-        depth_tof = depth_tof[index_x, :]
+            depth /= 1000.
 
-        step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
-        step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
+            sample[sensor_ + '_depth'] = np.asarray(depth)
+       
+            # define mask
+            if self.fusion_strategy == 'routingNet':
+                raise NotImplementedError
+                mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
+                mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
+                # remove strong artifacts coming from pixels close to missing pixels
+                # the routing network computes bad depths for these pixels that are
+                # not missing in the original image due to the convolutions over
+                # zero-valued pixels.
+                # for i in range(10):
+                #     mask = binary_erosion(mask)
 
-        index_y = [int(step_y * i) for i in
-                   range(0, int(depth_stereo.shape[1] / step_y))]
-        index_x = [int(step_x * i) for i in
-                   range(0, int(depth_stereo.shape[0] / step_x))]
+                # do not integrate depth values close to the image boundary
+                # this is relevant for the stereo modality. 
+                mask[0:10, :] = 0
+                mask[-10:-1, :] = 0
+                mask[:, 0:10] = 0
+                mask[:, -10:-1] = 0
 
-        depth_stereo = depth_stereo[:, index_y]
-        depth_stereo = depth_stereo[index_x, :]
+                sample['mask'] = mask
 
-        depth_tof /= 1000.
-        # depth_mono /= 1000
-        depth_stereo /= 1000.
+            else:
+                try:
+                    mask = (depth > eval('self.min_depth_' + sensor_))
+                    mask = np.logical_and(mask, depth < eval('self.max_depth_' + sensor_))
 
-        # define mask
-        if self.fusion_strategy == 'routingNet':
-            raise NotImplementedError
-            mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
-            mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
-            # remove strong artifacts coming from pixels close to missing pixels
-            # the routing network computes bad depths for these pixels that are
-            # not missing in the original image due to the convolutions over
-            # zero-valued pixels.
-            # for i in range(10):
-            #     mask = binary_erosion(mask)
+                    # do not integrate depth values close to the image boundary
+                    mask[0:eval('self.mask_' + sensor_ + '_height'), :] = 0
+                    mask[-eval('self.mask_' + sensor_ + '_height'):-1, :] = 0
+                    mask[:, 0:eval('self.mask_' + sensor_ + '_width')] = 0
+                    mask[:, -eval('self.mask_' + sensor_ + '_width'):-1] = 0
+                    sample[sensor_ + '_mask'] = mask
+                except:
+                    mask = (depth > self.min_depth)
+                    mask = np.logical_and(mask, depth < self.max_depth)
 
-            # do not integrate depth values close to the image boundary
-            # this is relevant for the stereo modality. 
-            mask[0:10, :] = 0
-            mask[-10:-1, :] = 0
-            mask[:, 0:10] = 0
-            mask[:, -10:-1] = 0
+                    # do not integrate depth values close to the image boundary
+                    mask[0:self.mask_height, :] = 0
+                    mask[-self.mask_height:-1, :] = 0
+                    mask[:, 0:self.mask_width] = 0
+                    mask[:, -self.mask_width:-1] = 0
+                    sample[sensor_ + '_mask'] = mask
 
-            sample['mask'] = mask
 
-        else:
-            mask = (depth_stereo > self.min_depth_stereo)
-            mask = np.logical_and(mask, depth_stereo < self.max_depth_stereo)
 
-            # do not integrate depth values close to the image boundary
-            # this is relevant for the stereo modality. 
-            mask[0:self.mask_stereo_height, :] = 0
-            mask[-self.mask_stereo_height:-1, :] = 0
-            mask[:, 0:self.mask_stereo_width] = 0
-            mask[:, -self.mask_stereo_width:-1] = 0
-            sample['stereo_mask'] = mask
-            mask = (depth_tof > self.min_depth_tof)
-            mask = np.logical_and(mask, depth_tof < self.max_depth_tof)
-
-            # do not integrate depth values close to the image boundary
-            # this is relevant for the stereo modality. 
-            mask[0:self.mask_tof_height, :] = 0
-            mask[-self.mask_tof_height:-1, :] = 0
-            mask[:, 0:self.mask_tof_width] = 0
-            mask[:, -self.mask_tof_width:-1] = 0
-            sample['tof_mask'] = mask
-
-            sample['tof_depth'] = np.asarray(depth_tof)
-            # sample['mono_depth'] = np.asarray(depth_mono)
-            sample['stereo_depth'] = np.asarray(depth_stereo)
+               
 
 
         # load ground truth depth map
@@ -495,8 +513,8 @@ class Replica(Dataset):
         # print(file)
         depth = io.imread(file).astype(np.float32)
 
-        step_x = depth.shape[0] / self.resolution_stereo[0]
-        step_y = depth.shape[1] / self.resolution_stereo[0]
+        step_x = depth.shape[0] / self.resolution[0]
+        step_y = depth.shape[1] / self.resolution[0]
 
         index_y = [int(step_y * i) for i in
                    range(0, int(depth.shape[1] / step_y))]
@@ -526,25 +544,29 @@ class Replica(Dataset):
         sample['extrinsics'] = np.matmul(rot_90_around_x, extrinsics[0:3, 0:4])
 
         hfov = 90.
-        f = self.resolution_tof[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
-        shift = self.resolution_tof[0]/2
+        try:
+            for sensor_ in self.input:
+                f = eval('self.resolution_' + sensor_ + '[0]')/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
+                shift = eval('self.resolution_' + sensor_ + '[0]')/2
 
-        # load intrinsics
-        intrinsics = np.asarray([[f, 0., shift],
-                                 [0., f, shift],
-                                 [0., 0., 1.]])
+                # load intrinsics
+                intrinsics = np.asarray([[f, 0., shift],
+                                         [0., f, shift],
+                                         [0., 0., 1.]])
 
-        sample['intrinsics_tof'] = intrinsics
+                sample['intrinsics_' + sensor_] = intrinsics
+        except:
+            f = self.resolution[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
+            shift = self.resolution[0]/2
 
-        f = self.resolution_stereo[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
-        shift = self.resolution_stereo[0]/2
+            # load intrinsics
+            intrinsics = np.asarray([[f, 0., shift],
+                                     [0., f, shift],
+                                     [0., 0., 1.]])
 
-        # load intrinsics
-        intrinsics = np.asarray([[f, 0., shift],
-                                 [0., f, shift],
-                                 [0., 0., 1.]])
+            sample['intrinsics'] = intrinsics
 
-        sample['intrinsics_stereo'] = intrinsics
+
 
         sample['frame_id'] = frame_id
 
@@ -552,6 +574,189 @@ class Replica(Dataset):
             sample = self.transform(sample)
 
         return sample
+
+    # def __getitem__(self, item):
+
+    #     sample = dict()
+    #     sample['item_id'] = item 
+
+    #     # load rgb image
+    #     file = self.color_images[item]
+
+    #     pathsplit = file.split('/')
+    #     scene = pathsplit[-4]
+    #     trajectory = pathsplit[-3]
+    #     frame = os.path.splitext(pathsplit[-1])[0]
+    #     frame_id = '{}/{}/{}'.format(scene, trajectory, frame)
+
+    #     image = io.imread(file)
+
+    #     step_x = image.shape[0] / self.resolution_stereo[0]
+    #     step_y = image.shape[1] / self.resolution_stereo[0]
+
+    #     index_y = [int(step_y * i) for i in
+    #                range(0, int(image.shape[1] / step_y))]
+    #     index_x = [int(step_x * i) for i in
+    #                range(0, int(image.shape[0] / step_x))]
+
+    #     image = image[:, index_y]
+    #     image = image[index_x, :]
+    #     sample['image'] = np.asarray(image).astype(np.float32)/255
+
+
+    #     # if self.intensity_gradient: 
+    #     intensity = rgb2gray(image) # seems to be in range 0 - 1 
+    #     sample['intensity'] = np.asarray(intensity).astype(np.float32)
+    #     grad_y = filters.sobel_h(intensity)
+    #     grad_x = filters.sobel_v(intensity)
+    #     grad = (grad_x**2 + grad_y**2)**(1/2)
+    #     sample['gradient'] = np.asarray(grad).astype(np.float32)
+
+    #     # load noisy depth maps
+    #     file_tof = self.depth_images_tof[item]
+    #     # file_mono = self.depth_images_mono[item]
+    #     file_stereo = self.depth_images_stereo[item]
+
+    #     depth_tof = io.imread(file_tof).astype(np.float32)
+    #     # depth_mono = io.imread(file_mono).astype(np.float32)
+    #     depth_stereo = io.imread(file_stereo).astype(np.float32)
+
+    #     step_x = depth_tof.shape[0] / self.resolution_tof[0]
+    #     step_y = depth_tof.shape[1] / self.resolution_tof[1]
+
+    #     index_y = [int(step_y * i) for i in
+    #                range(0, int(depth_tof.shape[1] / step_y))]
+    #     index_x = [int(step_x * i) for i in
+    #                range(0, int(depth_tof.shape[0] / step_x))]
+
+    #     depth_tof = depth_tof[:, index_y]
+    #     depth_tof = depth_tof[index_x, :]
+
+    #     step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
+    #     step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
+
+    #     index_y = [int(step_y * i) for i in
+    #                range(0, int(depth_stereo.shape[1] / step_y))]
+    #     index_x = [int(step_x * i) for i in
+    #                range(0, int(depth_stereo.shape[0] / step_x))]
+
+    #     depth_stereo = depth_stereo[:, index_y]
+    #     depth_stereo = depth_stereo[index_x, :]
+
+    #     depth_tof /= 1000.
+    #     # depth_mono /= 1000
+    #     depth_stereo /= 1000.
+
+    #     # define mask
+    #     if self.fusion_strategy == 'routingNet':
+    #         raise NotImplementedError
+    #         mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
+    #         mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
+    #         # remove strong artifacts coming from pixels close to missing pixels
+    #         # the routing network computes bad depths for these pixels that are
+    #         # not missing in the original image due to the convolutions over
+    #         # zero-valued pixels.
+    #         # for i in range(10):
+    #         #     mask = binary_erosion(mask)
+
+    #         # do not integrate depth values close to the image boundary
+    #         # this is relevant for the stereo modality. 
+    #         mask[0:10, :] = 0
+    #         mask[-10:-1, :] = 0
+    #         mask[:, 0:10] = 0
+    #         mask[:, -10:-1] = 0
+
+    #         sample['mask'] = mask
+
+    #     else:
+    #         mask = (depth_stereo > self.min_depth_stereo)
+    #         mask = np.logical_and(mask, depth_stereo < self.max_depth_stereo)
+
+    #         # do not integrate depth values close to the image boundary
+    #         # this is relevant for the stereo modality. 
+    #         mask[0:self.mask_stereo_height, :] = 0
+    #         mask[-self.mask_stereo_height:-1, :] = 0
+    #         mask[:, 0:self.mask_stereo_width] = 0
+    #         mask[:, -self.mask_stereo_width:-1] = 0
+    #         sample['stereo_mask'] = mask
+    #         mask = (depth_tof > self.min_depth_tof)
+    #         mask = np.logical_and(mask, depth_tof < self.max_depth_tof)
+
+    #         # do not integrate depth values close to the image boundary
+    #         # this is relevant for the stereo modality. 
+    #         mask[0:self.mask_tof_height, :] = 0
+    #         mask[-self.mask_tof_height:-1, :] = 0
+    #         mask[:, 0:self.mask_tof_width] = 0
+    #         mask[:, -self.mask_tof_width:-1] = 0
+    #         sample['tof_mask'] = mask
+
+    #         sample['tof_depth'] = np.asarray(depth_tof)
+    #         # sample['mono_depth'] = np.asarray(depth_mono)
+    #         sample['stereo_depth'] = np.asarray(depth_stereo)
+
+
+    #     # load ground truth depth map
+    #     file = self.depth_images_gt[item]
+    #     # print(file)
+    #     depth = io.imread(file).astype(np.float32)
+
+    #     step_x = depth.shape[0] / self.resolution_stereo[0]
+    #     step_y = depth.shape[1] / self.resolution_stereo[0]
+
+    #     index_y = [int(step_y * i) for i in
+    #                range(0, int(depth.shape[1] / step_y))]
+    #     index_x = [int(step_x * i) for i in
+    #                range(0, int(depth.shape[0] / step_x))]
+
+    #     depth = depth[:, index_y]
+    #     depth = depth[index_x, :]
+
+    #     depth /= 1000.
+
+    #     sample[self.target] = np.asarray(depth)
+
+    #     # load extrinsics
+    #     file = self.cameras[item]
+    #     # print(file)
+    #     extrinsics = np.loadtxt(file)
+    #     extrinsics = np.linalg.inv(extrinsics).astype(np.float32)
+    #     # the fusion code expects that the camera coordinate system is such that z is in the
+    #     # camera viewing direction, y is down and x is to the right. This is achieved by a serie of rotations
+    #     rot_180_around_y = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]]).astype(np.float32)
+    #     rot_180_around_z = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]).astype(np.float32)
+    #     rot_90_around_x = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]).astype(np.float32)
+    #     rotation = np.matmul(rot_180_around_z, rot_180_around_y)
+    #     extrinsics =  np.matmul(rotation, extrinsics[0:3, 0:4])
+    #     extrinsics = np.linalg.inv(np.concatenate((extrinsics, np.array([[0, 0, 0, 1]])), axis=0))
+    #     sample['extrinsics'] = np.matmul(rot_90_around_x, extrinsics[0:3, 0:4])
+
+    #     hfov = 90.
+    #     f = self.resolution_tof[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
+    #     shift = self.resolution_tof[0]/2
+
+    #     # load intrinsics
+    #     intrinsics = np.asarray([[f, 0., shift],
+    #                              [0., f, shift],
+    #                              [0., 0., 1.]])
+
+    #     sample['intrinsics_tof'] = intrinsics
+
+    #     f = self.resolution_stereo[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
+    #     shift = self.resolution_stereo[0]/2
+
+    #     # load intrinsics
+    #     intrinsics = np.asarray([[f, 0., shift],
+    #                              [0., f, shift],
+    #                              [0., 0., 1.]])
+
+    #     sample['intrinsics_stereo'] = intrinsics
+
+    #     sample['frame_id'] = frame_id
+
+    #     if self.transform:
+    #         sample = self.transform(sample)
+
+    #     return sample
 
     def get_grid(self, scene, truncation):
         file = os.path.join(self.root_dir, scene, 'sdf_' + scene + '.hdf')
