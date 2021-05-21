@@ -65,11 +65,14 @@ class Fuse_Pipeline(torch.nn.Module):
         elif config.DATA.truncation_strategy == 'artificial':
             config.FUSION_MODEL.init_value = config.DATA.init_value           
 
+        config.FEATURE_MODEL.n_points = config.FUSION_MODEL.n_points
         config.FEATURE_MODEL.n_points_tof = config.FUSION_MODEL.n_points_tof
         config.FEATURE_MODEL.n_points_stereo = config.FUSION_MODEL.n_points_stereo
         config.FEATURE_MODEL.n_tail_points_tof = config.FUSION_MODEL.n_tail_points_tof
         config.FEATURE_MODEL.n_tail_points_stereo = config.FUSION_MODEL.n_tail_points_stereo
 
+        self.n_features = self.config.FEATURE_MODEL.n_features
+ 
         self._extractor = dict()
         self._fusion_network = torch.nn.ModuleDict()
         self._feature_network = torch.nn.ModuleDict()
@@ -110,7 +113,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         return frame, confidence
 
-    def _fusion(self, input_, input_features, values, sensor): # TODO: adapt to when not using features
+    def _fusion(self, input_, input_features, values, sensor, gt_depth=None): # TODO: adapt to when not using features
 
         b, c, h, w = input_.shape
         if self.config.FUSION_MODEL.fixed:
@@ -121,7 +124,48 @@ class Fuse_Pipeline(torch.nn.Module):
         else:
             tsdf_pred = self._fusion_network[sensor].forward(input_)
 
-        feat_pred =  self._feature_network[sensor].forward(input_features)
+        
+
+        if self.config.FEATURE_MODEL.learned_features:
+            if self.config.FEATURE_MODEL.relative_normalization:
+                norm = dict()
+                feat_pred = dict()
+                for sensor_ in self.config.DATA.input:
+                    feat_pred[sensor_] = self._feature_network[sensor_].forward(input_features[sensor_])
+                    if self.config.FEATURE_MODEL.append_depth:
+                        # print(feat_pred[sensor_][:, -1, :, :])
+                        norm[sensor_] = torch.linalg.norm(feat_pred[sensor_][:, :-1, :, :], dim=1)
+                    else:
+                        norm[sensor_] = torch.linalg.norm(feat_pred[sensor_], dim=1)
+
+                # normalize
+                normalization_factor = None
+                for k, sensor_ in enumerate(self.config.DATA.input):
+                    if k == 0:
+                        normalization_factor = norm[sensor_]
+                    else:
+                        torch.min(normalization_factor, norm[sensor_])
+
+                feat_pred = feat_pred[sensor] / normalization_factor
+
+            else:
+                feat_pred =  self._feature_network[sensor].forward(input_features[sensor])
+        else:
+            if self.config.FEATURE_MODEL.append_pixel_conf:
+                if sensor == 'gauss_close_thresh':
+                    gt = torch.unsqueeze(gt_depth, -1)
+                    gt = gt.permute(0, -1, 1, 2)
+                    feat_pred = gt > 1.75
+                    # feat_pred = input_features[sensor] > 1.75 # one where we have no noise
+                elif sensor == 'gauss_far_thresh':
+                    gt = torch.unsqueeze(gt_depth, -1)
+                    gt = gt.permute(0, -1, 1, 2)
+                    feat_pred = gt < 1.75
+                    # feat_pred = input_features[sensor] < 1.75
+
+                feat_pred = torch.cat((feat_pred, input_features[sensor]), dim=1)
+            else:
+                feat_pred = input_features[sensor]
 
 
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
@@ -130,10 +174,13 @@ class Fuse_Pipeline(torch.nn.Module):
 
         output = dict()
 
+        try:
+            n_points = eval('self.config.FUSION_MODEL.n_points_' + sensor)
+        except:
+            n_points = self.config.FUSION_MODEL.n_points
 
-        n_points = eval('self.config.FUSION_MODEL.n_points_' + sensor)
         tsdf_est = tsdf_pred.view(b, h * w, n_points)
-        feature_est = feat_pred.view(b, h * w, 1, self.config.FEATURE_MODEL.n_features)
+        feature_est = feat_pred.view(b, h * w, 1, self.n_features)
         feature_est = feature_est.repeat(1, 1, n_points, 1)
 
         # computing weighted updates for loss calculation
@@ -156,8 +203,7 @@ class Fuse_Pipeline(torch.nn.Module):
     def _prepare_fusion_input(self, frame, values_sensor, sensor, confidence=None, n_points=None, rgb=None): # TODO: adapt to when not using features
 
         # get frame shape
-        b, h, w = frame.shape
-
+        b, h, w = frame[sensor].shape
         # extracting data
         # reshaping data
         tsdf_input = {}
@@ -166,18 +212,20 @@ class Fuse_Pipeline(torch.nn.Module):
             tsdf_input[sensor_] = values_sensor[sensor_]['fusion_values'].view(b, h, w, n_points)
             tsdf_weights[sensor_] = values_sensor[sensor_]['fusion_weights'].view(b, h, w, n_points)
 
-        tsdf_frame = torch.unsqueeze(frame, -1)
+        tsdf_frame = torch.unsqueeze(frame[sensor], -1)
 
-        feature_input = tsdf_frame # torch.cat([tsdf_frame, feature_weights_sensor, features], dim=3)
-        if rgb is not None:
-            rgb = rgb.unsqueeze(-1)
-            rgb = rgb.view(1, h, w, -1)
-            feature_input = torch.cat((feature_input, rgb), dim=3)
+        feature_input = dict()
+        for sensor_ in self.config.DATA.input:
+            feature_input[sensor_] = torch.unsqueeze(frame[sensor_], -1)
+            if rgb is not None:
+                rgb = rgb.unsqueeze(-1)
+                rgb = rgb.view(1, h, w, -1)
+                feature_input[sensor_] = torch.cat((feature_input[sensor_], rgb), dim=3)
+        
+            # del features, feature_weights_sensor
+            # permuting input
+            feature_input[sensor_] = feature_input[sensor_].permute(0, -1, 1, 2)
         del rgb
-        # del features, feature_weights_sensor
-        # permuting input
-        feature_input = feature_input.permute(0, -1, 1, 2)
-
         # stacking input data
         if self.config.FUSION_MODEL.with_peek:
             raise NotImplementedError
@@ -208,8 +256,11 @@ class Fuse_Pipeline(torch.nn.Module):
         return tsdf_input, feature_input
 
     def _prepare_volume_update(self, values, est, features, inputs, sensor) -> dict:# TODO: adapt to when not using features
+        try:
+            tail_points = eval('self.config.FUSION_MODEL.n_tail_points_' + sensor)
+        except:
+            tail_points = self.config.FUSION_MODEL.n_tail_points
 
-        tail_points = eval('self.config.FUSION_MODEL.n_tail_points_' + sensor)
 
         b, h, w = inputs.shape
         # print(b, h, w)
@@ -227,6 +278,7 @@ class Fuse_Pipeline(torch.nn.Module):
         # print(valid_filter.sum())
         # print('valid bef erode: ', (valid_filter > 0).sum())
 
+        # I do the erosion to avoid training on too many indices that are at the edge of the initialized space
         valid_filter = ndimage.binary_erosion(valid_filter, structure=np.ones((3,3)), iterations=1)
         # print('valid aft erode: ', (valid_filter > 0).sum())
 
@@ -304,8 +356,10 @@ class Fuse_Pipeline(torch.nn.Module):
 
 
         else:
-            frame = batch[batch['sensor'] + '_depth'].squeeze_(1)
-            frame = frame.to(device)
+            frame = dict()
+            for sensor_ in self.config.DATA.input: # we require to load all sensor frames if we do relative normalization in feature net
+                frame[sensor_] = batch[batch['sensor'] + '_depth'].squeeze_(1)
+                frame[sensor_] = frame[sensor_].to(device)
             confidence = None
 
         if self.config.FEATURE_MODEL.w_rgb:
@@ -323,17 +377,21 @@ class Fuse_Pipeline(torch.nn.Module):
             filtered_frame = torch.where(mask == 0, torch.zeros_like(frame),
                                     filtered_frame)
         else:
-            filtered_frame = torch.where(mask == 0, torch.zeros_like(frame),
-                                    frame)
+            filtered_frame = torch.where(mask == 0, torch.zeros_like(frame[batch['sensor']]),
+                                    frame[batch['sensor']])
 
         # get current tsdf values
         scene_id = batch['frame_id'][0].split('/')[0]
 
         extracted_values = dict()
         for sensor in self.config.DATA.input:
-            extracted_values[sensor] = self._extractor[batch['sensor']].forward(frame,
+            try:
+                intrinsics = batch['intrinsics' + '_' + batch['sensor']]
+            except:
+                intrinsics = batch['intrinsics']
+            extracted_values[sensor] = self._extractor[batch['sensor']].forward(frame[batch['sensor']],
                                          batch['extrinsics'],
-                                         batch['intrinsics' + '_' + batch['sensor']],
+                                         intrinsics,
                                          database[scene_id]['tsdf' + '_' + sensor],
                                          database[scene_id]['features_' + sensor],
                                          database[scene_id]['origin'],
@@ -342,14 +400,16 @@ class Fuse_Pipeline(torch.nn.Module):
                                          database[scene_id]['weights' + '_' + sensor],
                                          database[scene_id]['feature_weights' + '_' + sensor])
 
-
-        n_points = eval('self.config.FUSION_MODEL.n_points_' + batch['sensor'])
+        try:
+            n_points = eval('self.config.FUSION_MODEL.n_points_' + batch['sensor'])
+        except:
+            n_points = self.config.FUSION_MODEL.n_points
         tsdf_input, feature_input = self._prepare_fusion_input(frame, extracted_values, batch['sensor'],
                                                               confidence, n_points, rgb)
         del rgb, frame
 
 
-        fusion_output = self._fusion(tsdf_input, feature_input, extracted_values[batch['sensor']], batch['sensor'])
+        fusion_output = self._fusion(tsdf_input, feature_input, extracted_values[batch['sensor']], batch['sensor'], batch['gt'].to(device))
 
         # masking invalid losses
         tsdf_est = fusion_output['tsdf_est']
@@ -421,8 +481,10 @@ class Fuse_Pipeline(torch.nn.Module):
                 filtered_frame[confidence < self.config.ROUTING.threshold] = 0
             # frame = frame.to(device)
         else:
-            frame = batch[batch['sensor'] + '_depth'].squeeze_(1)
-            frame = frame.to(device) # putting extractor on gpu
+            frame = dict()
+            for sensor_ in self.config.DATA.input: # we require to load all sensor frames if we do relative normalization in feature net
+                frame[sensor_] = batch[batch['sensor'] + '_depth'].squeeze_(1)
+                frame[sensor_] = frame[sensor_].to(device)
             confidence = None
 
         if self.config.FEATURE_MODEL.w_rgb:
@@ -440,20 +502,25 @@ class Fuse_Pipeline(torch.nn.Module):
             filtered_frame = torch.where(mask == 0, torch.zeros_like(frame),
                                     filtered_frame)
         else:
-            filtered_frame = torch.where(mask == 0, torch.zeros_like(frame),
-                                    frame)
+            filtered_frame = torch.where(mask == 0, torch.zeros_like(frame[batch['sensor']]),
+                                    frame[batch['sensor']])
         del mask
 
-        b, h, w = frame.shape
+        b, h, w = frame[batch['sensor']].shape
 
         # get current tsdf values
         scene_id = batch['frame_id'][0].split('/')[0]
 
         extracted_values = dict()
+        try:
+            intrinsics = batch['intrinsics' + '_' + batch['sensor']]
+        except:
+            intrinsics = batch['intrinsics']
         for sensor in self.config.DATA.input:
-            extracted_values[sensor] = self._extractor[batch['sensor']].forward(frame,
+
+            extracted_values[sensor] = self._extractor[batch['sensor']].forward(frame[batch['sensor']],
                                          batch['extrinsics'],
-                                         batch['intrinsics' + '_' + batch['sensor']],
+                                         intrinsics,
                                          database[scene_id]['tsdf' + '_' + sensor],
                                          database[scene_id]['features_' + sensor],
                                          database[scene_id]['origin'],
@@ -464,9 +531,9 @@ class Fuse_Pipeline(torch.nn.Module):
 
 
         # TODO: make function that extracts only the gt values for speed up during training
-        extracted_values_gt = self._extractor[batch['sensor']].forward(frame,
+        extracted_values_gt = self._extractor[batch['sensor']].forward(frame[batch['sensor']],
                                          batch['extrinsics'],
-                                         batch['intrinsics' + '_' + batch['sensor']],
+                                         intrinsics,
                                          database[scene_id]['gt'],
                                          database[scene_id]['features_' + batch['sensor']],
                                          database[scene_id]['origin'],
@@ -478,12 +545,15 @@ class Fuse_Pipeline(torch.nn.Module):
         tsdf_target = extracted_values_gt['fusion_values']
         del extracted_values_gt
 
-        n_points = eval('self.config.FUSION_MODEL.n_points_' + batch['sensor'])
+        try:
+            n_points = eval('self.config.FUSION_MODEL.n_points_' + batch['sensor'])
+        except:
+            n_points = self.config.FUSION_MODEL.n_points
         tsdf_input, feature_input = self._prepare_fusion_input(frame, extracted_values, batch['sensor'], confidence, n_points, rgb)
         del rgb, frame
         
         # tsdf_target = tsdf_target.view(b, h, w, eval('self.config.FUSION_MODEL.n_points_' + batch['sensor']))
-        fusion_output = self._fusion(tsdf_input, feature_input, extracted_values[batch['sensor']], batch['sensor'])
+        fusion_output = self._fusion(tsdf_input, feature_input, extracted_values[batch['sensor']], batch['sensor'], batch['gt'].to(device))
 
 
         del tsdf_input, feature_input
