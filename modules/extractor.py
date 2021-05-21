@@ -17,8 +17,10 @@ class Extractor(nn.Module):
         super(Extractor, self).__init__()
 
         self.config = config
-
-        self.n_points = eval('self.config.n_points_' + sensor) 
+        try:
+            self.n_points = eval('self.config.n_points_' + sensor) 
+        except:
+            self.n_points = self.config.n_points
         self.mode = 'ray'
         self.n_empty_space_voting = config.n_empty_space_voting
         self.init_val = config.init_value
