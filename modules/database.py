@@ -23,9 +23,9 @@ class Database(Dataset):
         self.initial_value = config.init_value
         self.trunc_value = config.trunc_value
         self.erosion = config.erosion
-        self.n_features = config.n_features
+        self.n_features = config.n_features # this includes the append_depth option
         self.sensors = config.input
-        self.w_features = config.w_features
+        self.w_features = config.features_to_sdf_enc or config.features_to_weight_head
         self.test_mode = config.test_mode
 
         self.scenes_gt = {}
@@ -100,6 +100,7 @@ class Database(Dataset):
         for sensor in self.sensors:
             filename = scene_id + '_' + sensor + '.tsdf.hf5'
             weightname = scene_id + '_' + sensor + '.weights.hf5'
+            featurename = scene_id + '_' + sensor + '.features.hf5'
 
             with h5py.File(os.path.join(path, filename), 'w') as hf:
                 hf.create_dataset("TSDF",
@@ -113,6 +114,13 @@ class Database(Dataset):
                                       data=self.feature_weights[sensor][scene_id],
                                       compression='gzip',
                                       compression_opts=9)
+            if self.w_features:
+                with h5py.File(os.path.join(path, featurename), 'w') as hf:
+                    hf.create_dataset("features",
+                                          shape=self.features[sensor][scene_id].shape,
+                                          data=self.features[sensor][scene_id],
+                                          compression='gzip',
+                                          compression_opts=9)
 
         sdfname = scene_id + '.tsdf_filtered.hf5'
         with h5py.File(os.path.join(path, sdfname), 'w') as hf:
