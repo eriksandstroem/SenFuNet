@@ -2,10 +2,13 @@ import torch
 import datetime
 import time
 
+import matplotlib.pyplot as plt
+
 from modules.routing import ConfidenceRouting
 from modules.extractor import Extractor
 from modules.model import FusionNet
 from modules.model_features import FeatureNet
+from modules.model_features import FeatureResNet
 from modules.integrator import Integrator
 import math
 import numpy as np
@@ -79,7 +82,10 @@ class Fuse_Pipeline(torch.nn.Module):
         for sensor in config.DATA.input:
             self._extractor[sensor] = Extractor(config.FUSION_MODEL, sensor)
             self._fusion_network[sensor] = FusionNet(config.FUSION_MODEL, sensor)
-            self._feature_network[sensor] = FeatureNet(config.FEATURE_MODEL, sensor)# TODO: adapt to when not using features
+            if config.FEATURE_MODEL.network == 'resnet':
+                self._feature_network[sensor] = FeatureResNet(config.FEATURE_MODEL, sensor)# TODO: adapt to when not using features
+            else:
+                self._feature_network[sensor] = FeatureNet(config.FEATURE_MODEL, sensor)# TODO: adapt to when not using features
 
         config.FUSION_MODEL.train_on_border_voxels = config.FILTERING_MODEL.MLP_MODEL.train_on_border_voxels
         self._integrator = Integrator(config.FUSION_MODEL)
@@ -170,7 +176,11 @@ class Fuse_Pipeline(torch.nn.Module):
 
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
 
-        feat_pred = feat_pred.permute(0, 2, 3, 1) # (1, 256, 256, n_points*n_features)
+        feat_pred = feat_pred.permute(0, 2, 3, 1) # (1, 256, 256, n_features)
+
+        # save feature maps
+        # for i in range(feat_pred.shape[-1]):
+        #     plt.imsave(sensor + '/' + str(i)+ '_'+ sensor+   '.jpeg', feat_pred[0, :, :, i].cpu().detach().numpy())
 
         output = dict()
 
