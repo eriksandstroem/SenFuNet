@@ -76,7 +76,7 @@ def train_fusion(args):
     if config.FEATURE_MODEL.learned_features:
         config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.n_features + config.FEATURE_MODEL.append_depth
     else:
-        config.FEATURE_MODEL.n_features = 1 + config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
+        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
 
     # get database
     # get train database
@@ -214,7 +214,7 @@ def train_fusion(args):
         # functionality in the workspace so that it can do the writing of the appropriate properties
         train_loss = 0
         grad_norm = 0
-        grad_norm_feature = 0
+        grad_norm_feature = dict()
         val_norm = 0
         l1_interm = 0
         l1_grid = 0
@@ -223,6 +223,8 @@ def train_fusion(args):
         for sensor_ in config.DATA.input:
             l1_grid_dict[sensor_] = 0
             l_occ_dict[sensor_] = 0
+            grad_norm_feature[sensor_] = 0
+
 
         l1_gt_grid = 0
         l_feat = 0
@@ -306,7 +308,7 @@ def train_fusion(args):
                 if param.grad is not None:
                     if (i + 1) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
                         if name.startswith('fuse_pipeline._feature'):
-                            grad_norm_feature += torch.norm(
+                            grad_norm_feature[name.split('.')[2]] += torch.norm(
                             param.grad)
                         else:
                             grad_norm += torch.norm(
@@ -342,7 +344,7 @@ def train_fusion(args):
                 divide = config.SETTINGS.log_freq
                 train_loss /= divide
                 grad_norm /= divide
-                grad_norm_feature /= divide
+                
                 val_norm /= divide
                 # print('averaged grad norm: ', grad_norm)
                 # print('averaged val norm: ', val_norm)
@@ -352,6 +354,7 @@ def train_fusion(args):
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] /= divide
                     l_occ_dict[sensor_] /= divide
+                    grad_norm_feature[sensor_] /= divide
 
                 l_occ /= divide
 
@@ -359,7 +362,7 @@ def train_fusion(args):
                 # l_feat /= divide
                 workspace.writer.add_scalar('Train/loss', train_loss, global_step=i + 1 + epoch*n_batches)
                 workspace.writer.add_scalar('Train/grad_norm', grad_norm, global_step=i + 1 + epoch*n_batches)
-                workspace.writer.add_scalar('Train/grad_norm_feature', grad_norm_feature, global_step=i + 1 + epoch*n_batches)
+                
                 workspace.writer.add_scalar('Train/val_norm', val_norm, global_step=i + 1 + epoch*n_batches)
                 # workspace.writer.add_scalar('Train/lr_filt', get_lr(optimizer_filt), global_step=i + 1 + epoch*n_batches)
                 # workspace.writer.add_scalar('Train/lr_fusion', get_lr(optimizer_fusion), global_step=i + 1 + epoch*n_batches)
@@ -368,6 +371,7 @@ def train_fusion(args):
                 workspace.writer.add_scalar('Train/l1_translation', l1_grid, global_step=i + 1 + epoch*n_batches)
                 workspace.writer.add_scalar('Train/l1_gt_translation', l1_gt_grid, global_step=i + 1 + epoch*n_batches)
                 for sensor_ in config.DATA.input:
+                    workspace.writer.add_scalar('Train/grad_norm_feature_' + sensor_, grad_norm_feature[sensor_], global_step=i + 1 + epoch*n_batches)
                     workspace.writer.add_scalar('Train/l1_' + sensor_, l1_grid_dict[sensor_], global_step=i + 1 + epoch*n_batches)
                     workspace.writer.add_scalar('Train/occ_loss_' + sensor_, l_occ_dict[sensor_], global_step=i + 1 + epoch*n_batches)
 
@@ -379,11 +383,13 @@ def train_fusion(args):
                 val_norm = 0
                 l1_interm = 0
                 l1_grid = 0
+                grad_norm_feature = dict()
                 l1_grid_dict = dict()
                 l_occ_dict = dict()
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] = 0
                     l_occ_dict[sensor_] = 0
+                    grad_norm_feature[sensor_] = 0
 
 
                 l1_gt_grid = 0
