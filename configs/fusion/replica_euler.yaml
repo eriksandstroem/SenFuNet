@@ -3,11 +3,13 @@ SETTINGS:
   experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion # path where the logging is done and the models are saved.
   test_mode: False # make sure this is set to "test" when using test_fusion.py. This makes sure that we visualize the alpha weighting between the sensors if we use more than one sensor
   eval_freq: 1000 # how many global steps before evaluation and saving the model
-  log_freq: 3 # how many global steps before logging the training loss
+  log_freq: 300 # how many global steps before logging the training loss
   seed: 52
 FUSION_MODEL:
   fixed: True
   output_scale: 1.0
+  n_points: 11 # when using the toy noise we use this defauly value
+  n_tail_points: 9 # when using the toy noise we use this defauly value
   n_points_tof: 11
   n_tail_points_tof: 9
   n_points_stereo: 11
@@ -18,13 +20,18 @@ FUSION_MODEL:
   max_weight: 500
   extraction_strategy: 'nearest_neighbor' # nearest_neighbor or trilinear_interpolation
 FEATURE_MODEL:
+  network: resnet
+  learned_features: True
+  append_depth: False # this increases the number of features by one
+  append_pixel_conf: False # only valid when learned features is false and we use gauss thresh sensors
   w_rgb: False
   w_intensity_gradient: False
-  normalize: False
+  normalize: True
+  relative_normalization: False
   fixed: False
   n_features: 6
-  n_layers: 2
-  enc_activation: torch.nn.ReLU()
+  n_layers: 6
+  enc_activation: torch.nn.Tanh()
   dec_activation: torch.nn.Tanh()
   depth: True
   resx: 256
@@ -36,26 +43,34 @@ ROUTING_MODEL:
   n_output_channels: 2
   normalization: True
 FILTERING_MODEL:
-  model: mlp # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
-  setting: avg # or avg (relevant only for the mlp model)
-  w_features: True
+  use_outlier_filter: True # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
+  residual_learning: True
+  alpha_force: True
+  model: 3dconv # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
+  setting: translate # or avg (relevant only for the mlp model)
+  features_to_sdf_enc: False # feed 2D features to sdf encoding head
+  features_to_weight_head: True # feed 2D features directly to sensor weighting head
+  sdf_enc_to_weight_head: False # feed sdf encoding to sensor weighting head
   output_scale: 0.12
   fixed: False
   erosion: False 
   tanh_weight: True
   MLP_MODEL:
-    occ_head: True # only used when setting: translate
+    occ_head: False # only used when setting: translate
     activation: torch.nn.Tanh() # only used when setting: translate
     neighborhood: 3
     train_on_border_voxels: False
     neighborhood_out: 3 # only relevant for setting: avg
     attend_to_uninit: False
-  3DCONV_MODEL:
+  CONV3D_MODEL:
+    bias: True # bias in sdf encoder
     chunk_size: 64 # this size determines the size of the window used during training and testing that is fed to the 3D convnet
     activation: torch.nn.ReLU()
     nbr_groups: 2
     grouping_strategy: 'absolute'
-    network_depth: 3
+    network_depth: 2
+    weighting_complexity: '5layer' # low means one layer, high means several layers
+    network_depth_sensor_weighting: 2 # only used when weighting complexity is encode features first
 LOSS:
   gt_loss: False
   l1_weight: 1.0 # not used now
@@ -69,6 +84,12 @@ TRAINING:
   reset_strategy: False # True or False 
   reset_prob: 0.01 # in percent (used if reset_strategy: True)
   pretraining: True
+  # pretraining_fusion_gauss_close_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210517-112920/model/best_gauss_close_thresh.pth.tar
+  # pretraining_fusion_gauss_far_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210517-112920/model/best_gauss_far_thresh.pth.tar
+  pretraining_fusion_gauss_close_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210505-232837/model/best_gauss_close_thresh.pth.tar
+  pretraining_fusion_gauss_far_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210505-232837/model/best_gauss_far_thresh.pth.tar
+  pretraining_fusion_gauss_close_cont_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210521-200056/model/best_gauss_close_cont.pth.tar
+  pretraining_fusion_gauss_far_cont_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210521-200056/model/best_gauss_far_cont.pth.tar
   pretraining_fusion_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion/workspace/fusion/210426-153135/model/best_tof.pth.tar # if path exists, will load these weights at the start of training
   pretraining_fusion_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion/workspace/fusion/210426-153135/model/best_stereo.pth.tar
   routing_stereo_model_path: /home/esandstroem/scratch-second/opportunistic_3d_capture/Erik_3D_Reconstruction_Project/src/late_fusion/workspace/routing/stereo/model/best.pth.tar
@@ -83,7 +104,7 @@ TESTING:
   test_batch_size: 1
   test_shuffle: False
   pretrain_filtering_net: False
-  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210429-094916/model/best.pth.tar # 210330-231415
+  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210526-134209/model/best.pth.tar # 210330-231415
   weight_thresholds: [0.0]
 ROUTING:
   do: False
@@ -115,26 +136,32 @@ DATA:
   mask_stereo_width: 10 # in pixels (achieves fov 84.32)
   mask_tof_height: 52 # 52 # in pixels. Note that this value depends on the resolution of the image. With resolution 256 this would be 52
   mask_tof_width: 35 # 35 # in pixels. With resolution 256 this would be 35
-  pad: 0
+  mask_width: 1
+  mask_height: 1
+  pad: 2
   min_depth_stereo: 0.5
   max_depth_stereo: 2.5
   min_depth_tof: 0.5
   max_depth_tof: 3.86
+  min_depth: 0.0
+  max_depth: 12.3
   fusion_strategy: two_fusionNet # routingNet or fusionNet or three_fusionNet or fusionNet_conditioned (only applicable when DATA.input = 'multidepth')
   data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid (Note: if X_shuffle is true, this option serves no purpose)
   load_scenes_at_once: 1
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
   root_dir: /cluster/work/cvl/esandstroem/data/replica/manual #TMPDIR #/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
   dataset: Replica
-  input: [tof] # , 'stereo'] # list of sensors to fuse: mono, stereo, tof, gt, 
+  input: [gauss_close_cont, gauss_far_cont] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
   target: gt
   resx_stereo: 256
   resy_stereo: 256
   resx_tof: 256 # a tof camera has typically half the resolution of an rgb camera
   resy_tof: 256
-  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_1.txt
-  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_1.txt
-  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_1.txt # /home/esandstroem/scratch-second/euler_project/src/late_fusion_w_featurefusion/lists/replica/test_office_1.txt #
+  resx: 256 # default settings
+  resy: 256
+  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_hotel_0_toy_noise_0.05.txt
+  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_hotel_0_toy_noise_0.05.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_hotel_0_toy_noise_0.05.txt # /home/esandstroem/scratch-second/euler_project/src/late_fusion_w_featurefusion/lists/replica/test_office_1.txt #
   transform: ToTensor()
   init_value: 0.0 # init value of tsdf grids
   trunc_value: 0.1 # truncation distance
