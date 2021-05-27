@@ -4,6 +4,115 @@ import numpy as np
 
 from torch import nn
 
+class WeightingNetEncoder(torch.nn.Module):
+    
+    def __init__(self, config):
+
+        super(WeightingNetEncoder, self).__init__()
+
+        self.config = config
+
+        self.n_features = config.FILTERING_MODEL.features_to_weight_head*config.FEATURE_MODEL.n_features  # cannot feed sdf enc now
+        activation = eval(config.FILTERING_MODEL.MLP_MODEL.activation)
+
+        self.layer_context = torch.nn.Sequential(torch.nn.Linear((self.config.FILTERING_MODEL.MLP_MODEL.neighborhood ** 3) * self.n_features, 12*self.n_features),
+                                                  # torch.nn.LayerNorm([12*self.n_features], elementwise_affine=False),
+                                                  activation,
+                                                  torch.nn.Linear(12*self.n_features, 8*self.n_features),
+                                                  # torch.nn.LayerNorm([8*self.n_features], elementwise_affine=False),
+                                                  activation)
+
+    def forward(self, neighborhood):
+
+        context_features = self.layer_context(neighborhood)
+
+        return context_features
+
+class WeightingNetDecoder(torch.nn.Module):
+    
+    def __init__(self, config):
+
+        super(WeightingNetDecoder, self).__init__()
+
+        self.config = config
+
+        self.n_features = 2*config.FILTERING_MODEL.features_to_weight_head*config.FEATURE_MODEL.n_features  # cannot feed sdf enc now
+        activation = eval(config.FILTERING_MODEL.MLP_MODEL.activation)
+
+        self.layer1 = torch.nn.Sequential(
+            #torch.nn.Linear(3 + self.n_features + self.n_features, 64),
+            torch.nn.Linear(8*self.n_features, 32),
+            activation)
+
+        self.layer2 = torch.nn.Sequential(
+            # torch.nn.Linear(3 + self.n_features + 64, 32),
+            torch.nn.Linear(32 , 16),
+            activation)
+
+        self.layer3 = torch.nn.Sequential(
+            #torch.nn.Linear(3 + self.n_features + 32, 16),
+            torch.nn.Linear(16, 8),
+            activation)
+
+        self.alpha_head = torch.nn.Sequential(torch.nn.Linear(8, 1),
+                                                torch.nn.Sigmoid())
+
+
+
+    def forward(self, context_features):
+
+
+        features = context_features
+        features = self.layer1(features)
+        # print(features.shape)
+        # features = torch.cat([center_neighborhood, features], dim=1)
+        features = self.layer2(features)
+        # print(features.shape)
+        # features = torch.cat([center_neighborhood, features], dim=1)
+        features = self.layer3(features)
+        # print(features.shape)
+        alpha = self.alpha_head(features)
+        # print(alpha.shape)
+
+
+        return alpha
+
+class WeightingNet(torch.nn.Module):
+    def __init__(self, config):
+
+        super(WeightingNet, self).__init__()
+
+        self.config = config
+        self.encoder = nn.ModuleDict()
+        for sensor_ in config.DATA.input:
+            self.encoder[sensor_] = WeightingNetEncoder(config)
+        
+        self.decoder = WeightingNetDecoder(config)
+
+
+        self.tanh = torch.nn.Tanh()
+
+    def forward(self, neighborhood):
+        n = dict()
+        for k, sensor_ in enumerate(self.config.DATA.input):
+            start = int(neighborhood.shape[1]/2)*k
+            end = int(neighborhood.shape[1]/2)*(k + 1)
+            n[sensor_] = neighborhood[:, start:end]
+ 
+        context_feature = None
+        for k, sensor_ in enumerate(self.config.DATA.input): 
+            if k == 0:
+                context_feature = self.encoder[sensor_](n[sensor_]) 
+            else:
+                context_feature = torch.cat((context_feature, self.encoder[sensor_](n[sensor_])), dim=1)
+
+        alpha = self.decoder(context_feature)
+
+        return alpha
+
+
+
+
 class TranslationNetEncoder(torch.nn.Module):
     
     def __init__(self, config):
@@ -24,7 +133,16 @@ class TranslationNetEncoder(torch.nn.Module):
 
     def forward(self, neighborhood):
         # print('1', neighborhood[0, :, :])
-        neighborhood = neighborhood.contiguous().view(neighborhood.shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+        if self.config.FILTERING_MODEL.features_to_sdf_enc:
+            neighborhood = neighborhood.contiguous().view(neighborhood.shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+        else:
+            if self.config.FILTERING_MODEL.features_to_weight_head:
+                neighborhood = neighborhood[:, :, :2] # remove features from neighborhood, only keep tsdf and weights
+                neighborhood = neighborhood.contiguous().view(neighborhood.shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+            else:
+                neighborhood = neighborhood.contiguous().view(neighborhood.shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+        
+
         # print('2', neighborhood[0, :])
         # n = neighborhood.contiguous().view(neighborhood.shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3, self.n_features)
         # print('3', n[0, :, :])
@@ -66,11 +184,22 @@ class TranslationNetDecoder(torch.nn.Module):
                                                     torch.nn.Sigmoid())
 
     def forward(self, neighborhood, context_features):
-
-        if self.config.FILTERING_MODEL.MLP_MODEL.neighborhood == 3:
-            center_neighborhood = neighborhood[:, 13, :]
-        else: # Neighborhood is 5
-            center_neighborhood = neighborhood[:, 62, :]
+        if self.config.FEATURE_MODEL.features_to_sdf_enc:
+            if self.config.FILTERING_MODEL.MLP_MODEL.neighborhood == 3:
+                center_neighborhood = neighborhood[:, 13, :]
+            else: # Neighborhood is 5
+                center_neighborhood = neighborhood[:, 62, :]
+        else:
+            if self.config.FILTERING_MODEL.features_to_weight_head:
+                if self.config.FILTERING_MODEL.MLP_MODEL.neighborhood == 3:
+                    center_neighborhood = neighborhood[:, 13, :2]
+                else: # Neighborhood is 5
+                    center_neighborhood = neighborhood[:, 62, :2]
+            else:
+                if self.config.FILTERING_MODEL.MLP_MODEL.neighborhood == 3:
+                    center_neighborhood = neighborhood[:, 13, :]
+                else: # Neighborhood is 5
+                    center_neighborhood = neighborhood[:, 62, :]
 
         features = torch.cat([center_neighborhood, context_features], dim=1)
         features = self.layer1(features)
@@ -96,20 +225,23 @@ class TranslationNet(torch.nn.Module):
 
         self.config = config
 
-        self.encoder = nn.ModuleDict()
-        self.decoder = nn.ModuleDict()
-        for sensor_ in config.DATA.input:
-            self.encoder[sensor_] = TranslationNetEncoder(config)
-            self.decoder[sensor_] = TranslationNetDecoder(config)
+        if self.config.FILTERING_MODEL.use_outlier_filter:
+            self.encoder = nn.ModuleDict()
+            self.decoder = nn.ModuleDict()
+            for sensor_ in config.DATA.input:
+                self.encoder[sensor_] = TranslationNetEncoder(config)
+                self.decoder[sensor_] = TranslationNetDecoder(config)
 
         if len(config.DATA.input) > 1:
-            self.n_features = 2 + config.FILTERING_MODEL.features_to_sdf_enc*config.FEATURE_MODEL.n_features
+            self.n_features = config.FILTERING_MODEL.features_to_weight_head*config.FEATURE_MODEL.n_features # we can add sdf features 
+            # here later but these need not be the same features as the sdf enc since those are purely geometric
             activation = eval(config.FILTERING_MODEL.MLP_MODEL.activation)
-            self.sensor_weighting = torch.nn.Sequential(torch.nn.Linear(2*8*self.n_features, 8*self.n_features),
-                                                  # torch.nn.LayerNorm([8*self.n_features], elementwise_affine=False),
-                                                  activation,
-                                                  torch.nn.Linear(8*self.n_features, 1),
-                                                  torch.nn.Sigmoid())
+            # self.sensor_weighting = torch.nn.Sequential(torch.nn.Linear(2*self.n_features, 8*self.n_features),
+            #                                       # torch.nn.LayerNorm([8*self.n_features], elementwise_affine=False),
+            #                                       activation,
+            #                                       torch.nn.Linear(8*self.n_features, 1),
+            #                                       torch.nn.Sigmoid())
+            self.sensor_weighting = WeightingNet(config)
 
         self.tanh = torch.nn.Tanh()
 
@@ -121,10 +253,20 @@ class TranslationNet(torch.nn.Module):
 
         sdf = dict()
         occ = dict()
-        context_feature = dict() 
-        for sensor_ in self.config.DATA.input:
-            context_feature[sensor_] = self.encoder[sensor_](neighborhood[sensor_]) 
-            sdf[sensor_], occ[sensor_] = self.decoder[sensor_](neighborhood[sensor_], context_feature[sensor_])
+        context_feature = dict()
+        for sensor_ in self.config.DATA.input: 
+            if self.config.FILTERING_MODEL.use_outlier_filter:
+                context_feature[sensor_] = self.encoder[sensor_](neighborhood[sensor_]) 
+                sdf[sensor_], occ[sensor_] = self.decoder[sensor_](neighborhood[sensor_], context_feature[sensor_])
+                if self.config.FILTERING_MODEL.residual_learning: # when doing residual learning, perhaps don't use occupancy loss
+                    sdf[sensor_] += neighborhood[sensor_][:, :, 0]
+                    sdf[sensor_] = torch.clamp(sdf[sensor_],
+                                -self.config.DATA.trunc_value,
+                                self.config.DATA.trunc_value)
+            else:
+                sdf[sensor_] = neighborhood[sensor_][:, 13, 0]
+                occ[sensor_] = sdf[sensor_] < 0
+
 
         output = dict()
         if len(self.config.DATA.input) > 1:
@@ -134,21 +276,40 @@ class TranslationNet(torch.nn.Module):
 
             for k, sensor_ in enumerate(self.config.DATA.input):
                 if k == 0:
-                    input_ = context_feature[sensor_]
-                    alpha_val[sensor_] = torch.zeros_like(sdf[sensor_])
+                    if self.config.FILTERING_MODEL.sdf_enc_to_weight_head and self.config.FILTERING_MODEL.features_to_weight_head:
+                        n = neighborhood[sensor_][:, :, 2:].contiguous().view(neighborhood[sensor_].shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+                        input_ = torch.cat((context_feature[sensor_], n), dim=1)
+                    elif self.config.FILTERING_MODEL.features_to_weight_head:
+                        input_ = neighborhood[sensor_][:, :, 2:].contiguous().view(neighborhood[sensor_].shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+                    elif self.config.FILTERING_MODEL.sdf_enc_to_weight_head:
+                        input_ = context_feature[sensor_]
+
+                    alpha_val[sensor_] = torch.zeros_like(sdf[sensor_].unsqueeze(-1))
                 else:
-                    input_ = torch.cat((input_, context_feature[sensor_]), dim=1)
-                    alpha_val[sensor_] = torch.ones_like(sdf[sensor_]) 
+                    if self.config.FILTERING_MODEL.sdf_enc_to_weight_head and self.config.FILTERING_MODEL.features_to_weight_head:
+                        n = neighborhood[sensor_][:, :, 2:].contiguous().view(neighborhood[sensor_].shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+                        inp = torch.cat((context_feature[sensor_], n), dim=1)
+                    elif self.config.FILTERING_MODEL.features_to_weight_head:
+                        inp = neighborhood[sensor_][:, :, 2:].contiguous().view(neighborhood[sensor_].shape[0], self.config.FILTERING_MODEL.MLP_MODEL.neighborhood**3 * self.n_features)
+                    elif self.config.FILTERING_MODEL.sdf_enc_to_weight_head:
+                        inp = context_feature[sensor_]
+                    input_ = torch.cat((input_, inp), dim=1)
+        
+                    alpha_val[sensor_] = torch.ones_like(sdf[sensor_].unsqueeze(-1)) 
+
+
                 if self.config.FILTERING_MODEL.MLP_MODEL.neighborhood == 3:
                     center_weight[sensor_] = neighborhood[sensor_][:, 13, 1]
                 else: # Neighborhood is 5
                     center_weight[sensor_] = neighborhood[sensor_][:, 62, 1]
 
             alpha = self.sensor_weighting(input_)
+            if self.config.FILTERING_MODEL.alpha_force:
+                for sensor_ in self.config.DATA.input:
+                    alpha = torch.where(center_weight[sensor_].unsqueeze(-1) == 0, alpha_val[sensor_], alpha)
 
-            for sensor_ in self.config.DATA.input:
-                alpha = torch.where(center_weight[sensor_].unsqueeze(-1) == 0, alpha_val[sensor_], alpha)
-
+            alpha = alpha.squeeze()
+            # print(alpha)
             sdf_final = None
             for k, sensor_ in enumerate(self.config.DATA.input):
                 if k == 0:
