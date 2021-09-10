@@ -27,32 +27,57 @@ class Database(Dataset):
         self.sensors = config.input
         self.w_features = config.features_to_sdf_enc or config.features_to_weight_head
         self.test_mode = config.test_mode
+        self.outlier_filter = config.outlier_filter
+        self.alpha_supervision = config.alpha_supervision
 
         self.scenes_gt = {}
         self.tsdf = {}
         self.fusion_weights = {}
         self.features = {}
         self.feature_weights = {}
-        for sensor in config.input:
-            self.tsdf[sensor] = {}
-            self.fusion_weights[sensor] = {}
+        if self.outlier_filter and config.test_mode:
+            self.tsdf_refined = {}
+
+        for sensor_ in config.input:
+            self.tsdf[sensor_] = {}
+            self.fusion_weights[sensor_] = {}
             # if config.w_features:# TODO: adapt to when not using features
-            self.features[sensor] = {}
-            self.feature_weights[sensor] = {}
+            self.features[sensor_] = {}
+            self.feature_weights[sensor_] = {}
+            if self.outlier_filter and config.test_mode:
+                self.tsdf_refined[sensor_] = {}
     
         self.filtered = {} # grid to store the final sdf prediction
-        if len(config.input) > 1 and config.test_mode:
+        if len(config.input) == 2 and config.test_mode:
             self.sensor_weighting = {}
+        elif len(config.input) > 2 and config.test_mode:
+            self.sensor_weighting = {}
+            for sensor_ in config.input:
+                self.sensor_weighting[sensor_] = {}
+
+        if self.alpha_supervision:
+            self.proxy_alpha = {}
 
         for s in dataset.scenes:
             grid = dataset.get_grid(s, truncation=self.trunc_value)
+            if self.alpha_supervision:
+                self.proxy_alpha[s] = dataset.get_proxy_alpha_grid(s)
             self.scenes_gt[s] = grid
 
             init_volume = self.initial_value * np.ones_like(grid.volume, dtype=np.float16)
+            # the init_volume2 is needed for the tsdf_refined grids since otherwise, when we 
+            # change one of the sensorgrids, the other sensor change too if they have the 
+            # same init grid variable - super strange! This does not happen for the 
+            # noisy tsdf grids (it happens in theory, but in practice due to the implementation
+            # it does not happen). I should look into this more, but no time now. I keep them
+            # separate for the noisy grids just as a safety precaution.
+            init_volume2 = self.initial_value * np.ones_like(grid.volume, dtype=np.float16)
+            # it turns out I also need to have a separate init volume for the filtered grida as well
+            init_volume3 = self.initial_value * np.ones_like(grid.volume, dtype=np.float16)
 
             for sensor in config.input:
-                self.tsdf[sensor][s] = Voxelgrid(self.scenes_gt[s].resolution)
-                self.tsdf[sensor][s].from_array(init_volume, self.scenes_gt[s].bbox)
+                # self.tsdf[sensor][s] = Voxelgrid(self.scenes_gt[s].resolution)
+                # self.tsdf[sensor][s].from_array(init_volume, self.scenes_gt[s].bbox)
                 self.fusion_weights[sensor][s] = np.zeros(self.scenes_gt[s].volume.shape, dtype=np.float16)
 
                 # if config.w_features:# TODO: adapt to when not using features
@@ -60,14 +85,38 @@ class Database(Dataset):
                 self.features[sensor][s] = np.zeros(fusion_feature_shape, dtype=np.float16)
                 self.feature_weights[sensor][s] = np.zeros(self.scenes_gt[s].volume.shape, dtype=np.float16)
 
+                # if self.outlier_filter and config.test_mode:
+                #     self.tsdf_refined[sensor][s] = Voxelgrid(self.scenes_gt[s].resolution)
+                #     self.tsdf_refined[sensor][s].from_array(init_volume, self.scenes_gt[s].bbox)
+
+            self.tsdf['tof'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+            self.tsdf['tof'][s].from_array(init_volume, self.scenes_gt[s].bbox)
+            self.tsdf['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+            self.tsdf['stereo'][s].from_array(init_volume2, self.scenes_gt[s].bbox)
+
+            if self.outlier_filter and config.test_mode:
+                self.tsdf_refined['tof'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+                self.tsdf_refined['tof'][s].from_array(init_volume3, self.scenes_gt[s].bbox)
+                self.tsdf_refined['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+                self.tsdf_refined['stereo'][s].from_array(init_volume2, self.scenes_gt[s].bbox)
+
             self.filtered[s] = Voxelgrid(self.scenes_gt[s].resolution)
             self.filtered[s].from_array(init_volume, self.scenes_gt[s].bbox)
-            if len(config.input) > 1 and config.test_mode:
-                self.sensor_weighting[s] = Voxelgrid(self.scenes_gt[s].resolution)
-                # initialize to negative so that we know what values are initialized without needing the mask later in the visualization script
-                self.sensor_weighting[s].from_array(-np.ones_like(grid.volume, dtype=np.float16), self.scenes_gt[s].bbox) 
-
+            if len(config.input) == 2 and config.test_mode:
+                if config.outlier_channel:
+                    sensor_weighting_shape = (2, self.scenes_gt[s].volume.shape[0], self.scenes_gt[s].volume.shape[1], self.scenes_gt[s].volume.shape[2])
+                    self.sensor_weighting[s] = -np.ones(sensor_weighting_shape, dtype=np.float16)
+                else:
+                    self.sensor_weighting[s] = -np.ones(self.scenes_gt[s].volume.shape, dtype=np.float16)
+                    # initialize to negative so that we know what values are initialized without needing the mask later in the visualization script
+            elif len(config.input) > 2 and config.test_mode:
+                for sensor_ in config.input: 
+                    self.sensor_weighting[sensor_][s] = Voxelgrid(self.scenes_gt[s].resolution)
+                    # initialize to negative so that we know what values are initialized without needing the mask later in the visualization script
+                    self.sensor_weighting[sensor_][s].from_array(-np.ones_like(grid.volume, dtype=np.float16), self.scenes_gt[s].bbox) 
         
+
+
         # self.reset()
 
     def __getitem__(self, item):
@@ -75,17 +124,25 @@ class Database(Dataset):
         sample = dict()
 
         sample['gt'] = self.scenes_gt[item].volume
+        if self.alpha_supervision:
+            sample['proxy_alpha'] = self.proxy_alpha[item]
         sample['origin'] = self.scenes_gt[item].origin
         sample['resolution'] = self.scenes_gt[item].resolution
-        sample['filtered'] = self.filtered[item]
-        if len(self.sensors) > 1 and self.test_mode:
+        sample['filtered'] = self.filtered[item].volume
+        if len(self.sensors)  == 2 and self.test_mode:
             sample['sensor_weighting'] = self.sensor_weighting[item]
-        for sensor in self.sensors:
-            sample['tsdf_' + sensor] = self.tsdf[sensor][item].volume
-            sample['weights_' + sensor] = self.fusion_weights[sensor][item]
+        elif len(self.sensors) > 2 and self.test_mode:
+            for sensor_ in self.sensors:
+                sample['sensor_weighting_' + sensor_] = self.sensor_weighting[sensor_][item]
+        for sensor_ in self.sensors:
+            sample['tsdf_' + sensor_] = self.tsdf[sensor_][item].volume
+            sample['weights_' + sensor_] = self.fusion_weights[sensor_][item]
             # if self.w_features:# TODO: adapt to when not using features
-            sample['features_' + sensor] = self.features[sensor][item]
-            sample['feature_weights_' + sensor] = self.feature_weights[sensor][item]
+            sample['features_' + sensor_] = self.features[sensor_][item]
+            sample['feature_weights_' + sensor_] = self.feature_weights[sensor_][item]
+
+            if self.outlier_filter and self.test_mode:
+                sample['tsdf_refined_' + sensor_] = self.tsdf_refined[sensor_][item].volume
 
         if self.transform is not None:
             sample = self.transform(sample)
@@ -122,21 +179,43 @@ class Database(Dataset):
                                           compression='gzip',
                                           compression_opts=9)
 
+            if self.outlier_filter and self.test_mode:
+                refinedname = scene_id + '_' + sensor + '.tsdf_refined.hf5'
+                with h5py.File(os.path.join(path, refinedname), 'w') as hf:
+                    hf.create_dataset("TSDF",
+                                      shape=self.tsdf_refined[sensor][scene_id].volume.shape,
+                                      data=self.tsdf_refined[sensor][scene_id].volume,
+                                      compression='gzip',
+                                      compression_opts=9)
+
         sdfname = scene_id + '.tsdf_filtered.hf5'
         with h5py.File(os.path.join(path, sdfname), 'w') as hf:
             hf.create_dataset("TSDF_filtered",
                                   shape=self.filtered[scene_id].volume.shape,
-                                  data=self.filtered[scene_id].volume)
+                                  data=self.filtered[scene_id].volume,
+                                  compression='gzip',
+                                  compression_opts=9)
 
-        if len(self.sensors) > 1 and self.test_mode:
+        if len(self.sensors) == 2 and self.test_mode:
             sensor_weighting_name = scene_id + '.sensor_weighting.hf5'
             with h5py.File(os.path.join(path, sensor_weighting_name), 'w') as hf:
                 hf.create_dataset("sensor_weighting",
-                                      shape=self.sensor_weighting[scene_id].volume.shape,
-                                      data=self.sensor_weighting[scene_id].volume)
+                                      shape=self.sensor_weighting[scene_id].shape,
+                                      data=self.sensor_weighting[scene_id],
+                                      compression='gzip',
+                                      compression_opts=9)
+        elif len(self.sensors) > 2 and self.test_mode:
+            for sensor_ in self.sensors:
+                sensor_weighting_name = scene_id + '_' + sensor_ + '.sensor_weighting.hf5'
+                with h5py.File(os.path.join(path, sensor_weighting_name), 'w') as hf:
+                    hf.create_dataset("sensor_weighting",
+                                          shape=self.sensor_weighting[sensor_][scene_id].shape,
+                                          data=self.sensor_weighting[sensor_][scene_id],
+                                          compression='gzip',
+                                          compression_opts=9)
 
 
-    def evaluate(self, mode='train', workspace=None):
+    def evaluate(self, mode='train', workspace=None): # TODO: add evaluation of refined grid
 
         eval_results = {}
         eval_results_scene_save = {}
@@ -159,7 +238,7 @@ class Database(Dataset):
             mask = {}
             for sensor in self.sensors:
                 est[sensor] = self.tsdf[sensor][scene_id].volume
-                mask[sensor] = self.feature_weights[sensor][scene_id] > 0
+                mask[sensor] = self.fusion_weights[sensor][scene_id] > 0
 
             est_filt = self.filtered[scene_id].volume
             gt = self.scenes_gt[scene_id].volume
@@ -232,7 +311,6 @@ class Database(Dataset):
                 # if self.w_features:# TODO: adapt to when not using features
                 self.features[sensor][scene_id] = np.zeros(feature_shape, dtype=np.float16)
                 self.feature_weights[sensor][scene_id] = np.zeros(self.scenes_gt[scene_id].volume.shape, dtype=np.float16)
-            self.filtered[scene_id].volume = self.initial_value * np.ones(self.scenes_gt[scene_id].volume.shape, dtype=np.float16)
         else:
             for scene_id in self.scenes_gt.keys():
                 feature_shape = (self.scenes_gt[scene_id].volume.shape[0], self.scenes_gt[scene_id].volume.shape[1], self.scenes_gt[scene_id].volume.shape[2], self.n_features)
@@ -242,4 +320,3 @@ class Database(Dataset):
                     # if self.w_features: # TODO: adapt to when not using features
                     self.features[sensor][scene_id] = np.zeros(feature_shape, dtype=np.float16)
                     self.feature_weights[sensor][scene_id] = np.zeros(self.scenes_gt[scene_id].volume.shape, dtype=np.float16)
-                self.filtered[scene_id].volume = self.initial_value * np.ones(self.scenes_gt[scene_id].volume.shape, dtype=np.float16)

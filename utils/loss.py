@@ -1,6 +1,7 @@
 import torch
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Fusion_TranslationLoss(torch.nn.Module):
 
@@ -14,10 +15,17 @@ class Fusion_TranslationLoss(torch.nn.Module):
 		self.fixed_fusion_net = config.FUSION_MODEL.fixed
 		self.gt_loss = config.LOSS.gt_loss
 		self.grid_weight_gt = config.LOSS.grid_weight_gt
-		self.multisensor = len(config.DATA.input) > 1 and not (config.FILTERING_MODEL.setting == 'avg' and config.FILTERING_MODEL.model == 'mlp')
+		self.alpha_weight = config.LOSS.alpha_weight
+		self.alpha_supervision = config.LOSS.alpha_supervision
+		self.alpha_2d_supervision = config.LOSS.alpha_2d_supervision
+		self.alpha_single_sensor_supervision = config.LOSS.alpha_single_sensor_supervision
+		self.fusion_weight = config.LOSS.fusion_weight
+		self.refinement_loss = config.FILTERING_MODEL.use_outlier_filter and len(config.DATA.input) > 1 and not (config.FILTERING_MODEL.setting == 'avg' and config.FILTERING_MODEL.model == 'mlp')
 		self.occ_head = config.FILTERING_MODEL.model == 'mlp' and config.FILTERING_MODEL.setting == 'translate' \
 		 					and config.FILTERING_MODEL.MLP_MODEL.occ_head
 		self.occ_weight = config.LOSS.occ_weight
+		self.add_outlier_channel = config.FILTERING_MODEL.outlier_channel
+		self.use_fusion_net = config.FUSION_MODEL.use_fusion_net
 
 
 		self.l1 = torch.nn.L1Loss(reduction=reduction)
@@ -28,8 +36,9 @@ class Fusion_TranslationLoss(torch.nn.Module):
 
 	def forward(self, output):
 
-		est_grid = output['filtered_output']['tsdf_filtered_grid']['tsdf']
-		if self.multisensor:
+		l = None
+
+		if self.refinement_loss:
 			est_grid_dict = dict()
 			init = dict()
 			for sensor_ in self.sensors:
@@ -46,28 +55,247 @@ class Fusion_TranslationLoss(torch.nn.Module):
 			raise NotImplementedError
 			est_gt_grid = output['filtered_output']['tsdf_gt_filtered_grid']['tsdf']
 
-		target_grid = output['filtered_output']['tsdf_target_grid']
-		est_interm = output['tsdf_fused']
-		target_interm = output['tsdf_target']
+		if 'filtered_output' in output:
+			target_grid = output['filtered_output']['tsdf_target_grid']
+			est_grid = output['filtered_output']['tsdf_filtered_grid']['tsdf']
+			l1_grid = self.l1.forward(est_grid, target_grid)
 
-		l1_grid = self.l1.forward(est_grid, target_grid)
-		normalization = torch.ones_like(l1_grid).sum()
-		l1_grid = l1_grid.sum() / normalization
-		# print('l1_grid', l1_grid)
-		# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
-		# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
-		l = self.grid_weight * l1_grid
-		if l.isnan() > 0 or l.isinf():
-			print('1est_grid: ', est_grid.isnan().sum())
-			print('1target_grid: ', target_grid.isnan().sum())
-			print('1est_grid inf: ', est_grid.isinf().sum())
-			print('1target_grid inf: ', target_grid.isinf().sum())
-			print('1loss nan:', l.isnan())
-			print('1loss inf: ', l.isinf())
-			print('normalization factor: ', normalization)
-			print('l1_grid.shape:', l1_grid.shape)
+			# remove the indices where only one sensor integrates since these values will contribute to the loss, but we 
+			# won't compute a gradient for these so they just corrupt the loss representation
+			mask = torch.ones_like(l1_grid)
+			for sensor_ in self.sensors:
+				mask = torch.logical_and(mask, output['filtered_output']['tsdf_filtered_grid'][sensor_ + '_init'])
 
-		if self.multisensor:
+			# filter the mask so that we also remove the voxels where the ground truth tsdf is not between
+			# the sensor predictions
+			# mask_between = torch.logical_or(torch.logical_and((output['filtered_output']['tsdf_filtered_grid']['tsdf_' + self.sensors[0]] < target_grid), \
+			#  (output['filtered_output']['tsdf_filtered_grid']['tsdf_' + self.sensors[1]] > target_grid)), \
+			# 		 torch.logical_and((output['filtered_output']['tsdf_filtered_grid']['tsdf_' + self.sensors[1]] < target_grid), \
+			# 		 	(output['filtered_output']['tsdf_filtered_grid']['tsdf_' + self.sensors[0]] > target_grid)))
+			# print('indices both sensors: ', mask.sum())
+			# # here we make sure that we only take the voxels where both sensors integrate into account
+			# mask = torch.logical_and(mask, mask_between)
+			normalization = torch.ones_like(l1_grid[mask]).sum()
+			l1_grid = l1_grid[mask].sum() / normalization
+			# print('l1 grid: ', l1_grid)
+
+			# print('l1_grid', l1_grid)
+			# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
+			# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
+
+			if mask.sum() != 0: # checks if we have an empty l1_grid. This happens for the first frame that is integrated into the scene since
+			# we have no intersection to the other sensors since they are not yet integrated
+				l = self.grid_weight * l1_grid
+				if l.isnan() > 0 or l.isinf():
+					print('1est_grid: ', est_grid.isnan().sum())
+					print('1target_grid: ', target_grid.isnan().sum())
+					print('1est_grid inf: ', est_grid.isinf().sum())
+					print('1target_grid inf: ', target_grid.isinf().sum())
+					print('1loss nan:', l.isnan())
+					print('1loss inf: ', l.isinf())
+					print('normalization factor: ', normalization)
+					print('l1_grid.shape:', l1_grid.shape)
+			else:
+				l1_grid = None
+		else:
+			l1_grid = None
+
+		if self.alpha_supervision:
+			# note that if the target alpha is -1 we need to remove it since it is outside of the valid grid
+			# compute the valid mask
+			# mask = torch.zeros_like(mask)
+			# for sensor_ in self.sensors:
+			# 	mask = torch.logical_or(mask, output['filtered_output']['tsdf_filtered_grid'][sensor_ + '_init'])
+
+			# remove indices where the mask contains negative values. This can happen if we use the median filtered
+			# proxy alpha since I cannot control how the median filtering is done (did not have time). Thus, 
+			# in the event that I have a GT -1 (uninitialized value), remove this.
+			pos_proxy_alpha = output['filtered_output']['proxy_alpha_grid'] >= 0
+			mask = torch.logical_and(mask, pos_proxy_alpha)
+
+			l1_alpha = self.l1.forward(output['filtered_output']['alpha_grid'][mask], output['filtered_output']['proxy_alpha_grid'][mask])
+			normalization = torch.ones_like(l1_alpha).sum()
+			l1_alpha = l1_alpha.sum() / normalization
+			# print('l1_alpha: ', l1_alpha)
+			if l is None:
+				l = self.alpha_weight * l1_alpha
+			else:
+				l += self.alpha_weight * l1_alpha
+
+		if self.alpha_single_sensor_supervision:
+			# this loss is intended to improve outlier filtering performance which is 
+			# specifically needed where only one sensor integrates, since we do not supervise
+			# these voxels at all otherwise. The idea is to extract all voxels where only one sensor
+			# integrates and check the tsdf error compared to the ground truth. If the error is larger than
+			# e.g. 0.04 m, we say that it is an outlier. This means setting the target alpha as "no confidence"
+			# to the sensor, otherwise 100 percent confidence.
+			# outlier_ratio = dict()
+			for k, sensor_ in enumerate(self.sensors):
+				# get the mask where only sensor_ is active
+				# mask is a variable containing the "and"-region of both sensors. We negate it to get rid of 
+				# all voxels where both sensors integrate
+				single_sensor_mask = torch.logical_and(~mask,  output['filtered_output']['tsdf_filtered_grid'][sensor_ + '_init'].squeeze())
+				# compute target alpha for the sensor in question
+				if self.add_outlier_channel:
+					target_alpha = torch.zeros_like(output['filtered_output']['alpha_grid'][1, :, :, :][single_sensor_mask])
+				else:
+					target_alpha = torch.zeros_like(output['filtered_output']['alpha_grid'][single_sensor_mask])
+				tsdf_err = self.l1.forward(est_grid[single_sensor_mask], target_grid[single_sensor_mask])
+				sgn_err = torch.abs(torch.sgn(est_grid[single_sensor_mask]) - torch.sgn(target_grid[single_sensor_mask]))
+
+				sgn_err = (sgn_err > 0).float()
+				# print('tot ind: ', tsdf_err.shape)
+				# print('err larger than thresh: ', (tsdf_err > 0.04).sum())
+				# gt 0, stereo 1. When alpha is 1 we trust gt
+				
+				if k == 0:
+					target_alpha = ~torch.logical_and(tsdf_err > 0.04, sgn_err > 0)
+					# target_alpha = ~(tsdf_err > 0.04)
+					outlier_alpha = (target_alpha == False)
+					inlier_alpha = (target_alpha == True)
+					target_alpha = target_alpha.float()
+					# outlier_ratio[sensor_] = ((~(target_alpha.bool())).sum()/target_alpha.shape[0])
+				elif k == 1:
+					target_alpha = torch.logical_and(tsdf_err > 0.04, sgn_err > 0)
+					# target_alpha = tsdf_err > 0.04
+					outlier_alpha = (target_alpha == True)
+					inlier_alpha = (target_alpha == False)
+					target_alpha = target_alpha.float()
+					# outlier_ratio[sensor_] = (target_alpha.sum()/target_alpha.shape[0])
+
+				# print(sensor_)
+				# print((target_alpha.sum()/target_alpha.shape[0]))
+				# print(single_sensor_mask.sum())
+				# only outleir if tsdf err is larger than 0.04 and sgn err, toherwise inlier
+
+				if single_sensor_mask.sum() > 0:
+					# ind = (target_grid[single_sensor_mask] > 0.099).nonzero()[:, 0]
+					# outliers = torch.logical_and(tsdf_err[ind] > 0.01, sgn_err[ind] > 0).float()
+					# # outliers = (tsdf_err[ind] > 0.01).float()
+					# print(ind.shape)
+					# # print(est_grid[single_sensor_mask][ind])
+					
+					# # print(tsdf_err[ind])
+					# print((outliers.sum()/tsdf_err[ind].shape[0]))
+					if self.add_outlier_channel:
+						l1_alpha = self.l1.forward(output['filtered_output']['alpha_grid'][1, :, :, :][single_sensor_mask], target_alpha)
+					else:
+						l1_alpha = self.l1.forward(output['filtered_output']['alpha_grid'][single_sensor_mask], target_alpha)
+					# l1_alpha = torch.mean(self.occ.forward(output['filtered_output']['alpha_grid'][single_sensor_mask], target_alpha))
+					l1_outlier_alpha = 10*l1_alpha[outlier_alpha].sum()/torch.ones_like(l1_alpha[outlier_alpha]).sum()
+					l1_inlier_alpha = l1_alpha[inlier_alpha].sum()/torch.ones_like(l1_alpha[inlier_alpha]).sum()
+
+
+					if l is None:
+						if l1_outlier_alpha.sum() > 0:
+							l = self.alpha_weight * l1_outlier_alpha 
+							if l1_inlier_alpha.sum() > 0:
+								l += self.alpha_weight * l1_inlier_alpha
+						elif l1_inlier_alpha.sum() > 0:
+							l = self.alpha_weight * l1_inlier_alpha 
+
+					else:
+						if l1_outlier_alpha.sum() > 0:
+							l += self.alpha_weight * l1_outlier_alpha 
+						if l1_inlier_alpha.sum() > 0:
+							l += self.alpha_weight * l1_inlier_alpha
+						# print('l1 outlier: ', l1_outlier_alpha)
+
+
+		if self.alpha_2d_supervision:
+			output['gt'] = output['gt'].squeeze()
+			output['confidence_2d'] = output['confidence_2d'].squeeze()
+
+			# plt.imsave('conf2d.png', output['confidence_2d'].cpu().detach().numpy())
+			# 'confidence_2d'
+			# 'tof_mask', 'stereo_mask', 'tof_depth', 'stereo_depth'
+			mask = torch.ones_like(output['confidence_2d'])
+			for sensor_ in self.sensors:
+				mask = torch.logical_and(mask, output[sensor_ + '_mask'].squeeze())
+				output[sensor_ + '_depth'] = output[sensor_ + '_depth'].squeeze()
+				# plt.imsave(sensor_+'depth.png', output[sensor_ + '_depth'].cpu().detach().numpy())
+				# plt.imsave(sensor_+'mask.png', output[sensor_ + '_mask'].squeeze().cpu().detach().numpy())
+
+			# create ground truth map
+			gt_confidence = -torch.ones_like(output['confidence_2d'])
+			# compute mask between
+			mask_between = torch.logical_or(torch.logical_and((output[self.sensors[0] + '_depth'] < output['gt']), (output['gt'] < output[self.sensors[1] + '_depth'])), \
+			 torch.logical_and((output[self.sensors[1] + '_depth'] < output['gt']), (output['gt'] < output[self.sensors[0] + '_depth'])))
+
+			mask_between = torch.logical_and(mask_between, mask)
+			gt = output['gt'][mask_between]
+			depth_0 = output[self.sensors[0] + '_depth'][mask_between]
+			depth_1 = output[self.sensors[1] + '_depth'][mask_between]
+
+			# real values confidence with mask between
+			tot_err = abs(gt - depth_0) + abs(gt - depth_1)
+			if output['sensor'] == self.sensors[0]:
+				gt_confidence[mask_between] = abs(gt - depth_1)/(tot_err)
+			else:
+				gt_confidence[mask_between] = abs(gt - depth_0)/(tot_err)
+
+			# binary confidence with mask between
+			# depth_0_err = abs(gt -	depth_0)
+			# depth_1_err = abs(gt -	depth_1)
+			# # if sensor 0 has a smaller err sensor weighting should be 1 i.e. alpha is 1, otherwise 0
+			# if output['sensor'] == self.sensors[0]:
+			# 	gt_confidence[mask_between] = (depth_0_err < depth_1_err).float()
+			# else:
+			# 	gt_confidence[mask_between] = (depth_0_err > depth_1_err).float()
+
+			# compute mask not between
+			mask_not_between = torch.logical_or(torch.logical_and((output[self.sensors[0] + '_depth'] <= output['gt']), (output[self.sensors[1] + '_depth'] <= output['gt'])), \
+					 torch.logical_and((output[self.sensors[1] + '_depth'] >= output['gt']), (output[self.sensors[0] + '_depth'] >= output['gt'])))
+			# remove the voxels where only ones sensor integrates
+			mask_not_between = torch.logical_and(mask_not_between, mask)
+
+			gt = output['gt'][mask_not_between]
+			depth_0 = output[self.sensors[0] + '_depth'][mask_not_between]
+			depth_1 = output[self.sensors[1] + '_depth'][mask_not_between]
+			depth_0_err = abs(gt -	depth_0)
+			depth_1_err = abs(gt -	depth_1)
+			# if sensor 0 has a smaller err sensor weighting should be 1, otherwise 0
+			if output['sensor'] == self.sensors[0]:
+				gt_confidence[mask_not_between] = (depth_0_err < depth_1_err).float()
+			else:
+				gt_confidence[mask_not_between] = (depth_0_err > depth_1_err).float()
+
+			# plt.imsave('conf2dgt.png', gt_confidence.cpu().detach().numpy())
+			# plt.imsave('masknotbet.png', mask_not_between.cpu().detach().numpy())
+			# plt.imsave('maskbet.png', mask_between.cpu().detach().numpy())
+			# plt.imsave('mask.png', mask.cpu().detach().numpy())
+
+			# l1 loss
+			# with exp(-relu(x)) activation
+			l_alpha_2d = self.l1.forward(torch.exp(-output['confidence_2d'][mask]), gt_confidence[mask])
+			# with sigmoid activation
+			# l_alpha_2d = self.l1.forward(output['confidence_2d'][mask], gt_confidence[mask])
+			normalization = torch.ones_like(l_alpha_2d).sum()
+			l_alpha_2d = l_alpha_2d.sum() / normalization
+
+			# kendall loss
+			# print('out sum: ', output['confidence_2d'].sum())
+			# print('l1 b', self.l1.forward(output[output['sensor'] + '_depth'], output['gt']).sum())
+			# l1_depth_w_c = torch.exp(-output['confidence_2d'])*self.l1.forward(output[output['sensor'] + '_depth'], output['gt'])
+			# normalization = mask.sum()
+			# l1_depth_w_c = l1_depth_w_c[mask].sum() / normalization
+			# l_alpha_2d = l1_depth_w_c + 0.01*output['confidence_2d'][mask].sum()/mask.sum()
+			# print('l1: ', l1_depth_w_c)
+			# print('c: ', output['confidence_2d'][mask].sum()/mask.sum())
+
+			# binary cross entropy loss
+			# l_alpha_2d = torch.mean(self.occ.forward(output['confidence_2d'][mask], gt_confidence[mask]))
+
+			if l is None:
+				l = self.alpha_weight * l_alpha_2d
+			else:
+				l += self.alpha_weight * l_alpha_2d
+
+		else:
+			l_alpha_2d = None
+
+
+		if self.refinement_loss:
 			l1_grid_dict = dict()
 			for sensor_ in self.sensors:
 				l1_grid_dict[sensor_] = self.l1.forward(est_grid_dict[sensor_][init[sensor_]], target_grid[init[sensor_]])
@@ -78,7 +306,10 @@ class Fusion_TranslationLoss(torch.nn.Module):
 					l1_grid_dict[sensor_] = l1_grid_dict[sensor_].sum() / normalization
 					# Note: if you only want to compute the loss for a subset of your full loss - for debugging etc. make sure to uncomment the criterion of the
 					# other loss terms since these seem to cause memory problems otherwise - I suppose those losses somehow gets saved and not emptied.
-					l += self.grid_weight/2 * l1_grid_dict[sensor_]
+					if l is None:
+						l = self.grid_weight/2 * l1_grid_dict[sensor_]
+					else:
+						l += self.grid_weight/2 * l1_grid_dict[sensor_]
 					if l1_grid_dict[sensor_].isnan() > 0 or l1_grid_dict[sensor_].isinf():
 						print(sensor_ + 'loss nan:', l1_grid_dict[sensor_].isnan())
 						print(sensor_ + 'loss inf: ', l1_grid_dict[sensor_].isinf())
@@ -90,13 +321,18 @@ class Fusion_TranslationLoss(torch.nn.Module):
 			for sensor_ in self.sensors:
 				l1_grid_dict[sensor_] = None
 
-		if not self.fixed_fusion_net:
+		if not self.fixed_fusion_net and self.use_fusion_net:
+			est_interm = output['tsdf_fused']
+			target_interm = output['tsdf_target']
 			l1_interm = self.l1.forward(est_interm, target_interm)
 
 			normalization = torch.ones_like(l1_interm).sum()
 
 			l1_interm = l1_interm.sum() / normalization
-			l += l1_interm
+			if l is None:
+				l = self.fusion_weight * l1_interm
+			else:
+				l += self.fusion_weight * l1_interm
 		else:
 			l1_interm = None
 
@@ -113,7 +349,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
 			occ_target_grid = target_grid.clone()
 			occ_target_grid[target_grid >= 0.] = 0.
 			occ_target_grid[target_grid < 0.] = 1.
-			if self.multisensor:
+			if self.refinement_loss:
 				l_grid_occ_dict = dict()
 				for sensor_ in self.sensors:
 					l_grid_occ_dict[sensor_] = torch.mean(self.occ.forward(occ_dict[sensor_][init[sensor_]], occ_target_grid[init[sensor_]]))
@@ -141,13 +377,18 @@ class Fusion_TranslationLoss(torch.nn.Module):
 
 		output = dict()
 		output['loss'] = l
-		output['l1_interm'] = l1_interm
+		output['l1_interm'] = l1_interm # this mixes all sensors in one logging graph
 		output['l1_grid'] = l1_grid
 		output['l_occ'] = l_grid_occ
 		output['l1_gt_grid'] = l1_gt_grid
 		for sensor_ in self.sensors:
+			# print(l1_grid_dict[sensor_])
 			output['l1_grid_' + sensor_] = l1_grid_dict[sensor_]
 			output['l_occ_' + sensor_] = l_grid_occ_dict[sensor_]
+		output['l_alpha_2d'] = l_alpha_2d
+		# print(l_alpha_2d)
+		# print('l: ', l)
+		# print('l1_grid: ', l1_grid)
 
 		return output
 

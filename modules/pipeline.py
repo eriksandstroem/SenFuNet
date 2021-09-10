@@ -26,14 +26,22 @@ class Pipeline(torch.nn.Module):
             self.filter_pipeline = Filter_Pipeline_mlp(config)
         elif config.FILTERING_MODEL.model == '3dconv': 
             self.filter_pipeline = Filter_Pipeline(config)
+        else:
+            self.filter_pipeline = None # used when we run the tsdf baseline tests
 
 
-    def forward(self, batch, database, device): # train step
+    def forward(self, batch, database, epoch, device): # train step
         scene_id = batch['frame_id'][0].split('/')[0]
-
+        # print(scene_id)
+        frame = batch['frame_id'][0].split('/')[-1] # CHANGE
+        # print('1m: ', torch.cuda.max_memory_allocated(device=device))
+        # print('1: ', torch.cuda.memory_allocated(device=device))
         fused_output = self.fuse_pipeline.fuse_training(batch, database, device)
-        filtered_output = self.filter_pipeline.filter_training(fused_output, database, scene_id, batch['sensor'], device)
-        
+        # print('2m: ', torch.cuda.max_memory_allocated(device=device))
+        # print('2: ', torch.cuda.memory_allocated(device=device))
+        filtered_output = self.filter_pipeline.filter_training(fused_output, database, epoch, frame, scene_id, batch['sensor'], device) # CHANGE
+        # print('3m: ', torch.cuda.max_memory_allocated(device=device))
+        # print('3: ', torch.cuda.memory_allocated(device=device))
         if filtered_output == 'save_and_exit':
             return 'save_and_exit'
 
@@ -42,11 +50,20 @@ class Pipeline(torch.nn.Module):
         else:
             return None
 
+        if self.config.LOSS.alpha_2d_supervision:
+            fused_output['sensor'] = batch['sensor']
+            for sensor_ in self.config.DATA.input:
+                fused_output[sensor_ + '_depth'] = batch[sensor_ + '_depth'].to(device)
+                fused_output[sensor_ + '_mask'] = batch[sensor_ + '_mask'].to(device)
+                fused_output['gt'] = batch['gt'].to(device)
+
         return fused_output
 
     def test(self, val_loader, val_dataset, val_database, sensors, device):
                 
         for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
+            # print(k)
+            # if k == 466:
             # validation step - fusion
             # randomly integrate the selected sensors
             # random.shuffle(sensors)
@@ -59,11 +76,107 @@ class Pipeline(torch.nn.Module):
                 batch['sensor'] = sensor_
                 output = self.fuse_pipeline.fuse(batch, val_database, device)
 
-            if k == 5:
-                break # debug
+                # return
 
-   
+            # if k == 10:
+            #     break # debug
+
+        # make learned featueres zero
+        # for scene in val_database.filtered.keys(): 
+        #     for sensor_ in sensors:
+        #         val_database[scene]['features_' + sensor_][:, :, :, :-1] = 0
+
         # run filtering network on all voxels which have a non-zero weight
         for scene in val_database.filtered.keys():   
             self.filter_pipeline.filter(scene, val_database, device)
-    
+
+        # apply outlier filter i.e. make the weights of the outlier voxels zero so
+        # that they are not used in the evaluation of the IoU
+        for scene in val_database.filtered.keys(): 
+            mask = np.zeros_like(val_database[scene]['gt'])
+            and_mask = np.ones_like(val_database[scene]['gt'])
+            sensor_mask = dict()
+            
+            for sensor_ in self.config.DATA.input:
+                # print(sensor_)
+                weights = val_database.fusion_weights[sensor_][scene]
+                mask = np.logical_or(mask, weights > 0)
+                and_mask = np.logical_and(and_mask, weights > 0)
+                sensor_mask[sensor_] = weights > 0
+                # break
+
+            if len(self.config.DATA.input) == 2: #alpha eq 0 means we trust gauss far 
+                # load weighting sensor grid
+                if self.config.FILTERING_MODEL.outlier_channel:
+                    sensor_weighting = val_database[scene]['sensor_weighting'][1, :, :, :]
+                else:
+                    sensor_weighting = val_database[scene]['sensor_weighting']
+
+                only_one_sensor_mask = np.logical_xor(mask, and_mask)
+                for sensor_ in self.config.DATA.input:
+                    only_sensor_mask = np.logical_and(only_one_sensor_mask, sensor_mask[sensor_])
+                    if sensor_ == self.config.DATA.input[0]: 
+                        rem_indices = np.logical_and(only_sensor_mask, sensor_weighting < 0.5)
+                    else:
+                        # before I fixed the bug always ended up here when I had tof and stereo as sensors
+                        # but this would mean that for the tof sensor I removed those indices
+                        # if alpha was larger than 0.5 which it almost always is. This means that 
+                        # essentially all (cannot be 100 % sure) voxels where we only integrated 
+                        # tof, was removed. Since the histogram is essentially does not have 
+                        # any voxels with trust less than 0.5, we also removed all alone stereo voxels
+                        # so at the end we end up with a mask very similar to the and_mask
+                        rem_indices = np.logical_and(only_sensor_mask, sensor_weighting > 0.5)
+
+                    # rem_indices = rem_indices.astype(dtype=bool)
+                    val_database[scene]['weights_' + sensor_][rem_indices] = 0
+        
+    def test_tsdf_baseline(self, val_loader, val_dataset, val_database, sensors, device):
+                
+        for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
+            # print(k)
+            # if k == 466:
+            # validation step - fusion
+            # randomly integrate the selected sensors
+            # random.shuffle(sensors)
+            if self.config.ROUTING.do and self.config.FILTERING_MODEL.model == 'tsdf_early_fusion':
+                # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
+                batch['routing_net'] = 'self._routing_network'
+                batch['sensor'] = self.config.DATA.input[0]
+                output = self.fuse_pipeline.fuse(batch, val_database, device)
+            else:
+                for sensor_ in sensors:
+                    # print(sensor_)
+                    batch['depth'] = batch[sensor_ + '_depth']
+                    # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
+                    batch['routing_net'] = 'self._routing_network_' + sensor_
+                    batch['mask'] = batch[sensor_ + '_mask']
+                    batch['sensor'] = sensor_
+                    output = self.fuse_pipeline.fuse(batch, val_database, device)
+
+            # if k == 10:
+            #     break # debug
+
+        # perform the fusion of the grids
+        if self.config.FILTERING_MODEL.model == 'tsdf_early_fusion':
+            for scene in val_database.filtered.keys():
+                val_database.filtered[scene].volume = val_database.tsdf[self.config.DATA.input[0]][scene].volume
+
+        elif self.config.FILTERING_MODEL.model == 'tsdf_middle_fusion': # this is weighted average fusion
+            for scene in val_database.filtered.keys():
+                weight_sum = np.zeros_like(val_database.filtered[scene].volume)
+                for sensor_ in sensors: 
+                    weight_sum += val_database.fusion_weights[sensor_][scene]
+                    val_database.filtered[scene].volume += val_database.tsdf[sensor_][scene].volume * val_database.fusion_weights[sensor_][scene]
+                val_database.filtered[scene].volume = np.divide(val_database.filtered[scene].volume, weight_sum, out=np.zeros_like(weight_sum), where=weight_sum!=0.0)
+
+                val_database.sensor_weighting[scene] = np.divide(val_database.fusion_weights[sensors[0]][scene], weight_sum, out=np.zeros_like(weight_sum), where=weight_sum!=0.0)
+
+        elif self.config.FILTERING_MODEL.model == 'tsdf_average_fusion': # simple average fusion
+            for scene in val_database.filtered.keys():
+                for sensor_ in sensors: 
+                    val_database.filtered[scene].volume += val_database.tsdf[sensor_][scene].volume
+                val_database.filtered[scene].volume /= len(sensors) #this can shift the outliers more i.e. we take the average
+                # even if only one sensor integrates compared to the middle fusion case where we don't consider 
+                # uninitialized voxels in the average. But we cannot get rid of the outliers though....
+
+                val_database.sensor_weighting[scene][:, :, :] = 0.5

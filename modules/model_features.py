@@ -74,6 +74,7 @@ class FeatureNet(nn.Module):
             self.n_features = 1
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
+        self.w_stereo_warp_right = config.stereo_warp_right 
         self.w_intensity_gradient = config.w_intensity_gradient
 
 
@@ -89,12 +90,19 @@ class FeatureNet(nn.Module):
         self.tsdf_out = self.n_points
         layernorm = config.layernorm
         self.append_depth = config.append_depth
+        self.supervision = config.supervision
+        self.append_conf = config.append_pixel_conf
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
         self.decoder = nn.ModuleList()
 
-        n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient)
+        if sensor == 'tof':
+            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient)
+        elif sensor == 'stereo':
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right)
+        else:
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient)
 
         # add first encoder block
         self.encoder.append(EncoderBlock(n_channels_first,
@@ -103,11 +111,27 @@ class FeatureNet(nn.Module):
                                          resolution,
                                          layernorm))
         # add first decoder block
-        self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient),
-                                         self.n_layers * n_channels_output,
-                                         dec_activation,
-                                         resolution,
-                                         layernorm))
+        if sensor == 'stereo':
+            self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + \
+                                             2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right),
+                                             self.n_layers * n_channels_output,
+                                             dec_activation,
+                                             resolution,
+                                             layernorm))
+        elif sensor == 'tof':
+            self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + \
+                                             2*int(self.w_intensity_gradient),
+                                             self.n_layers * n_channels_output,
+                                             dec_activation,
+                                             resolution,
+                                             layernorm))    
+        else:
+            self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + \
+                                             2*int(self.w_intensity_gradient),
+                                             self.n_layers * n_channels_output,
+                                             dec_activation,
+                                             resolution,
+                                             layernorm))
 
         # adding model layers
         for l in range(1, self.n_layers):
@@ -122,6 +146,10 @@ class FeatureNet(nn.Module):
                                              dec_activation,
                                              resolution,
                                              layernorm))
+
+        if self.supervision:
+            self.confidence_head = nn.Sequential(nn.Conv2d(self.n_features, 1, (1, 1), padding=0),
+                                       nn.Sigmoid())
 
         self.tanh = nn.Tanh()
 
@@ -139,13 +167,9 @@ class FeatureNet(nn.Module):
             # print('enc: ', xmid.isnan().sum())
             x = torch.cat([x, xmid], dim=1)
 
-        # print('enc isnan: ', x.isnan().sum())
-
         # decoding
         for dec in self.decoder:
             x = dec(x)
-
-        # print('dec isnan: ', x.isnan().sum())
 
         if self.normalize:
             x = normalize(x, p=2, dim=1)
@@ -155,8 +179,19 @@ class FeatureNet(nn.Module):
 
         if self.append_depth:
             x = torch.cat([x, d], dim=1)
-  
-        return x
+
+
+        output = dict()
+
+        if self.supervision:
+            conf = self.confidence_head(x)
+            output['confidence'] = conf
+            if self.append_conf:
+                x = torch.cat((x, conf), dim=1)
+    
+        output['feature'] = x
+    
+        return output
 
 
 class FeatureResNet(nn.Module):
@@ -177,6 +212,7 @@ class FeatureResNet(nn.Module):
             self.n_features = 1
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
+        self.w_stereo_warp_right = config.stereo_warp_right 
         self.w_intensity_gradient = config.w_intensity_gradient
 
 
@@ -192,11 +228,18 @@ class FeatureResNet(nn.Module):
         self.tsdf_out = self.n_points
         layernorm = config.layernorm
         self.append_depth = config.append_depth
+        self.supervision = config.supervision
+        self.append_conf = config.append_pixel_conf
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
 
-        n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient)
+        if sensor == 'tof':
+            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient)
+        elif sensor == 'stereo':
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right)
+        else:
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) 
 
         # add first encoder block
         self.encoder.append(EncoderBlock(n_channels_first,
@@ -214,12 +257,20 @@ class FeatureResNet(nn.Module):
                                              resolution,
                                              layernorm))
 
+        if self.supervision:
+            self.confidence_head = nn.Sequential(nn.Conv2d(self.n_features, 1, (1, 1), padding=0),
+                                       nn.Sigmoid())
+                                       # nn.ReLU())
 
         self.tanh = nn.Tanh()
 
     def forward(self, x):
         if self.append_depth:
-            d = x
+            if self.w_rgb:
+                d = x[:, 0, :, :].unsqueeze(1)
+            else:
+                d = x
+
         # encoding
 
         for k, enc in enumerate(self.encoder):
@@ -239,11 +290,18 @@ class FeatureResNet(nn.Module):
             x = normalize(x, p=2, dim=1)
 
 
-
-
         if self.append_depth:
             x = torch.cat([x, d], dim=1)
   
-        return x
+        output = dict()
 
+        if self.supervision:
+            conf = self.confidence_head(x)
+            output['confidence'] = conf
+            if self.append_conf:
+                x = torch.cat((x, conf), dim=1)
+    
+        output['feature'] = x
+    
+        return output
 

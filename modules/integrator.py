@@ -19,14 +19,14 @@ class Integrator(torch.nn.Module):
 
 
         # unpack data
-        values = integrator_input['update_values'].to('cuda:0')
-        features = integrator_input['update_features'].to('cuda:0')
-        indices = integrator_input['update_indices'].to('cuda:0')
-        feature_indices = integrator_input['update_feature_indices'].to('cuda:0')
+        values = integrator_input['update_values'].to(self.device)
+        features = integrator_input['update_features'].to(self.device)
+        indices = integrator_input['update_indices'].to(self.device)
+        feature_indices = integrator_input['update_feature_indices'].to(self.device)
         filter_indices = integrator_input['filter_indices']
-        weights = integrator_input['update_weights'].to('cuda:0')
-        indices_empty= integrator_input['update_indices_empty'].to('cuda:0')
-        weights_empty = integrator_input['update_weights_empty'].to('cuda:0')
+        weights = integrator_input['update_weights'].to(self.device)
+        indices_empty= integrator_input['update_indices_empty'].to(self.device)
+        weights_empty = integrator_input['update_weights_empty'].to(self.device)
 
         n1, n2, n3, f4 = features.shape # f1 = 1, f2= 65536 (when no filtering), f3= tail_points, f4 = nbr_features
 
@@ -94,6 +94,9 @@ class Integrator(torch.nn.Module):
         indices_insert = torch.unique_consecutive(indices[index.sort()[1]], dim=0) # since the coalesce() operation on the sparse tensors sorts the
         vcache = torch.sparse.FloatTensor(index.unsqueeze_(0), update, torch.Size([xs * ys * zs])).coalesce()
         update = vcache.values()
+
+        if indices_insert.shape[0] != update.shape[0]:
+            print('wrong dim!')
         del vcache
 
         # weights for tsdf
@@ -121,6 +124,8 @@ class Integrator(torch.nn.Module):
         update_feat_weights = torch.ones_like(update_feat[:, 0])
         feature_indices = fcache.indices().squeeze()
         update_feat = fcache.values()
+        if feature_indices_insert.shape[0] != update_feat.shape[0]:
+            print('wrong dim feat!')
         del fcache
 
         #feature weights
@@ -149,6 +154,7 @@ class Integrator(torch.nn.Module):
         # here we should not multiply the update_feat with weights_feat in the nominator since we already have that baked in
         # as weight one for each term when we sum all features to the index
         feature_update = (feature_weights_old * features_old + update_feat) / (feature_weights_old + weights_feat)
+
         weight_update_features = feature_weights_old + weights_feat
         weight_update_features = torch.clamp(weight_update_features, 0, self.max_weight)
         # we need to reduce the size of the tensor since the tensor contains 4 copies of each weight
@@ -172,8 +178,8 @@ class Integrator(torch.nn.Module):
         insert_values(feature_update, feature_indices_insert, features_volume) 
         insert_values(weight_update_features, feature_indices_insert, feature_weights_volume) 
 
-        insert_values(value_update_empty, indices_empty_insert, values_volume)
-        insert_values(weight_update_empty, indices_empty_insert, weights_volume)
+        # insert_values(value_update_empty, indices_empty_insert, values_volume)
+        # insert_values(weight_update_empty, indices_empty_insert, weights_volume)
 
         # I don't need to threshold the behind the surface online outlier filter wrt to the weights
         # because I don't update the weights at all. But we should not update these indices if they
@@ -185,19 +191,20 @@ class Integrator(torch.nn.Module):
         # valid_indices = (weights_volume[indices_empty_behind[:, 0], indices_empty_behind[:, 1], indices_empty_behind[:, 2]] == 0).nonzero()[:, 0]
         # insert_values(value_update_empty_behind[valid_indices], indices_empty_behind[valid_indices], values_volume)
 
-        if self.train_on_border_voxels:
-            indices = torch.cat((indices, indices_empty[:int(indices_empty.shape[0]/10), :]), dim=0)
-        else:
-            # we need to feed the weights belonging to the no border voxels in order to not train the filtering and translation
-            # networks on center voxels with a zero weight. On the other hand, if I only train the filtering and translation net using the 
-            # feature indices (which always have a weight of at least 1 for each update), then I don't need this step.
-            # valid_filter = weight_update_filter > 0.01
-            # indices_no_border = indices_no_border_insert[valid_filter, :]
+        # if self.train_on_border_voxels:
+        #     indices = torch.cat((indices, indices_empty_insert[:int(indices_empty_insert.shape[0]/10), :]), dim=0)
 
-            indices = indices_no_border_insert
+        # else:
+        #     # we need to feed the weights belonging to the no border voxels in order to not train the filtering and translation
+        #     # networks on center voxels with a zero weight. On the other hand, if I only train the filtering and translation net using the 
+        #     # feature indices (which always have a weight of at least 1 for each update), then I don't need this step.
+        #     # valid_filter = weight_update_filter > 0.01
+        #     # indices_no_border = indices_no_border_insert[valid_filter, :]
+
+        #     indices = indices_no_border_insert
             #indices = torch.cat((indices_no_border, indices_empty[:int(indices_empty.shape[0]/10), :]), dim=0)
 
-        return values_volume, features_volume, weights_volume, feature_weights_volume, indices
+        return values_volume, features_volume, weights_volume, feature_weights_volume, indices_insert
 
     def forward_old(self, integrator_input, values_volume, features_volume, weights_volume):
         xs, ys, zs = values_volume.shape

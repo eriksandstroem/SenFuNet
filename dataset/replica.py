@@ -10,6 +10,8 @@ from skimage.color import rgb2gray
 from skimage import filters
 from skimage.morphology import binary_erosion
 from torch.utils.data import Dataset
+import matplotlib.pyplot as plt
+
 
 from graphics import Voxelgrid
 import h5py
@@ -18,11 +20,12 @@ import h5py
 class Replica(Dataset):
 
     def __init__(self, config_data):
-        self.root_dir = os.getenv(config_data.root_dir) # when training on local scratch
-        
+        self.root_dir = os.getenv(config_data.root_dir)
+        if self.root_dir:
+            self.root_dir += '/cluster/work/cvl/esandstroem/data/replica/manual' # when training on local scratch
         # os.getenv returns none when the input does not exist. When 
         # it returns none, we want to train on the work folder
-        if not self.root_dir:
+        else:
             self.root_dir  = config_data.root_dir
 
         self.sampling_density_stereo = config_data.sampling_density_stereo
@@ -61,10 +64,12 @@ class Replica(Dataset):
 
         self._scenes = []
 
-        self.sensor_line_mapping = {'left_depth_gt': 0, 'left_depth_gt_2': 0, 'left_rgb': -2, 'left_camera_matrix': -1,
+        self.sensor_line_mapping = {'left_depth_gt': 0, 'left_depth_gt_2': 0, 'left_rgb_aug': -3,
+                                    'left_rgb': -2, 'left_camera_matrix': -1,
                                     'tof': 1, 'mono': 2, 'stereo': 3, 'gauss_close_thresh': 4,
                                     'gauss_far_thresh': 5, 'gauss_close_cont': 6,
-                                    'gauss_far_cont': 7}
+                                    'gauss_far_cont': 7, 'gauss_red': 8, 'gauss_blue': 9, 'gauss_red_aug': 10,
+                                    'gauss_blue_aug': 11, 'sgm_stereo': 12}
 
         if config_data.data_load_strategy == 'hybrid':
             self.nbr_load_scenes = config_data.load_scenes_at_once
@@ -225,9 +230,12 @@ class Replica(Dataset):
         for sensor_ in self.depth_images.keys():
             self.depth_images[sensor_]  = sorted(self.depth_images[sensor_] , key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
 
+            print(len(self.depth_images[sensor_]))
         if self.mode == 'val':
             for sensor_ in self.depth_images.keys():
-                self.depth_images[sensor_]  = self.depth_images[sensor_][::4]
+                self.depth_images[sensor_]  = self.depth_images[sensor_][::10]
+
+
 
     # def _load_depths(self): # loads the paths of the noisy depth images to a list
 
@@ -303,7 +311,7 @@ class Replica(Dataset):
             self.depth_images_gt = sorted(self.depth_images_gt, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
 
         if self.mode == 'val':
-            self.depth_images_gt = self.depth_images_gt[::4]
+            self.depth_images_gt = self.depth_images_gt[::10]
 
 
     def _load_color(self):
@@ -335,18 +343,22 @@ class Replica(Dataset):
             del tmp_dict
 
         else:
+            if self.input[0].endswith('aug'):
+                rgb_path = 'left_rgb_aug'
+            else:
+                rgb_path = 'left_rgb'
             # reading files from list
             with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
                 for line in file:
                     line = line.split(' ')
-                    files = glob.glob(os.path.join(self.root_dir, line[self.sensor_line_mapping['left_rgb']], '*.png'))
+                    files = glob.glob(os.path.join(self.root_dir, line[self.sensor_line_mapping[rgb_path]], '*.png'))
                     for file in files:
                         self.color_images.append(file)
 
             self.color_images = sorted(self.color_images, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
 
         if self.mode == 'val':
-            self.color_images = self.color_images[::4]
+            self.color_images = self.color_images[::10]
 
     def _load_cameras(self):
         self.cameras = []
@@ -390,7 +402,7 @@ class Replica(Dataset):
             self.cameras = sorted(self.cameras, key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
 
         if self.mode == 'val':
-            self.cameras = self.cameras[::4]
+            self.cameras = self.cameras[::10]
 
     @property
     def scenes(self):
@@ -400,6 +412,10 @@ class Replica(Dataset):
         return len(self.depth_images_gt)
 
     def __getitem__(self, item):
+
+        # there is something strane if you print the item and frame here s.t. I don't print them in order
+        # but when I print the frame id in the test function in the pipeline.py everything is in order.
+        # I think the issue is with the printing and the need to flush.
 
         sample = dict()
         sample['item_id'] = item 
@@ -411,6 +427,7 @@ class Replica(Dataset):
         scene = pathsplit[-4]
         trajectory = pathsplit[-3]
         frame = os.path.splitext(pathsplit[-1])[0]
+
         frame_id = '{}/{}/{}'.format(scene, trajectory, frame)
 
         image = io.imread(file)
@@ -428,6 +445,7 @@ class Replica(Dataset):
         sample['image'] = np.asarray(image).astype(np.float32)/255
 
 
+
         # if self.intensity_gradient: 
         intensity = rgb2gray(image) # seems to be in range 0 - 1 
         sample['intensity'] = np.asarray(intensity).astype(np.float32)
@@ -441,6 +459,7 @@ class Replica(Dataset):
             file = self.depth_images[sensor_][item]
 
             depth = io.imread(file).astype(np.float32)
+
             try:
                 step_x = depth.shape[0] / eval('self.resolution_' + sensor_ + '[0]')
                 step_y = depth.shape[1] / eval('self.resolution_' + sensor_ + '[1]')
@@ -459,29 +478,36 @@ class Replica(Dataset):
             depth /= 1000.
 
             sample[sensor_ + '_depth'] = np.asarray(depth)
+
+            if sensor_ == 'stereo':
+                # load right rgb image
+                file = self.color_images[item]
+                file = '/'.join(file.split('/')[:-2]) + '/right_rgb/' + file.split('/')[-1]
+
+                image = io.imread(file)
+
+                step_x = image.shape[0] / self.resolution[0]
+                step_y = image.shape[1] / self.resolution[0]
+
+                index_y = [int(step_y * i) for i in
+                           range(0, int(image.shape[1] / step_y))]
+                index_x = [int(step_x * i) for i in
+                           range(0, int(image.shape[0] / step_x))]
+
+                image = image[:, index_y]
+                image = image[index_x, :]
+                right_image = np.asarray(image).astype(np.float32)/255
+
+                sample['right_warped_rgb_stereo'] = self.get_warped_image(right_image, sample[sensor_ + '_depth'])
+
+                # plt.imsave('rgbwarp' +frame +'.png', sample['right_warped_rgb_stereo'])
+                # plt.imsave('left' +frame +'.png', sample['image'])
+                # plt.imsave('rgbwarpdiff' +frame +'.png', np.abs(sample['image'] - sample['right_warped_rgb_stereo']))
+                # plt.imsave('depth' +frame +'.png', sample[sensor_ + '_depth'])
+
        
             # define mask
-            if self.fusion_strategy == 'routingNet':
-                raise NotImplementedError
-                mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
-                mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
-                # remove strong artifacts coming from pixels close to missing pixels
-                # the routing network computes bad depths for these pixels that are
-                # not missing in the original image due to the convolutions over
-                # zero-valued pixels.
-                # for i in range(10):
-                #     mask = binary_erosion(mask)
-
-                # do not integrate depth values close to the image boundary
-                # this is relevant for the stereo modality. 
-                mask[0:10, :] = 0
-                mask[-10:-1, :] = 0
-                mask[:, 0:10] = 0
-                mask[:, -10:-1] = 0
-
-                sample['mask'] = mask
-
-            else:
+            if not self.fusion_strategy == 'routingNet':
                 try:
                     mask = (depth > eval('self.min_depth_' + sensor_))
                     mask = np.logical_and(mask, depth < eval('self.max_depth_' + sensor_))
@@ -503,6 +529,24 @@ class Replica(Dataset):
                     mask[:, -self.mask_width:-1] = 0
                     sample[sensor_ + '_mask'] = mask
 
+        if self.fusion_strategy == 'routingNet':
+            mask = np.logical_or((sample['tof_depth'] > self.min_depth), (sample['stereo_depth'] > self.min_depth))
+            mask = np.logical_and(mask, np.logical_or(sample['tof_depth'] < self.max_depth, sample['stereo_depth'] < self.max_depth))
+            # remove strong artifacts coming from pixels close to missing pixels
+            # the routing network computes bad depths for these pixels that are
+            # not missing in the original image due to the convolutions over
+            # zero-valued pixels.
+            # for i in range(10):
+            #     mask = binary_erosion(mask)
+
+            # do not integrate depth values close to the image boundary
+            # this is relevant for the stereo modality. 
+            mask[0:self.mask_height, :] = 0
+            mask[-self.mask_height:-1, :] = 0
+            mask[:, 0:self.mask_width] = 0
+            mask[:, -self.mask_width:-1] = 0
+
+            sample['mask'] = mask
 
 
                
@@ -527,6 +571,8 @@ class Replica(Dataset):
         depth /= 1000.
 
         sample[self.target] = np.asarray(depth)
+        # plt.imsave('depthdiff' +frame +'.png', np.abs(sample[sensor_ + '_depth'] - sample[self.target]))
+        # plt.imsave('depthgt' +frame +'.png', sample[self.target])
 
         # load extrinsics
         file = self.cameras[item]
@@ -757,6 +803,54 @@ class Replica(Dataset):
     #         sample = self.transform(sample)
 
     #     return sample
+
+    def get_warped_image(self, right_rgb, left_depth):
+        
+        disp = 0.1*128/left_depth # compute disparity (unit pixels) from depth (unit m) using the fact that the baseline is 0.1 m and 
+        # the focal length in pixels is 128 (since our image size is 256x256)
+        size = right_rgb.shape[0] # assumes square input image
+
+        idx_x_left = np.transpose(np.expand_dims(np.arange(size), 1).repeat(size, axis=1))
+        idx_y = np.expand_dims(np.arange(size), 1).repeat(size, axis=1)
+
+        idx_left = np.zeros((size, size, 2)).astype(np.int)
+        idx_left[:, :, 0] = idx_y
+        idx_left[:, :, 1] = idx_x_left
+
+        idx_x_right = (idx_x_left - disp).astype(np.int)
+        idx_right = np.zeros((size, size, 2)).astype(np.int)
+        idx_right[:, :, 0] = idx_y
+        idx_right[:, :, 1] = idx_x_right
+
+        # get mask to remove negative indices
+        idx_x_valid = idx_x_right >= 0
+
+        # remove indices in right image which are negative (outside right image)
+        idx_right = idx_right[idx_x_valid, :]
+        # remove the same indices amongst left indices
+        idx_left = idx_left[idx_x_valid, :]
+
+        # right_valid = np.zeros((512, 512, 3))
+        # right_valid[idx_right[:, 0], idx_right[:, 1], :] = right_rgb[idx_right[:, 0], idx_right[:, 1], :]
+        # cv2.imwrite('testrimg.png', right_valid)
+
+        # warp right image to left image
+        right_warp = np.zeros((size, size, 3)).astype(np.float32)
+        right_warp[idx_left[:, 0], idx_left[:, 1], :] = right_rgb[idx_right[:, 0], idx_right[:, 1], :]
+        # cv2.imwrite('rightwarptest.png', right_warp)  #*15)
+
+        return right_warp
+
+    def get_proxy_alpha_grid(self, scene):
+        file = os.path.join(self.root_dir, scene, 'proxy_alpha_' + scene + '.hdf')
+
+        # read from hdf file!
+        f = h5py.File(file, 'r')
+        voxels = np.array(f['proxy_alpha'])
+        # Add padding to grid to give more room to fusion net
+        voxels = np.pad(voxels, self.pad, 'constant', constant_values=-1.0)
+
+        return voxels
 
     def get_grid(self, scene, truncation):
         file = os.path.join(self.root_dir, scene, 'sdf_' + scene + '.hdf')

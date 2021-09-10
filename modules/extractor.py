@@ -40,19 +40,17 @@ class Extractor(nn.Module):
         :return: values/voxels of groundtruth and current as well as at its coordinates and indices
         '''
 
-        tsdf_volume = tsdf_volume
-
         intrinsics = intrinsics.float()
         extrinsics = extrinsics.float()
 
-        if torch.cuda.is_available() and gpu:  # putting extractor on gpu
+        if torch.cuda.is_available() and gpu:  # putting extractor on gpu. This makes computations much faster
             intrinsics = intrinsics.cuda()
             extrinsics = extrinsics.cuda()
 
             tsdf_volume = tsdf_volume.cuda()
             weights_volume = weights_volume.cuda()
-            feature_volume = feature_volume.cuda()
-            feature_weights_volume = feature_weights_volume.cuda()
+            # feature_volume = feature_volume.cuda()
+            # feature_weights_volume = feature_weights_volume.cuda()
             origin = origin.cuda()
 
         b, h, w = depth.shape
@@ -68,7 +66,7 @@ class Extractor(nn.Module):
 
         if self.extraction_strategy == 'trilinear_interplation':
             fusion_values, indices, weights, indices_empty, weights_empty, \
-            fusion_weights = trilinear_interpolation(self.init_val, ray_pts, empty_points, tsdf_volume, weights_volume)
+            fusion_weights = self.trilinear_interpolation(ray_pts, empty_points, tsdf_volume, weights_volume)
 
             n1, n2, n3 = fusion_values.shape
 
@@ -79,7 +77,7 @@ class Extractor(nn.Module):
             weights_empty = weights_empty.view(n1, n2, self.n_empty_space_voting, 8)
         elif self.extraction_strategy == 'nearest_neighbor':
             fusion_values, indices, weights, indices_empty, weights_empty, \
-            fusion_weights = nearest_neighbor_extraction_tsdf(self.init_val, ray_pts, empty_points, tsdf_volume, weights_volume)
+            fusion_weights = self.nearest_neighbor_extraction_tsdf(ray_pts, empty_points, tsdf_volume, weights_volume)
 
             n1, n2, n3 = fusion_values.shape
 
@@ -92,26 +90,26 @@ class Extractor(nn.Module):
         # we want to extract the features using nearest neighbor extraction rather than trilinear interpolation
         # contrary to the trilinear case, the feature_weights fill the purpose as both the "weights" and "fusion_weights" variable as
         # we only have integer counts for the weights when working with the features
-        feature_values, feature_indices, feature_weights = nearest_neighbor_extraction(ray_pts, feature_volume, feature_weights_volume)
+        # feature_values, feature_indices, feature_weights = self.nearest_neighbor_extraction(ray_pts, feature_volume, feature_weights_volume)
 
-        feature_indices = feature_indices.view(n1, n2, n3, 1, 3)
-        feature_weights = feature_weights.view(n1, n2, n3, 1)
+        # feature_indices = feature_indices.view(n1, n2, n3, 1, 3)
+        # feature_weights = feature_weights.view(n1, n2, n3, 1)
 
         # feature_indices and indices are identical! One can be removed!
 
         # packing
         values = dict(fusion_values=fusion_values,
-                      feature_values=feature_values,
+                      # feature_values=feature_values,
                       fusion_weights=fusion_weights,
                       depth=depth.view(b, h*w),
                       indices=indices,
                       weights=weights,
-                      feature_indices=feature_indices,
-                      feature_weights=feature_weights,
+                      feature_indices=indices,
+                      feature_weights=fusion_weights,
                       indices_empty=indices_empty,
                       weights_empty=weights_empty)
 
-        del extrinsics, intrinsics, origin, weights_volume, tsdf_volume, feature_volume, feature_weights_volume
+        del extrinsics, intrinsics, origin, weights_volume, tsdf_volume
 
         return values
 
@@ -202,6 +200,137 @@ class Extractor(nn.Module):
         empty_points = torch.stack(empty_points, dim=2) # (1, 65536, n_empty_pints, 3)
 
         return points, empty_points
+
+    def nearest_neighbor_extraction_tsdf(self, points, empty_points, tsdf_volume, weights_volume):
+        x, y, z = tsdf_volume.shape
+        b, h, n, dim = points.shape
+
+        # get indices from the points which are already in the voxel grid but floating point coordinates
+        points = points.contiguous().view(b*h*n, dim)
+        indices = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
+
+        # get valid indices
+        valid = get_index_mask(indices, (x, y, z))
+
+        valid_idx = torch.nonzero(valid)[:, 0]
+
+        tsdf = extract_values(indices, tsdf_volume, valid)
+        weights = extract_values(indices, weights_volume, valid)
+
+
+        tsdf_container = self.init_val * torch.ones_like(valid).float() 
+        weight_container = torch.zeros_like(valid).float()
+        
+
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
+        tsdf_container[valid_idx] = tsdf.float()
+        weight_container[valid_idx] =  weights.float()
+
+        weights = torch.ones_like(valid).float()
+
+
+        fusion_values = tsdf_container.view(b, h, n)
+        fusion_weights = weight_container.view(b, h, n)
+
+        del tsdf
+
+        # handle the empty points
+        b, h, n, dim = empty_points.shape
+
+        # get indices from the points which are already in the voxel grid but floating point coordinates
+        points = empty_points.contiguous().view(b*h*n, dim)
+        indices_empty = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
+        weights_empty = torch.ones(points.shape[0], device=self.config.device).float()
+
+
+        return fusion_values, indices, weights, indices_empty, weights_empty, fusion_weights
+
+    def trilinear_interpolation(self, points, empty_points, tsdf_volume, weights_volume):
+
+        b, h, n, dim = points.shape
+
+        #get interpolation weights
+        weights, indices = interpolation_weights(points)
+
+        weights_empty, indices_empty = interpolation_weights(empty_points) # check speed of this - perhaps assign weight 1 to each.
+
+        n1, n2, n3 = indices.shape
+        # nbr_features = feature_volume.shape[-1]
+        indices = indices.contiguous().view(n1*n2, n3).long()
+
+
+        #TODO: change to replication padding instead of zero padding
+        #TODO: double check indices
+
+        # get valid indices
+        valid = get_index_mask(indices, tsdf_volume.shape)
+        valid_idx = torch.nonzero(valid)[:, 0]
+
+        tsdf_values = extract_values(indices, tsdf_volume, valid)
+        tsdf_weights = extract_values(indices, weights_volume, valid)
+        # features = extract_values(indices, feature_volume, valid)
+
+        value_container = self.init_val*torch.ones_like(valid).float() 
+        weight_container = torch.zeros_like(valid).float()
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device='cuda:0').float() # here we should extract the initial value of the confidence grid
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
+
+        value_container[valid_idx] = tsdf_values.float()
+        weight_container[valid_idx] = tsdf_weights.float()
+        # I forgot to put the variable features into the container here before. FAIL!
+        # feature_container[valid_idx, :] = features.float()
+
+        value_container = value_container.view(weights.shape)
+        weight_container = weight_container.view(weights.shape)
+        # feature_container = feature_container.view(weights.shape[0], weights.shape[1], nbr_features)
+
+        # trilinear interpolation
+        fusion_values = torch.sum(value_container * weights, dim=1)
+        fusion_weights = torch.sum(weight_container * weights, dim=1)
+        weights = weights.unsqueeze_(-1)
+        # feature_weights = weights.repeat(1, 1, nbr_features)
+        # fusion_features = torch.sum(feature_container * feature_weights, dim=1)
+
+        fusion_values = fusion_values.view(b, h, n)
+        fusion_weights = fusion_weights.view(b, h, n)
+        # fusion_features = fusion_features.view(b, h, n, nbr_features)
+
+        indices = indices.view(n1, n2, n3)
+
+        # return fusion_values.float(), fusion_features.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
+        return fusion_values.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
+
+
+    def nearest_neighbor_extraction(self, points, feature_volume, feature_weights_volume):
+        b, h, n, dim = points.shape
+        x, y, z, nbr_features = feature_volume.shape
+
+        # get indices from the points which are already in the voxel grid but floating point coordinates
+        points = points.contiguous().view(b*h*n, dim)
+        indices = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
+
+        # get valid indices
+        valid = get_index_mask(indices, (x, y, z))
+
+        valid_idx = torch.nonzero(valid)[:, 0]
+
+        features = extract_values(indices, feature_volume, valid)
+        weights = extract_values(indices, feature_weights_volume, valid)
+
+
+        feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device=self.config.device).float() 
+        weight_container = torch.zeros_like(valid).float()
+
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
+        feature_container[valid_idx, :] = features.float()
+        weight_container[valid_idx] =  weights.float()
+
+        del features, weights
+
+        feature_container = feature_container.view(b, h, n, nbr_features)
+        weight_container = weight_container.view(b, h, n)
+
+        return feature_container, indices, weight_container
 
 def interpolation_weights(points):
 
@@ -362,136 +491,6 @@ def extract_values(indices, volume, mask=None):
         return volume[x, y, z, :]
 
 
-def trilinear_interpolation(init_val, points, empty_points, tsdf_volume, weights_volume):
-
-    b, h, n, dim = points.shape
-
-    #get interpolation weights
-    weights, indices = interpolation_weights(points)
-
-    weights_empty, indices_empty = interpolation_weights(empty_points) # check speed of this - perhaps assign weight 1 to each.
-
-    n1, n2, n3 = indices.shape
-    # nbr_features = feature_volume.shape[-1]
-    indices = indices.contiguous().view(n1*n2, n3).long()
-
-
-    #TODO: change to replication padding instead of zero padding
-    #TODO: double check indices
-
-    # get valid indices
-    valid = get_index_mask(indices, tsdf_volume.shape)
-    valid_idx = torch.nonzero(valid)[:, 0]
-
-    tsdf_values = extract_values(indices, tsdf_volume, valid)
-    tsdf_weights = extract_values(indices, weights_volume, valid)
-    # features = extract_values(indices, feature_volume, valid)
-
-    value_container = init_val*torch.ones_like(valid).float() 
-    weight_container = torch.zeros_like(valid).float()
-    # feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device='cuda:0').float() # here we should extract the initial value of the confidence grid
-    # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
-
-    value_container[valid_idx] = tsdf_values.float()
-    weight_container[valid_idx] = tsdf_weights.float()
-    # I forgot to put the variable features into the container here before. FAIL!
-    # feature_container[valid_idx, :] = features.float()
-
-    value_container = value_container.view(weights.shape)
-    weight_container = weight_container.view(weights.shape)
-    # feature_container = feature_container.view(weights.shape[0], weights.shape[1], nbr_features)
-
-    # trilinear interpolation
-    fusion_values = torch.sum(value_container * weights, dim=1)
-    fusion_weights = torch.sum(weight_container * weights, dim=1)
-    weights = weights.unsqueeze_(-1)
-    # feature_weights = weights.repeat(1, 1, nbr_features)
-    # fusion_features = torch.sum(feature_container * feature_weights, dim=1)
-
-    fusion_values = fusion_values.view(b, h, n)
-    fusion_weights = fusion_weights.view(b, h, n)
-    # fusion_features = fusion_features.view(b, h, n, nbr_features)
-
-    indices = indices.view(n1, n2, n3)
-
-    # return fusion_values.float(), fusion_features.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
-    return fusion_values.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
-
-
-def nearest_neighbor_extraction(points, feature_volume, feature_weights_volume):
-    b, h, n, dim = points.shape
-    x, y, z, nbr_features = feature_volume.shape
-
-    # get indices from the points which are already in the voxel grid but floating point coordinates
-    points = points.contiguous().view(b*h*n, dim)
-    indices = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
-
-    # get valid indices
-    valid = get_index_mask(indices, (x, y, z))
-
-    valid_idx = torch.nonzero(valid)[:, 0]
-
-    features = extract_values(indices, feature_volume, valid)
-    weights = extract_values(indices, feature_weights_volume, valid)
-
-
-    feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device='cuda:0').float() 
-    weight_container = torch.zeros_like(valid).float()
-
-    # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
-    feature_container[valid_idx, :] = features.float()
-    weight_container[valid_idx] =  weights.float()
-
-    del features, weights
-
-    feature_container = feature_container.view(b, h, n, nbr_features)
-    weight_container = weight_container.view(b, h, n)
-
-    return feature_container, indices, weight_container
-
-def nearest_neighbor_extraction_tsdf(init_val, points, empty_points, tsdf_volume, weights_volume):
-    x, y, z = tsdf_volume.shape
-    b, h, n, dim = points.shape
-
-    # get indices from the points which are already in the voxel grid but floating point coordinates
-    points = points.contiguous().view(b*h*n, dim)
-    indices = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
-
-    # get valid indices
-    valid = get_index_mask(indices, (x, y, z))
-
-    valid_idx = torch.nonzero(valid)[:, 0]
-
-    tsdf = extract_values(indices, tsdf_volume, valid)
-    weights = extract_values(indices, weights_volume, valid)
-
-
-    tsdf_container = init_val * torch.ones_like(valid).float() 
-    weight_container = torch.zeros_like(valid).float()
-    
-
-    # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
-    tsdf_container[valid_idx] = tsdf.float()
-    weight_container[valid_idx] =  weights.float()
-
-    weights = torch.ones_like(valid).float()
-
-
-    fusion_values = tsdf_container.view(b, h, n)
-    fusion_weights = weight_container.view(b, h, n)
-
-    del tsdf
-
-    # handle the empty points
-    b, h, n, dim = empty_points.shape
-
-    # get indices from the points which are already in the voxel grid but floating point coordinates
-    points = empty_points.contiguous().view(b*h*n, dim)
-    indices_empty = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
-    weights_empty = torch.ones(points.shape[0], device='cuda:0').float()
-
-
-    return fusion_values, indices, weights, indices_empty, weights_empty, fusion_weights
 
 
 

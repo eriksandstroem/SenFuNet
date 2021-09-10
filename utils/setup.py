@@ -1,9 +1,15 @@
 import torch
 import os
 import logging
+
+# import dataset
 from dataset import ShapeNet
 from dataset import Replica # core dumped
 from dataset import CoRBS
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
  
 from torch.utils.tensorboard import SummaryWriter
 import trimesh
@@ -19,7 +25,7 @@ from copy import copy
 from utils.saving import *
 
 def get_data_config(config, mode):
-
+# 
     data_config = copy(config.DATA)
 
     if mode == 'train':
@@ -54,7 +60,10 @@ def get_database(dataset, config, mode='train'):
     database_config.n_features = config.FEATURE_MODEL.n_features
     database_config.features_to_sdf_enc = config.FILTERING_MODEL.features_to_sdf_enc
     database_config.features_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
+    database_config.outlier_filter = config.FILTERING_MODEL.use_outlier_filter
     database_config.test_mode = config.SETTINGS.test_mode
+    database_config.alpha_supervision = config.LOSS.alpha_supervision
+    database_config.outlier_channel = config.FILTERING_MODEL.outlier_channel
     database_config.scene_list = eval('config.DATA.{}_scene_list'.format(mode))
 
     return Database(dataset, database_config)
@@ -141,8 +150,21 @@ class Workspace(object):
         print('Saving config to ', self.workspace_path)
         save_config_to_json(self.workspace_path, config)
 
-    def save_model_state(self, state, is_best_filt, is_best):
-        save_checkpoint(state, is_best_filt, is_best, self.model_path)
+    def save_model_state(self, state, is_best, is_best_filt=None):
+        save_checkpoint(state, is_best, self.model_path, is_best_filt)
+
+    def save_alpha_histogram(self, database, sensors, epoch):
+        
+        for scene in database.scenes_gt.keys():
+            mask = np.zeros_like(database.sensor_weighting[scene], dtype=bool)
+            for sensor_ in sensors:
+                mask = np.logical_or(mask, (database.feature_weights[sensor_][scene] > 0))
+
+            hist = database.sensor_weighting[scene][mask].flatten().astype(np.float32)
+            plt.hist(hist, bins = 100)
+            plt.savefig(self.output_path + '/sensor_weighting_grid_histogram_' + scene + '_epoch_' + str(epoch) + '.png')
+            plt.clf()
+
 
     def save_tsdf_data(self, file, data):
         tsdf_file = os.path.join(self.output_path, file)

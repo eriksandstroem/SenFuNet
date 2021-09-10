@@ -4,7 +4,6 @@
 #BSUB -R "rusage[mem=3000, ngpus_excl_p=1]"
 #BSUB -R "select[gpu_mtotal0<=15000]"
 #BSUB -n 20
-#BSUB -R "select[model!=EPYC_7742]"
 #BSUB -oo /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/scripts/log
 
 # call your calculation executable, redirect output

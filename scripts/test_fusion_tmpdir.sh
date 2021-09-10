@@ -1,12 +1,13 @@
 #!/bin/bash
 
-#BSUB -W 24:00
+#BSUB -W 4:00
 #BSUB -R "rusage[mem=3000, ngpus_excl_p=1]"
 #BSUB -R "select[gpu_mtotal0<=15000]"
 #BSUB -n 20
-#BSUB -R "select[model!=EPYC_7742]"
 #BSUB -R "rusage[scratch=1000]" # 1000 MB of local scratch storage per core
 #BSUB -oo /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/scripts/log
+
+# #BSUB -R "select[model!=EPYC_7742]"
 
 # activate virtual environment
 export PATH=/cluster/project/cvl/esandstroem/virtual_envs/multisensor_env_python_gpu_3.8.5/bin:$PATH

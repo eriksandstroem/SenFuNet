@@ -6,7 +6,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_size):
+def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_size, outlier_channel):
 	cmap = plt.get_cmap("inferno")
 	# print weighting histogram - only works in the 2-sensor case! With more sensors we cannot do this in the same way
 	# bad idea to not feed the mask to this function as we will include wrongful values in the histogram which are 
@@ -14,11 +14,18 @@ def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_siz
 	# the filtered grid and the sensor_weighting grid will be filled with ones even though those voxels are uninitialized.
 	# this skews our perception of the grid histogram.
 	# hist = sensor_weighting[sensor_weighting > -1].flatten()
+	if outlier_channel:
+		sensor_weighting = sensor_weighting[0, :, :, :]
+		
 	hist = sensor_weighting[mask].flatten()
-	# print('hist nbr shape nn: ', hist.shape)
-	plt.hist(hist, bins = 100)
+
+	cm = plt.get_cmap('inferno')
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cm(c))
 	plt.savefig(test_dir + '/sensor_weighting_grid_histogram.png')
 	plt.clf()
+
 
 	# read vertices from mesh
 	vertices = mesh.vertices
@@ -86,7 +93,7 @@ def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_siz
 	# print(colors.shape)
 	if (vals == -1).sum() > 0:
 		print('Invalid index or indices found among voxel points!')
-		return
+		# return
 	# print((vals == -1).sum()) # this sum should always be zero when we subtract half a voxel size to get to the voxel
 	# coordinate space.
 	colors[vals == -1] = [0, 1, 0] # make all uninitialized voxels green
@@ -96,9 +103,9 @@ def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_siz
 	o3d.io.write_triangle_mesh(test_dir + '/sensor_weighting_nn.ply', mesh)
 
 	# compute surface histogram
-	plt.hist(vals, bins = 100) # histogram of "averaged" alpha values.
-	plt.savefig(test_dir + '/sensor_weighting_surface_histogram.png') # here I see that the averaged alpha values in the neighborhood skews the
-	# distribution of the alpha values a lot. I will try with taking the value of the nearest neighbor as well to compare. Then I don't shift
-	# the alpha distribution at all
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cm(c))
+	plt.savefig(test_dir + '/sensor_weighting_surface_histogram.png')
 	plt.clf()
 

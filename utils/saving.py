@@ -11,7 +11,7 @@ def save_config_to_json(path, config):
     with open(os.path.join(path, 'config.json'), 'w') as file:
         json.dump(config, file)
 
-def save_checkpoint(state, is_best_filt, is_best, checkpoint):
+def save_checkpoint(state, is_best, checkpoint, is_best_filt=None):
     """Saves model and training parameters
     at checkpoint + 'last.pth.tar'.
     If is_best==True, also saves
@@ -28,10 +28,14 @@ def save_checkpoint(state, is_best_filt, is_best, checkpoint):
 
     filepath = os.path.join(checkpoint, 'last.pth.tar')
     torch.save(state, filepath)
-    if is_best:
+    if is_best_filt:
       shutil.copyfile(filepath, os.path.join(checkpoint, 'best.pth.tar'))
 
-    for sensor in is_best.keys():
-      if is_best[sensor]:
-        shutil.copyfile(filepath, os.path.join(checkpoint, 'best_' +  sensor + '.pth.tar'))
+    if isinstance(is_best, list):
+      for sensor in is_best.keys():
+        if is_best[sensor]:
+          shutil.copyfile(filepath, os.path.join(checkpoint, 'best_' +  sensor + '.pth.tar'))
+    else:
+      if is_best:
+        shutil.copyfile(filepath, os.path.join(checkpoint, 'best.pth.tar')) # train routing network with multiple sensor inputs
 

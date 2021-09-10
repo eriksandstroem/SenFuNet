@@ -14,6 +14,11 @@ class Filter_Pipeline(torch.nn.Module):
         super(Filter_Pipeline, self).__init__()
 
         self.config = config
+        self.defined_bboxes = dict() # CHANGE
+        for sensor_ in config.DATA.input:
+            self.defined_bboxes[sensor_] = dict()   
+            self.defined_bboxes[sensor_]['bbox'] = dict() # CHANGE
+            self.defined_bboxes[sensor_]['valid_indices'] = dict() # CHANGE
 
         # if len(config.DATA.input) > 1:
         #     self._filtering_network = FilteringNetFuseSensors(config)
@@ -29,10 +34,10 @@ class Filter_Pipeline(torch.nn.Module):
 
         return output
 
-    def _prepare_input_training(self, volumes, bbox):
+    def _prepare_input_training(self, volumes, bbox, device):
         # print(bbox)
         # Now we have a bounding box which we know have valid indices. Now it is time to extract this volume from the input grid,
-        # which is already on the gpu
+        # which is already on the gpu.
 
         neighborhood = None
         for k, volume in enumerate(volumes.keys()):
@@ -51,7 +56,7 @@ class Filter_Pipeline(torch.nn.Module):
             else:
                 neighborhood = torch.cat((neighborhood, n_hood), dim=0) # shape (C, D, H ,W)
 
-        output = neighborhood.unsqueeze_(0).float() # add batch dimension
+        output = neighborhood.unsqueeze_(0).float().to(device) # add batch dimension
         del neighborhood
 
         return output
@@ -148,8 +153,16 @@ class Filter_Pipeline(torch.nn.Module):
         local_grids, pad_x, pad_y, pad_z = self._prepare_local_grids(bbox, database, scene)
 
         filtered_local_grid = torch.zeros(tuple(local_grids[self.config.DATA.input[0]][0, 0, :, :, :].shape))
-        if len(self.config.DATA.input) > 1:
+        if len(self.config.DATA.input) == 2:
             sensor_weighting_local_grid = torch.zeros_like(filtered_local_grid)
+            if self.config.FILTERING_MODEL.outlier_channel:
+                sensor_weighting_local_grid = sensor_weighting_local_grid.unsqueeze(0)
+                sensor_weighting_local_grid = torch.cat((sensor_weighting_local_grid, sensor_weighting_local_grid), dim=0)
+        if self.config.FILTERING_MODEL.use_outlier_filter and self.config.SETTINGS.test_mode:
+            tsdf_refined_local_grid = dict()
+            for sensor_ in self.config.DATA.input:
+                tsdf_refined_local_grid[sensor_] = torch.zeros_like(filtered_local_grid) 
+
         # print(filtered_local_grid.shape)
         # traverse the local grid, extracting chunks from the local grid to feed to the 
         # filtering network one at a time.
@@ -185,43 +198,92 @@ class Filter_Pipeline(torch.nn.Module):
                     del input_
 
                     
-                    if len(self.config.DATA.input) > 1 and self.config.SETTINGS.test_mode:
+                    if len(self.config.DATA.input) == 2 and self.config.SETTINGS.test_mode:
                         sensor_weighting = sub_filter_dict['sensor_weighting'].cpu().detach()
-                        sensor_weighting_local_grid[moving_bbox[0, 0] + int(chunk_size/4):moving_bbox[0, 1] - int(chunk_size/4),
+                        if self.config.FILTERING_MODEL.outlier_channel:
+                            sensor_weighting_local_grid[:, moving_bbox[0, 0] + int(chunk_size/4):moving_bbox[0, 1] - int(chunk_size/4),
+                                        moving_bbox[1, 0] + int(chunk_size/4):moving_bbox[1, 1] - int(chunk_size/4),
+                                        moving_bbox[2, 0] + int(chunk_size/4):moving_bbox[2, 1] - int(chunk_size/4)] = sensor_weighting[:, int(chunk_size/4):-int(chunk_size/4),
+                                                                            int(chunk_size/4):-int(chunk_size/4),
+                                                                            int(chunk_size/4):-int(chunk_size/4)]
+                        else:
+                            sensor_weighting_local_grid[moving_bbox[0, 0] + int(chunk_size/4):moving_bbox[0, 1] - int(chunk_size/4),
                                         moving_bbox[1, 0] + int(chunk_size/4):moving_bbox[1, 1] - int(chunk_size/4),
                                         moving_bbox[2, 0] + int(chunk_size/4):moving_bbox[2, 1] - int(chunk_size/4)] = sensor_weighting[int(chunk_size/4):-int(chunk_size/4),
                                                                             int(chunk_size/4):-int(chunk_size/4),
                                                                             int(chunk_size/4):-int(chunk_size/4)]
 
+                    if self.config.FILTERING_MODEL.use_outlier_filter and self.config.SETTINGS.test_mode:
+                        for sensor_ in self.config.DATA.input:
+                            tsdf_refined = sub_filter_dict['tsdf_' + sensor_].cpu().detach()
+                            tsdf_refined_local_grid[sensor_][moving_bbox[0, 0] + int(chunk_size/4):moving_bbox[0, 1] - int(chunk_size/4),
+                                            moving_bbox[1, 0] + int(chunk_size/4):moving_bbox[1, 1] - int(chunk_size/4),
+                                            moving_bbox[2, 0] + int(chunk_size/4):moving_bbox[2, 1] - int(chunk_size/4)] = tsdf_refined[int(chunk_size/4):-int(chunk_size/4),
+                                                                                int(chunk_size/4):-int(chunk_size/4),
+                                                                                int(chunk_size/4):-int(chunk_size/4)]
 
                     sub_tsdf = sub_filter_dict['tsdf'].cpu().detach()
 
                     del sub_filter_dict
 
                     # insert sub_tsdf into the local filtered grid
-                    # print(sub_tsdf.shape)
-                    # print(moving_bbox)
                     filtered_local_grid[moving_bbox[0, 0] + int(chunk_size/4):moving_bbox[0, 1] - int(chunk_size/4),
                                         moving_bbox[1, 0] + int(chunk_size/4):moving_bbox[1, 1] - int(chunk_size/4),
                                         moving_bbox[2, 0] + int(chunk_size/4):moving_bbox[2, 1] - int(chunk_size/4)] = sub_tsdf[int(chunk_size/4):-int(chunk_size/4),
                                                                             int(chunk_size/4):-int(chunk_size/4),
                                                                             int(chunk_size/4):-int(chunk_size/4)]
+
                     del sub_tsdf
 
         # transfer the local_filtered_grid to the global grid
         # first remove the padding
-        if len(self.config.DATA.input) > 1 and self.config.SETTINGS.test_mode:
-            sensor_weighting_local_grid = sensor_weighting_local_grid[int(chunk_size/4):-int(chunk_size/4)-pad_x, 
+        if len(self.config.DATA.input) == 2 and self.config.SETTINGS.test_mode:
+            if self.config.FILTERING_MODEL.outlier_channel:
+                sensor_weighting_local_grid = sensor_weighting_local_grid[:, int(chunk_size/4):-int(chunk_size/4)-pad_x, 
+                    int(chunk_size/4):-int(chunk_size/4)-pad_y, int(chunk_size/4):-int(chunk_size/4)-pad_z]
+
+                database.sensor_weighting[scene][:, bbox[0, 0]:bbox[0, 1],
+                                                        bbox[1, 0]:bbox[1, 1],
+                                                        bbox[2, 0]:bbox[2, 1]] = sensor_weighting_local_grid.numpy().squeeze()
+                # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized
+                # voxel values with their default value
+                database.sensor_weighting[scene][:, uninit_indices[:, 0], uninit_indices[:, 1], 
+                                                    uninit_indices[:, 2]] = -1
+            else:
+                sensor_weighting_local_grid = sensor_weighting_local_grid[int(chunk_size/4):-int(chunk_size/4)-pad_x, 
+                    int(chunk_size/4):-int(chunk_size/4)-pad_y, int(chunk_size/4):-int(chunk_size/4)-pad_z]
+
+                database.sensor_weighting[scene][bbox[0, 0]:bbox[0, 1],
+                                                        bbox[1, 0]:bbox[1, 1],
+                                                        bbox[2, 0]:bbox[2, 1]] = sensor_weighting_local_grid.numpy().squeeze()
+                # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized
+                # voxel values with their default value
+                database.sensor_weighting[scene][uninit_indices[:, 0], uninit_indices[:, 1], 
+                                                    uninit_indices[:, 2]] = -1
+            del sensor_weighting_local_grid
+
+        if self.config.FILTERING_MODEL.use_outlier_filter and self.config.SETTINGS.test_mode:
+            for sensor_ in self.config.DATA.input:
+                refined_local_grid = tsdf_refined_local_grid[sensor_][int(chunk_size/4):-int(chunk_size/4)-pad_x, 
                 int(chunk_size/4):-int(chunk_size/4)-pad_y, int(chunk_size/4):-int(chunk_size/4)-pad_z]
 
-            database.sensor_weighting[scene].volume[bbox[0, 0]:bbox[0, 1],
-                                                    bbox[1, 0]:bbox[1, 1],
-                                                    bbox[2, 0]:bbox[2, 1]] = sensor_weighting_local_grid.numpy().squeeze()
-            # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized
-            # voxel values with their default value
-            database.sensor_weighting[scene].volume[uninit_indices[:, 0], uninit_indices[:, 1], 
-                                                uninit_indices[:, 2]] = -1
-            del sensor_weighting_local_grid
+                database.tsdf_refined[sensor_][scene].volume[bbox[0, 0]:bbox[0, 1],
+                                                        bbox[1, 0]:bbox[1, 1],
+                                                        bbox[2, 0]:bbox[2, 1]] = refined_local_grid.numpy().squeeze()
+
+                # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized
+                # voxel values with their default value. Why do I do this? Later during evaluation
+                # I will anyway only consider the indices where the weight is non-zero. Here I actually use the 
+                # unini_indices variable that is the union of both sensors so this is not the correct index set to use
+                # but it does not matter in the end...
+
+                database.tsdf_refined[sensor_][scene].volume[uninit_indices[:, 0], uninit_indices[:, 1], 
+                                                    uninit_indices[:, 2]] = self.config.DATA.init_value
+
+
+            del tsdf_refined_local_grid
+
+
 
         filtered_local_grid = filtered_local_grid[int(chunk_size/4):-int(chunk_size/4)-pad_x, 
                         int(chunk_size/4):-int(chunk_size/4)-pad_y, int(chunk_size/4):-int(chunk_size/4)-pad_z]
@@ -229,14 +291,16 @@ class Filter_Pipeline(torch.nn.Module):
         database.filtered[scene].volume[bbox[0, 0]:bbox[0, 1],
                                                 bbox[1, 0]:bbox[1, 1],
                                                 bbox[2, 0]:bbox[2, 1]] = filtered_local_grid.numpy().squeeze()
+
+
         # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized
         # voxel values with their default value
         database.filtered[scene].volume[uninit_indices[:, 0], uninit_indices[:, 1], 
                                                 uninit_indices[:, 2]] = self.config.DATA.init_value
+
         del filtered_local_grid
 
-
-    def filter_training(self, input_dir, database, scene_id, sensor, device):
+    def filter_training(self, input_dir, database, epoch, frame, scene_id, sensor, device): # CHANGE
         # this function computes 
 
         self.device = device
@@ -244,7 +308,10 @@ class Filter_Pipeline(torch.nn.Module):
         indices = input_dir['indices'].cpu()
         del input_dir['indices']
 
-        output = self.request_random_bbox(indices)
+        # if epoch > 0: # CHANGE
+        #     output = self.request_defined_bbox(sensor, frame) # CHANGE
+        # else: # CHANGE
+        output = self.request_random_bbox(indices, epoch, sensor, frame) # CHANGE
 
         if output == None:
             return None
@@ -267,13 +334,16 @@ class Filter_Pipeline(torch.nn.Module):
                 if self.config.FILTERING_MODEL.features_to_sdf_enc or self.config.FILTERING_MODEL.features_to_weight_head:
                     in_dir['features'] = input_dir['features']
             else:
-                in_dir = {'tsdf': database[scene_id]['tsdf_' + sensor_].to(device),
-                            'weights': database[scene_id]['weights_' + sensor_].to(device)}
+                in_dir = {'tsdf': database[scene_id]['tsdf_' + sensor_],
+                            'weights': database[scene_id]['weights_' + sensor_]}
                 if self.config.FILTERING_MODEL.features_to_sdf_enc or self.config.FILTERING_MODEL.features_to_weight_head:
-                    in_dir['features'] = database[scene_id]['features_' + sensor_].to(device)
-            neighborhood[sensor_] = self._prepare_input_training(in_dir, bbox) 
+                    in_dir['features'] = database[scene_id]['features_' + sensor_]
+
+            neighborhood[sensor_] = self._prepare_input_training(in_dir, bbox, device) 
 
         tsdf_filtered = self._filtering(neighborhood)
+
+
         if tsdf_filtered == None:
             return 'save_and_exit'
         # tsdf_filtered = tsdf_vol[bbox[0, 0]:bbox[0, 1], # for now I just feed the intermediate grid as the filtered one
@@ -302,14 +372,21 @@ class Filter_Pipeline(torch.nn.Module):
 
 
         # mask target for loss
-        tsdf_target = gt_vol[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+        tsdf_target = gt_vol[bbox[0, 0]:bbox[0, 1], bbox[1, 0]:bbox[1, 1], bbox[2, 0]:bbox[2, 1]]
+        # tsdf_target = gt_vol[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
         # print('tsdf target shape: ', tsdf_target.shape)
         tsdf_target = tsdf_target.float() #.unsqueeze_(-1)
 
-        # print('tsdf target sq shape> ', tsdf_target.squeeze().shape)
-        # if tsdf_target.squeeze().shape[0] == 0:
-        #     print('return none target shaep')
-        #     return None
+        if self.config.LOSS.alpha_supervision or self.config.LOSS.alpha_single_sensor_supervision:
+            if self.config.LOSS.alpha_supervision:
+                proxy_alpha = database[scene_id]['proxy_alpha']
+                # mask target for loss
+                alpha_target = proxy_alpha[bbox[0, 0]:bbox[0, 1], bbox[1, 0]:bbox[1, 1], bbox[2, 0]:bbox[2, 1]]
+                # alpha_target = proxy_alpha[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+                alpha_target = alpha_target.float() 
+                alpha_target = alpha_target.to(device)
+
+            alpha = tsdf_filtered['sensor_weighting']
 
         del gt_vol
 
@@ -318,31 +395,41 @@ class Filter_Pipeline(torch.nn.Module):
         # tsdf_filtered variable. Thus, I should be able to take the valid_indices minus
         # bbox[:, 0] in order to get the correct valid indices for tsdf_filtered
         valid_indices  = valid_indices - bbox[:, 0]
-        # mask filtered loss
-        tsdf_filtered['tsdf'] = tsdf_filtered['tsdf'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-        if self.config.LOSS.gt_loss:
-            tsdf_gt_filtered['tsdf'] = tsdf_gt_filtered['tsdf'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+        # mask filtered loss - no, there is no need for it
+        # tsdf_filtered['tsdf'] = tsdf_filtered['tsdf'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+        # if self.config.LOSS.alpha_supervision or self.config.LOSS.alpha_single_sensor_supervision:
 
-        if len(self.config.DATA.input) > 1:
-            for sensor_ in self.config.DATA.input:
-                tsdf_filtered['tsdf_'+ sensor_] = tsdf_filtered['tsdf_'+ sensor_][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-                # the init key is important for the per sensor head supervision since we have fewer initialized indices in the case of the "opposite sensor".
-                # i.e. if we integrate a tof frame, we will have X indices to supervise on for the tof head and the fused head, but X - Y indices
-                # to supervise for the stereo head. We use the init key to guide what stereo indices are initialized. For the tof supervision
-                # the init key will not do anything since it contains the same information as the valid_indices variable. When doing
-                # single sensor training, we thus don't need an init key.
-                tsdf_filtered[sensor_ + '_init'] = tsdf_filtered[sensor_ + '_init'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+        #     alpha = alpha[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+
+            
+        # if self.config.LOSS.gt_loss:
+        #     tsdf_gt_filtered['tsdf'] = tsdf_gt_filtered['tsdf'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+
+        # if len(self.config.DATA.input) > 1:
+        #     for sensor_ in self.config.DATA.input:
+        #         tsdf_filtered['tsdf_'+ sensor_] = tsdf_filtered['tsdf_'+ sensor_][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+        #         # the init key is important for the per sensor head supervision since we have fewer initialized indices in the case of the "opposite sensor".
+        #         # i.e. if we integrate a tof frame, we will have X indices to supervise on for the tof head and the fused head, but X - Y indices
+        #         # to supervise for the stereo head. We use the init key to guide what stereo indices are initialized. For the tof supervision
+        #         # the init key will not do anything since it contains the same information as the valid_indices variable. When doing
+        #         # single sensor training, we thus don't need an init key.
+        #         tsdf_filtered[sensor_ + '_init'] = tsdf_filtered[sensor_ + '_init'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
         tsdf_target = tsdf_target.to(device)
+        
 
         output = dict()
         output['tsdf_filtered_grid'] = tsdf_filtered
         output['tsdf_gt_filtered_grid'] = tsdf_gt_filtered
-        output['tsdf_target_grid'] = tsdf_target #.squeeze()
+        output['tsdf_target_grid'] = tsdf_target 
+        if self.config.LOSS.alpha_supervision or self.config.LOSS.alpha_single_sensor_supervision:
+            if self.config.LOSS.alpha_supervision:
+                output['proxy_alpha_grid'] = alpha_target
+            output['alpha_grid'] = alpha
  
         return output
 
-    def request_random_bbox(self, indices):
+    def request_random_bbox(self, indices, epoch, sensor, frame): # CHANGE
 
         # get minimum box size
         x_size = indices[:, 0].max() - indices[:, 0].min() # + 64 - (indices[:, 0].max() - indices[:, 0].min()) % 64
@@ -355,10 +442,10 @@ class Filter_Pipeline(torch.nn.Module):
         bbox = np.zeros_like(bbox_input)
         # extract a random location chunk inside the minimum bound. If the minimum bound is smaller
         # than the chunk size, extract the minimum bound
-        idx_threshold = 3000
+        idx_threshold = 2000
 
         # we sample at most 5 times a random box and if any box is higher than some threshold, we select this box
-        for i in range(15):
+        for i in range(600):
             if x_size / self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size > 1:
                 bbox[0, 0] =  np.random.random_integers(bbox_input[0, 0], bbox_input[0, 1] - self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size)
                 bbox[0, 1] =  bbox[0, 0] + self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size
@@ -386,7 +473,14 @@ class Filter_Pipeline(torch.nn.Module):
 
             # compute a mask determining what indices should be used in the loss out of all indices in the bbox. Note
             # that the bbox is not the full min bounding volume of the indices, but only a random extraction
-            # according to the chunk size. Thus, we need to select the valid indices within the chunk volume
+            # according to the chunk size. Thus, we need to select the valid indices within the chunk volume. No, we should
+            # not need to do that. This only matters if we want to propagate gradients to the fusion net, but otherwise, since
+            # it does not seem like we will do this, it is also fine to just take the initialized indices within the chunk
+            # to compute the loss and gradients for the filtering network. The downside of this strategy is that 
+            # if we train the fusion network jointly with the filtering network, the fusion network will compute
+            # very few gradients from the total chunk bbox while the loss is computed for the entire bbox so the 
+            # fusion net might not train well given this low information flow i.e. we may need to increase the 
+            # hyperparamter that controls the intermediate loss.
             valid_indices = ((indices[:, 0] >= bbox[0, 0]) &
                     (indices[:, 0] < bbox[0, 1]) & # I think I can use equals and less than here since the bbox
                     # is defined by the max index value
@@ -401,6 +495,12 @@ class Filter_Pipeline(torch.nn.Module):
             # within the chunk volume
             # print('final valid_indices.shape: ', valid_indices.shape)
             # print(valid_indices.shape[0])
+
+            if epoch == 0: # CHANGE
+                self.defined_bboxes[sensor]['bbox'][frame] = bbox # CHANGE
+                self.defined_bboxes[sensor]['valid_indices'][frame] = valid_indices # CHANGE
+
+
             if valid_indices.shape[0] > idx_threshold:
                 return bbox, valid_indices
 
@@ -408,3 +508,6 @@ class Filter_Pipeline(torch.nn.Module):
         print('The desired amount of valid indices were not met or no valid indices were found')
         return None
 
+
+    def request_defined_bbox(self, sensor, frame): # CHANGE
+        return self.defined_bboxes[sensor]['bbox'][frame], self.defined_bboxes[sensor]['valid_indices'][frame] # CHANGE
