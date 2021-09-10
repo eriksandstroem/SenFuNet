@@ -1,0 +1,74 @@
+SETTINGS:
+  gpu: True
+  experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing # path where the logging is done and the models are saved.
+MODEL:
+  contraction: 64
+  depth: 1
+  n_output_channels: 2
+  normalization: False
+LOSS:
+  name: gradweighted + uncertainty # gradweighteduncertainty or gradweighted + uncertainty or uncertainty or VNL + gradweighted + uncertainty or VNL + gradweighteduncertainty
+  crop_fraction: 0.
+  vmin: 0.05
+  vmax: 12.3
+  weight_scale: 10. # only relevant if the gradweighted term is used
+  lmbda: 0.06
+  completion: False # If completion is True, all pixels incur a loss, while, if it is false, on those with a valid input value incur a loss.
+TRAINING:
+  train_batch_size: 2
+  train_shuffle: True
+  val_batch_size: 2
+  val_shuffle: False
+  n_epochs: 1000
+TESTING:
+  test_batch_size: 1
+  test_shuffle: False
+  model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/201230-204843/model/best.pth.tar
+  output_path:
+OPTIMIZATION:
+  lr: 1.e-05
+  rho: 0.95
+  eps: 1.e-07
+  momentum: 0.9
+  weight_decay: 0.01
+  accumulate: True
+  accumulation_steps: 16
+  alternate: False
+  alternate_steps: 5
+DATA:
+  sampling_density_stereo: 1
+  sampling_density_tof: 1
+  mask_stereo_height: 10 #35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
+  # compared to the color camera of the azure kinect
+  mask_stereo_width: 10 # in pixels (achieves fov 84.32)
+  mask_tof_height: 10 # 52 # 52 # in pixels. Note that this value depends on the resolution of the image. With resolution 256 this would be 52
+  mask_tof_width: 10 #35 # 35 # in pixels. With resolution 256 this would be 35
+  mask_width: 10
+  mask_height: 10
+  pad: 2
+  min_depth_stereo: 0.0 # 0.5
+  max_depth_stereo: 12.3 # 2.5
+  min_depth_tof: 0.0 # 0.5
+  max_depth_tof: 12.3 # 3.86
+  min_depth: 0.0
+  max_depth: 12.3
+  fusion_strategy: routingNet # not used but needed because of replica.py
+  data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid - not used, but needed here because of replica.py
+  intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
+  root_dir: TMPDIR # /cluster/work/cvl/esandstroem/data/replica/manual #
+  dataset: Replica
+  input: [tof, stereo] # mono_depth, stereo_depth, tof_depth, multidepth
+  target: depth_gt
+  resx: 512
+  resy: 512
+  resx_stereo: 512
+  resy_stereo: 512
+  resx_tof: 512 # a tof camera has typically half the resolution of an rgb camera
+  resy_tof: 512
+  focalx: 256 # focal length of intrinsic matrix
+  focaly: 256
+  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/train.txt
+  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/val.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt
+  init_value: 0.1 # truncation distance
+  truncation_strategy: standard # standard, artificial or none
