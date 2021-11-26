@@ -89,14 +89,14 @@ class Database(Dataset):
                 #     self.tsdf_refined[sensor][s] = Voxelgrid(self.scenes_gt[s].resolution)
                 #     self.tsdf_refined[sensor][s].from_array(init_volume, self.scenes_gt[s].bbox)
 
-            self.tsdf['tof'][s] = Voxelgrid(self.scenes_gt[s].resolution)
-            self.tsdf['tof'][s].from_array(init_volume, self.scenes_gt[s].bbox)
+            self.tsdf['sgm_stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+            self.tsdf['sgm_stereo'][s].from_array(init_volume, self.scenes_gt[s].bbox)
             self.tsdf['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
             self.tsdf['stereo'][s].from_array(init_volume2, self.scenes_gt[s].bbox)
 
             if self.outlier_filter and config.test_mode:
-                self.tsdf_refined['tof'][s] = Voxelgrid(self.scenes_gt[s].resolution)
-                self.tsdf_refined['tof'][s].from_array(init_volume3, self.scenes_gt[s].bbox)
+                self.tsdf_refined['sgm_stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+                self.tsdf_refined['sgm_stereo'][s].from_array(init_volume3, self.scenes_gt[s].bbox)
                 self.tsdf_refined['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
                 self.tsdf_refined['stereo'][s].from_array(init_volume2, self.scenes_gt[s].bbox)
 
@@ -167,7 +167,10 @@ class Database(Dataset):
                                       compression_opts=9)
             with h5py.File(os.path.join(path, weightname), 'w') as hf:
                 hf.create_dataset("weights",
-                                      shape=self.feature_weights[sensor][scene_id].shape, # NOTE MAYBE CHANGE LATER TO FUSION WEIGHTS?
+                                      shape=self.feature_weights[sensor][scene_id].shape, # NOTE MAYBE CHANGE LATER TO FUSION WEIGHTS? Maybe not, because I use the
+                                      # feature weights here because at test time I remove the indices of the fusion weights since I want that during 
+                                      # validation during training, but here I use the non-altered feature weights. I should remove the 
+                                      # feature weights though and only have one set of weights, but that requires some coding.
                                       data=self.feature_weights[sensor][scene_id],
                                       compression='gzip',
                                       compression_opts=9)
@@ -238,13 +241,16 @@ class Database(Dataset):
             mask = {}
             for sensor in self.sensors:
                 est[sensor] = self.tsdf[sensor][scene_id].volume
-                mask[sensor] = self.fusion_weights[sensor][scene_id] > 0
+                mask[sensor] = self.feature_weights[sensor][scene_id] > 0 # do not use fusion weights here
+                # because the fusion weights are filtered with the learned outlier filter so only the fused
+                # grid is allowed to use that for masking
+
 
             est_filt = self.filtered[scene_id].volume
             gt = self.scenes_gt[scene_id].volume
             mask_filt = np.zeros_like(gt)
             for sensor in self.sensors:
-                mask_filt = np.logical_or(mask_filt, mask[sensor])
+                mask_filt = np.logical_or(mask_filt, self.fusion_weights[sensor][scene_id] > 0)
 
             if self.erosion:
                 # if self.translation_kernel == 3:
@@ -262,6 +268,7 @@ class Database(Dataset):
             eval_results_scene = dict()
             for sensor in self.sensors:
                 eval_results_scene[sensor] = evaluation(est[sensor], gt, mask[sensor])
+                
             eval_results_scene_filt = evaluation(est_filt, gt, mask_filt)
 
             del est, gt, mask, est_filt, mask_filt

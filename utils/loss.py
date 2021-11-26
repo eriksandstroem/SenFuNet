@@ -122,7 +122,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
 			else:
 				l += self.alpha_weight * l1_alpha
 
-		if self.alpha_single_sensor_supervision:
+		if self.alpha_single_sensor_supervision and 'filtered_output' in output:
 			# this loss is intended to improve outlier filtering performance which is 
 			# specifically needed where only one sensor integrates, since we do not supervise
 			# these voxels at all otherwise. The idea is to extract all voxels where only one sensor

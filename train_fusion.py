@@ -5,6 +5,7 @@ import numpy as np
 import random
 
 from tqdm import tqdm
+import math
 
 from utils.setup import *
 from utils.loading import *
@@ -28,7 +29,6 @@ def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-# @profile
 def train_fusion(args):
 
     config = load_config_from_yaml(args['config'])
@@ -78,7 +78,7 @@ def train_fusion(args):
             assert config.FEATURE_MODEL.append_pixel_conf == False
         config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.n_features + config.FEATURE_MODEL.append_depth
     else:
-        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
+        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.append_depth + 3*config.FEATURE_MODEL.w_rgb # 1 for label encoding of noise in gaussian threshold data
 
     # get database
     # get train database
@@ -94,7 +94,8 @@ def train_fusion(args):
             print('Fusion Net ', sensor, ': ', count_parameters(pipeline.fuse_pipeline._fusion_network[sensor]))
         print('Feature Net ', sensor, ': ', count_parameters(pipeline.fuse_pipeline._feature_network[sensor]))
 
-    print('Filtering Net: ', count_parameters(pipeline.filter_pipeline._filtering_network))
+    if pipeline.filter_pipeline is not None:
+        print('Filtering Net: ', count_parameters(pipeline.filter_pipeline._filtering_network))
     print('Fusion and Filtering: ', count_parameters(pipeline))
 
     # optimization
@@ -107,7 +108,7 @@ def train_fusion(args):
             # print(routing_checkpoint)
             # load_model(config.TESTING.routing_model_path, pipeline._routing_network)
             # Keep line below until I see that the new loading function works.
-            pipeline.fuse_pipeline._routing_network.load_state_dict(routing_checkpoint['state_dict'])
+            pipeline.fuse_pipeline._routing_network.load_state_dict(routing_checkpoint['pipeline_state_dict'])
         elif config.DATA.fusion_strategy == 'fusionNet':
             for sensor_ in config.DATA.input:
                 checkpoint = torch.load(eval('config.TRAINING.routing_' + sensor_ + '_model_path'))
@@ -118,12 +119,14 @@ def train_fusion(args):
 
     if config.TRAINING.pretraining and config.FUSION_MODEL.use_fusion_net:
         for sensor in config.DATA.input:
-            if sensor == 'tof' or sensor == 'stereo':
-                load_net_old(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+            if not config.ROUTING.do:
+                if sensor == 'tof' or sensor == 'stereo':
+                    load_net_old(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+                else:
+                    load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
             else:
-                load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
-        
-            # load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+                load_net(eval('config.TRAINING.pretraining_fusionrouting_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
+                # load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
             # loading gt depth model fusion net
             # load_net('/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210507-093251/model/best.pth.tar', pipeline.fuse_pipeline._fusion_network[sensor], 'left_depth_gt_2')
         
@@ -150,7 +153,7 @@ def train_fusion(args):
                                                             gamma=config.OPTIMIZATION.scheduler.gamma_fusion)
 
 
-    if not config.FILTERING_MODEL.fixed:
+    if not config.FILTERING_MODEL.fixed and pipeline.filter_pipeline is not None:
         # optimizer_filt = torch.optim.RMSprop(pipeline.filter_pipeline._filtering_network.parameters(),
         #                                     config.OPTIMIZATION.lr_filtering,
         #                                     config.OPTIMIZATION.rho,
@@ -211,7 +214,7 @@ def train_fusion(args):
             pipeline.fuse_pipeline._routing_network.eval()
         if config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
             pipeline.fuse_pipeline._fusion_network.eval()
-        if config.FILTERING_MODEL.fixed:
+        if config.FILTERING_MODEL.fixed and pipeline.filter_pipeline is not None:
             pipeline.filter_pipeline._filtering_network.eval()
 
 
@@ -264,15 +267,23 @@ def train_fusion(args):
             # as keys in the batch. But I also need knowledge of sensor label for the routing network. I create the 'routing_net'
             # and 'depth' keys and pass that to the fuse_training function in three steps. Also pass the routing threshold as a
             # key.
-            # fusion pipeline
-            # randomly integrate the selected sensors
-            random.shuffle(sensors)
-            # sensors = ['gauss_far_cont']
-            for sensor in sensors:
+            if config.DATA.collaborative_reconstruction:
+                if math.ceil(int(batch['frame_id'][0].split('/')[-1])/ \
+                    config.DATA.frames_per_chunk) % 2  == 0:
+                    sensor = sensors[0]
+                else:
+                    sensor = sensors[1]
+
                 batch['depth'] =  batch[sensor + '_depth']
                 # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
                 batch['mask'] = batch[sensor + '_mask']
-                batch['sensor'] = sensor
+                if config.FILTERING_MODEL.model == 'routedfusion_middle':
+                    batch['sensor'] = 'tof'
+                else:
+                    batch['sensor'] = sensor
+
+                batch['routingNet'] = sensor # used to be able to train routedfusion_middle
+                batch['fusionNet'] = sensor # used to be able to train routedfusion_middle
                 output = pipeline(batch, train_database, epoch, device) # CHANGE
 
                 # optimization
@@ -327,6 +338,76 @@ def train_fusion(args):
                     # print('5m: ', torch.cuda.max_memory_allocated(device=device))
                     # print('5: ', torch.cuda.memory_allocated(device=device))
                 # break
+            else:
+                # fusion pipeline
+                # randomly integrate the selected sensors
+                random.shuffle(sensors)
+                # sensors = ['gauss_far_cont']
+                for sensor in sensors:
+                    batch['depth'] =  batch[sensor + '_depth']
+                    # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
+                    batch['mask'] = batch[sensor + '_mask']
+                    
+                    if config.FILTERING_MODEL.model == 'routedfusion_middle':
+                        batch['sensor'] = 'tof'
+                    else:
+                        batch['sensor'] = sensor
+                    batch['routingNet'] = sensor # used to be able to train routedfusion_middle
+                    batch['fusionNet'] = sensor # used to be able to train routedfusion_middle
+                    output = pipeline(batch, train_database, epoch, device) # CHANGE
+
+                    # optimization
+                    if output is None: # output is None when no valid indices were found for the filtering net within the random
+                    # bbox within the bounding volume of the integrated indices
+                        print('output None from pipeline')
+                        # break
+                        continue
+
+                    if output == 'save_and_exit':
+                        print('Found alpha nan. Save and exit')
+                        workspace.save_model_state({'pipeline_state_dict': pipeline.state_dict(),
+                                    'epoch': epoch},
+                                   is_best=is_best, is_best_filt=is_best_filt)
+                        return
+
+                    output = criterion(output)
+
+                    # loss = criterion(output['tsdf_filtered_grid'], output['tsdf_target_grid'])
+                    # if loss.grad_fn: # this is needed because when the mono mask filters out all pixels, this results in a failure
+                    # print('bef backward: ', torch.cuda.memory_allocated(device))
+                    if output['loss'] is not None:
+                        divide += 1
+                        train_loss += output['loss'].item() # note that this loss is a moving average over the training window of log_freq steps
+                    if output['l1_interm'] is not None:
+                        l1_interm += output['l1_interm'].item() # note that this loss is a moving average over the training window of log_freq steps
+                    if output['l1_grid'] is not None:
+                        l1_grid += output['l1_grid'].item() 
+                    if output['l1_gt_grid'] is not None:
+                        l1_gt_grid += output['l1_gt_grid'].item() 
+
+                    if len(config.DATA.input) > 1:
+                        for sensor_ in config.DATA.input:
+                            if output['l1_grid_' + sensor_] is not None:
+                                l1_grid_dict[sensor_] += output['l1_grid_' + sensor_].item() 
+                        if output['l_alpha_2d'] is not None:
+                            l_alpha_2d[batch['sensor']] += output['l_alpha_2d']
+                    if config.FILTERING_MODEL.model == 'mlp' and config.FILTERING_MODEL.setting == 'translate'  \
+                                and config.FILTERING_MODEL.MLP_MODEL.occ_head:
+                        for sensor_ in config.DATA.input:
+                            if output['l_occ_' + sensor_] is not None:
+                                l_occ_dict[sensor_] += output['l_occ_' + sensor_].item() 
+                        if output['l_occ'] is not None:
+                            l_occ += output['l_occ'].item() 
+
+
+
+                    if output['loss'] is not None:
+                        # print('4m: ', torch.cuda.max_memory_allocated(device=device))
+                        # print('4: ', torch.cuda.memory_allocated(device=device))
+                        output['loss'].backward()
+                        # print('5m: ', torch.cuda.max_memory_allocated(device=device))
+                        # print('5: ', torch.cuda.memory_allocated(device=device))
+                    # break
                 
 
             del batch
@@ -562,7 +643,7 @@ def train_fusion(args):
                     pipeline.fuse_pipeline._routing_network.eval()
                 if config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
                     pipeline.fuse_pipeline._fusion_network.eval()
-                if config.FILTERING_MODEL.fixed:
+                if config.FILTERING_MODEL.fixed and pipeline.filter_pipeline is not None:
                     pipeline.filter_pipeline._filtering_network.eval()
 
 

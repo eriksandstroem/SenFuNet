@@ -39,9 +39,8 @@ def arg_parse():
 def count_parameters(model): return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def test_fusion(config):
-    
     # define output dir
-    test_path = '/test'
+    test_path = '/test_no_carving_best'
     test_dir = config.SETTINGS.experiment_path + '/' + config.TESTING.fusion_model_path.split('/')[-3] + test_path
 
     if not os.path.exists(test_dir):
@@ -66,7 +65,7 @@ def test_fusion(config):
     if config.FEATURE_MODEL.learned_features:
         config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.n_features + config.FEATURE_MODEL.append_depth
     else:
-        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
+        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.append_depth + 3*config.FEATURE_MODEL.w_rgb# 1 for label encoding of noise in gaussian threshold data
 
 
     # get test database
@@ -81,26 +80,23 @@ def test_fusion(config):
             print('Fusion Net ', sensor, ': ', count_parameters(pipeline.fuse_pipeline._fusion_network[sensor]))
         print('Feature Net ', sensor, ': ', count_parameters(pipeline.fuse_pipeline._feature_network[sensor]))
 
-    print('Filtering Net: ', count_parameters(pipeline.filter_pipeline._filtering_network))
+    if pipeline.filter_pipeline is not None:
+        print('Filtering Net: ', count_parameters(pipeline.filter_pipeline._filtering_network))
 
 
 
-   # load pretrained routing model into Imparameters
+    loading.load_pipeline(config.TESTING.fusion_model_path, pipeline) # this loads all parameters it can
+
+    # load pretrained routing model into Imparameters
     # if config.ROUTING.do:
     #     if config.DATA.fusion_strategy == 'routingNet':
     #         routing_checkpoint = torch.load(config.TESTING.routing_model_path)
     #         pipeline._routing_network.load_state_dict(routing_checkpoint['pipeline_state_dict'])
-    #     elif config.DATA.fusion_strategy == 'fusionNet' or config.DATA.fusion_strategy == 'three_fusionNet' or config.DATA.fusion_strategy == 'fusionNet_conditioned':
-    #         routing_mono_checkpoint = torch.load(config.TESTING.routing_mono_model_path)
-    #         routing_stereo_checkpoint = torch.load(config.TESTING.routing_stereo_model_path)
-    #         routing_tof_checkpoint = torch.load(config.TESTING.routing_tof_model_path)
+    #     elif config.DATA.fusion_strategy == 'fusionNet':
+    #         for sensor_ in config.DATA.input:
+    #             routing_checkpoint = torch.load(eval('config.TRAINING.routing_' + sensor_ + '_model_path'))
+    #             pipeline.fuse_pipeline._routing_network[sensor_].load_state_dict(routing_checkpoint['pipeline_state_dict'])
 
-    #         pipeline._routing_network_mono.load_state_dict(routing_mono_checkpoint['state_dict'])
-    #         pipeline._routing_network_stereo.load_state_dict(routing_stereo_checkpoint['pipeline_state_dict'])
-    #         pipeline._routing_network_tof.load_state_dict(routing_tof_checkpoint['pipeline_state_dict'])
-
-    loading.load_pipeline(config.TESTING.fusion_model_path, pipeline) # this loads all parameters it can
-    
     # load pipelines
     # for sensor in config.DATA.input: # in the event that we want to load specific fusion and feature nets - overwrite the load_pipeline method
     #     if sensor == 'tof' or sensor == 'stereo':
@@ -211,192 +207,210 @@ def evaluate(database, config, test_path):
 
         # define paths
         for weight_threshold in weight_thresholds:
-            model_test = scene + '_weight_threshold_' + str(weight_threshold)
-            model_test = model_test + '_filtered'
-            logger = get_logger(test_dir, name=model_test)
-            tsdf = tsdf_path + '/' + scene + '.tsdf_filtered.hf5'
+            # model_test = scene + '_weight_threshold_' + str(weight_threshold)
+            # model_test = model_test + '_filtered'
+            # logger = get_logger(test_dir, name=model_test)
+            # tsdf = tsdf_path + '/' + scene + '.tsdf_filtered.hf5'
 
-            # read tsdfs and weight grids
-            f = h5py.File(tsdf, 'r')
-            tsdf = np.array(f['TSDF_filtered']).astype(np.float16)
+            # # read tsdfs and weight grids
+            # f = h5py.File(tsdf, 'r')
+            # tsdf = np.array(f['TSDF_filtered']).astype(np.float16)
 
-            # load weight grids for all sensors here to get the mask used for filtering
-            # Fail now I know why I never could get better recall on my conv3dmodels with stereo / becasue I only
-            # used the tof mask!!
-            mask = np.zeros_like(tsdf)
-            and_mask = np.ones_like(tsdf)
-            sensor_mask = dict()
+            # # load weight grids for all sensors here to get the mask used for filtering
+            # # Fail now I know why I never could get better recall on my conv3dmodels with stereo / becasue I only
+            # # used the tof mask!!
+            # mask = np.zeros_like(tsdf)
+            # and_mask = np.ones_like(tsdf)
+            # sensor_mask = dict()
             
-            for sensor_ in config.DATA.input:
-                # print(sensor_)
-                weights = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
-                f = h5py.File(weights, 'r')
-                weights = np.array(f['weights']).astype(np.float16)
-                mask = np.logical_or(mask, weights > weight_threshold)
-                and_mask = np.logical_and(and_mask, weights > weight_threshold)
-                sensor_mask[sensor_] = weights > weight_threshold
-                # break
+            # for sensor_ in config.DATA.input:
+            #     # print(sensor_)
+            #     weights = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
+            #     f = h5py.File(weights, 'r')
+            #     weights = np.array(f['weights']).astype(np.float16)
+            #     mask = np.logical_or(mask, weights > 0)
+            #     and_mask = np.logical_and(and_mask, weights > 0)
+            #     sensor_mask[sensor_] = weights > 0
 
-            # use the and_mask together with the sensor_weighting grid to filter the mask s.t.
-            # when only one sensor has integrated and the confidence is less than 0.5 for the integrated sensor,
-            # remove the entry from the mask
-            # load sensor weighting grid
-            if len(config.DATA.input) > 1: #alpha eq 0 means we trust gauss far 
-                # load weighting sensor grid
-                sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
-                f = h5py.File(sensor_weighting, 'r')
-                sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
+            # sensor_weighting_mask = mask.copy() # we want to display the sensor weighting before outlier filtering
+            #     # break
+            #     # wrong here when we use weight_threshold > 0 since we make voxels where both
+            #     # sensors have integrated into single-sensor observations suddenly. Instead we
+            #     # want to use 0 as the threshold above and then to filter with a non-zero weight
+            #     # threshold, we want to apply the weight_thresholding after the single sensor 
+            #     # filtering
 
-                if config.FILTERING_MODEL.outlier_channel:
-                    sensor_weighting = sensor_weighting[1, :, :, :]
+            # # use the and_mask together with the sensor_weighting grid to filter the mask s.t.
+            # # when only one sensor has integrated and the confidence is less than 0.5 for the integrated sensor,
+            # # remove the entry from the mask
+            # # load sensor weighting grid
+            # if len(config.DATA.input) > 1: #alpha eq 0 means we trust gauss far 
+            #     # load weighting sensor grid
+            #     sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
+            #     f = h5py.File(sensor_weighting, 'r')
+            #     sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
 
-                only_one_sensor_mask = np.logical_xor(mask, and_mask)
-                for sensor_ in config.DATA.input:
-                    only_sensor_mask = np.logical_and(only_one_sensor_mask, sensor_mask[sensor_])
-                    if sensor_ == config.DATA.input[0]: 
-                        rem_indices = np.logical_and(only_sensor_mask, sensor_weighting < 0.5)
-                    else:
-                        # before I fixed the bug always ended up here when I had tof and stereo as sensors
-                        # but this would mean that for the tof sensor I removed those indices
-                        # if alpha was larger than 0.5 which it almost always is. This means that 
-                        # essentially all (cannot be 100 % sure) voxels where we only integrated 
-                        # tof, was removed. Since the histogram is essentially does not have 
-                        # any voxels with trust less than 0.5, we also removed all alone stereo voxels
-                        # so at the end we end up with a mask very similar to the and_mask
-                        rem_indices = np.logical_and(only_sensor_mask, sensor_weighting > 0.5)
+            #     if config.FILTERING_MODEL.outlier_channel:
+            #         sensor_weighting = sensor_weighting[1, :, :, :]
 
-                    mask[rem_indices] = 0
+            #     only_one_sensor_mask = np.logical_xor(mask, and_mask)
+            #     for sensor_ in config.DATA.input:
+            #         only_sensor_mask = np.logical_and(only_one_sensor_mask, sensor_mask[sensor_])
+            #         if sensor_ == config.DATA.input[0]: 
+            #             rem_indices = np.logical_and(only_sensor_mask, sensor_weighting < 0.5)
+            #         else:
+            #             # before I fixed the bug always ended up here when I had tof and stereo as sensors
+            #             # but this would mean that for the tof sensor I removed those indices
+            #             # if alpha was larger than 0.5 which it almost always is. This means that 
+            #             # essentially all (cannot be 100 % sure) voxels where we only integrated 
+            #             # tof, was removed. Since the histogram is essentially does not have 
+            #             # any voxels with trust less than 0.5, we also removed all alone stereo voxels
+            #             # so at the end we end up with a mask very similar to the and_mask
+            #             rem_indices = np.logical_and(only_sensor_mask, sensor_weighting > 0.5)
+
+            #         mask[rem_indices] = 0
+
+            # weight_mask = np.zeros_like(tsdf)
+            # for sensor_ in config.DATA.input:
+            #     # print(sensor_)
+            #     weights = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
+            #     f = h5py.File(weights, 'r')
+            #     weights = np.array(f['weights']).astype(np.float16)
+            #     weight_mask = np.logical_or(weight_mask, weights > weight_threshold)
+
+            # # filter away outliers using the weight mask when weight_threshold > 0
+            # mask = np.logical_and(mask, weight_mask)
 
 
-            # erode masks appropriately
-            if config.FILTERING_MODEL.erosion:
-                mask = ndimage.binary_erosion(mask, structure=np.ones((3,3,3)), iterations=1)
+            # # erode masks appropriately
+            # if config.FILTERING_MODEL.erosion:
+            #     mask = ndimage.binary_erosion(mask, structure=np.ones((3,3,3)), iterations=1)
 
-            eval_results_scene = evaluation(tsdf, sdf_gt, mask)
+            # eval_results_scene = evaluation(tsdf, sdf_gt, mask)
 
-            logger.info('Test Scores for scene: ' + scene)
-            for key in eval_results_scene:
-                logger.info(key + ': ' + str(eval_results_scene[key]))
+            # logger.info('Test Scores for scene: ' + scene)
+            # for key in eval_results_scene:
+            #     logger.info(key + ': ' + str(eval_results_scene[key]))
     
 
-            # Create the mesh using the given mask
-            tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-            tsdf_cube[:resolution[0], :resolution[1], :resolution[2]] = tsdf
+            # # Create the mesh using the given mask
+            # tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
+            # tsdf_cube[:resolution[0], :resolution[1], :resolution[2]] = tsdf
 
 
-            indices_x = mask.nonzero()[0]
-            indices_y = mask.nonzero()[1]
-            indices_z = mask.nonzero()[2]
+            # indices_x = mask.nonzero()[0]
+            # indices_y = mask.nonzero()[1]
+            # indices_z = mask.nonzero()[2]
 
-            # this creates a voxelgrid with max_resolution voxels along the length length. Each 
-            # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
-            # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
-            # This is not a problem, however, since we will only initialize the valid indices. I.e. 
-            # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
-            # for this, the max_resolution variable should be 1 less than it is now, making length smaller
-            # as well since length is max_resolution times voxel_size
-            volume = o3d.integration.UniformTSDFVolume(
-                    length=length,
-                    resolution=max_resolution,
-                    sdf_trunc=truncation,
-                    color_type=o3d.integration.TSDFVolumeColorType.RGB8)
+            # # this creates a voxelgrid with max_resolution voxels along the length length. Each 
+            # # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
+            # # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
+            # # This is not a problem, however, since we will only initialize the valid indices. I.e. 
+            # # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
+            # # for this, the max_resolution variable should be 1 less than it is now, making length smaller
+            # # as well since length is max_resolution times voxel_size
+            # volume = o3d.integration.UniformTSDFVolume(
+            #         length=length,
+            #         resolution=max_resolution,
+            #         sdf_trunc=truncation,
+            #         color_type=o3d.integration.TSDFVolumeColorType.RGB8)
             
-            for i in range(indices_x.shape[0]):
-                volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
-                volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
+            # for i in range(indices_x.shape[0]):
+            #     volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
+            #     volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
 
-            print("Extract a triangle mesh from the volume and visualize it.")
-            mesh = volume.extract_triangle_mesh()
+            # print("Extract a triangle mesh from the volume and visualize it.")
+            # mesh = volume.extract_triangle_mesh()
 
-            del volume
-            mesh.compute_vertex_normals()
-            # o3d.visualization.draw_geometries([mesh])
-            o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + '.ply'), mesh)
-            mask_filtered = mask
+            # del volume
+            # mesh.compute_vertex_normals()
+            # # o3d.visualization.draw_geometries([mesh])
+            # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + '.ply'), mesh)
 
 
-            # # volume = o3d.integration.UniformTSDFVolume(
-            # #         length=3.0,
-            # #         resolution=3,
-            # #         sdf_trunc=1.0,
-            # #         color_type=o3d.integration.TSDFVolumeColorType.RGB8)
+            # # # volume = o3d.integration.UniformTSDFVolume(
+            # # #         length=3.0,
+            # # #         resolution=3,
+            # # #         sdf_trunc=1.0,
+            # # #         color_type=o3d.integration.TSDFVolumeColorType.RGB8)
             
-            # # volume.set_tsdf_at(0.5, 1,1,1)
-            # # volume.set_tsdf_at(0.5, 2,1,1)
-            # # volume.set_tsdf_at(0.5, 2,1,2)
-            # # volume.set_tsdf_at(0.5, 1,1,2)
-            # # volume.set_weight_at(1, 1,1,1)
-            # # volume.set_weight_at(1, 2,1,1)
-            # # volume.set_weight_at(1, 2,1,2)
-            # # volume.set_weight_at(1, 1,1,2)
-            # # volume.set_weight_at(1, 1,2,1)
-            # # volume.set_weight_at(1, 1,2,2)
-            # # volume.set_weight_at(1, 2,2,2)
-            # # volume.set_weight_at(1, 2,2,1)
-            # # volume.set_tsdf_at(-0.5, 1,2,1)
-            # # volume.set_tsdf_at(-0.5, 1,2,2)
-            # # volume.set_tsdf_at(-0.5, 2,2,2)
-            # # volume.set_tsdf_at(-0.5, 2,2,1)
+            # # # volume.set_tsdf_at(0.5, 1,1,1)
+            # # # volume.set_tsdf_at(0.5, 2,1,1)
+            # # # volume.set_tsdf_at(0.5, 2,1,2)
+            # # # volume.set_tsdf_at(0.5, 1,1,2)
+            # # # volume.set_weight_at(1, 1,1,1)
+            # # # volume.set_weight_at(1, 2,1,1)
+            # # # volume.set_weight_at(1, 2,1,2)
+            # # # volume.set_weight_at(1, 1,1,2)
+            # # # volume.set_weight_at(1, 1,2,1)
+            # # # volume.set_weight_at(1, 1,2,2)
+            # # # volume.set_weight_at(1, 2,2,2)
+            # # # volume.set_weight_at(1, 2,2,1)
+            # # # volume.set_tsdf_at(-0.5, 1,2,1)
+            # # # volume.set_tsdf_at(-0.5, 1,2,2)
+            # # # volume.set_tsdf_at(-0.5, 2,2,2)
+            # # # volume.set_tsdf_at(-0.5, 2,2,1)
 
 
-            # # volume.set_weight_at(1, 1,1,0)
-            # # volume.set_weight_at(1, 2,1,0)
-            # # volume.set_weight_at(1, 2,1,1)
-            # # volume.set_weight_at(1, 1,1,1)
-            # # volume.set_weight_at(1, 1,2,0)
-            # # volume.set_weight_at(1, 1,2,1)
-            # # volume.set_weight_at(1, 2,2,1)
-            # # volume.set_weight_at(1, 2,2,0)
-            # # volume.set_tsdf_at(0.5, 1,1,0)
-            # # volume.set_tsdf_at(0.5, 2,1,0)
-            # # volume.set_tsdf_at(0.5, 2,1,1)
-            # # volume.set_tsdf_at(0.5, 1,1,1)
-            # # volume.set_tsdf_at(-0.5, 1,2,0)
-            # # volume.set_tsdf_at(-0.5, 1,2,1)
-            # # volume.set_tsdf_at(-0.5, 2,2,1)
-            # # volume.set_tsdf_at(-0.5, 2,2,0)
+            # # # volume.set_weight_at(1, 1,1,0)
+            # # # volume.set_weight_at(1, 2,1,0)
+            # # # volume.set_weight_at(1, 2,1,1)
+            # # # volume.set_weight_at(1, 1,1,1)
+            # # # volume.set_weight_at(1, 1,2,0)
+            # # # volume.set_weight_at(1, 1,2,1)
+            # # # volume.set_weight_at(1, 2,2,1)
+            # # # volume.set_weight_at(1, 2,2,0)
+            # # # volume.set_tsdf_at(0.5, 1,1,0)
+            # # # volume.set_tsdf_at(0.5, 2,1,0)
+            # # # volume.set_tsdf_at(0.5, 2,1,1)
+            # # # volume.set_tsdf_at(0.5, 1,1,1)
+            # # # volume.set_tsdf_at(-0.5, 1,2,0)
+            # # # volume.set_tsdf_at(-0.5, 1,2,1)
+            # # # volume.set_tsdf_at(-0.5, 2,2,1)
+            # # # volume.set_tsdf_at(-0.5, 2,2,0)
 
-            # # a = volume.extract_voxel_grid()
-            # # print(a)
+            # # # a = volume.extract_voxel_grid()
+            # # # print(a)
 
-            # # mesh = volume.extract_triangle_mesh()
-            # # print(np.asarray(mesh.vertices))
-            # # print(np.asarray(mesh.faces))
-            # # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + 'test4.ply'), mesh)
-            # # volume.set_weight_at(1, 0,1,1)
-            # # mesh = volume.extract_triangle_mesh()
-            # # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + 'test2.ply'), mesh)
-            # # return
-            if len(config.DATA.input) > 1:
-                # Generate visualization of the sensor weighting
-                # load weighting sensor grid
-                sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
-                f = h5py.File(sensor_weighting, 'r')
-                sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
+            # # # mesh = volume.extract_triangle_mesh()
+            # # # print(np.asarray(mesh.vertices))
+            # # # print(np.asarray(mesh.faces))
+            # # # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + 'test4.ply'), mesh)
+            # # # volume.set_weight_at(1, 0,1,1)
+            # # # mesh = volume.extract_triangle_mesh()
+            # # # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + 'test2.ply'), mesh)
+            # # # return
+            # # if len(config.DATA.input) > 1:
+            # #     # Generate visualization of the sensor weighting
+            # #     # load weighting sensor grid
+            # #     sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
+            # #     f = h5py.File(sensor_weighting, 'r')
+            # #     sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
 
-                # compute sensor weighting histogram and mesh visualization
-                visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_size, config.FILTERING_MODEL.outlier_channel)
+            # #     # compute sensor weighting histogram and mesh visualization
+            # #     visualize_sensor_weighting(tsdf, sensor_weighting, test_dir, sensor_weighting_mask, \
+            # #         truncation, length, max_resolution, resolution, voxel_size, config.FILTERING_MODEL.outlier_channel)
 
 
-            # Compute the F-score, precision and recall
-            ply_path = model_test + '.ply'
+            # # Compute the F-score, precision and recall
+            # ply_path = model_test + '.ply'
 
-            # run commandline command
-            os.chdir(test_dir)
+            # # run commandline command
+            # os.chdir(test_dir)
 
-            print('running script: evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
-            os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
+            # # print('running script: evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
+            # os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
 
-            # move the logs and plys to the evaluation dirs
-            os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
-            os.system('mv ' + test_dir + '/' + model_test + '.ply ' + test_dir + '/' + model_test + '/' + model_test + '.ply')
-            if len(config.DATA.input) > 1:
-                os.system('mv ' + test_dir + '/sensor_weighting_nn.ply ' + test_dir + '/' + model_test + '/sensor_weighting_nn.ply')
-                os.system('mv ' + test_dir + '/sensor_weighting_grid_histogram.png ' + test_dir + '/' + model_test + '/sensor_weighting_grid_histogram.png')
-                os.system('mv ' + test_dir + '/sensor_weighting_surface_histogram.png ' + test_dir + '/' + model_test + '/sensor_weighting_surface_histogram.png')
+            # # move the logs and plys to the evaluation dirs
+            # os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
+            # os.system('mv ' + test_dir + '/' + model_test + '.ply ' + test_dir + '/' + model_test + '/' + model_test + '.ply')
+            # # if len(config.DATA.input) > 1:
+            # #     os.system('mv ' + test_dir + '/sensor_weighting_nn_no_outlier_filter.ply ' + test_dir + '/' + model_test + '/sensor_weighting_nn.ply')
+            # #     os.system('mv ' + test_dir + '/sensor_weighting_grid_histogram_no_outlier_filter.png ' + test_dir + '/' + model_test + '/sensor_weighting_grid_histogram.png')
+            # #     os.system('mv ' + test_dir + '/sensor_weighting_surface_histogram_no_outlier_filter.png ' + test_dir + '/' + model_test + '/sensor_weighting_surface_histogram.png')
 
-            # return
-            for sensor_ in config.DATA.input:
+        # # return
+            for sensor_ in ['sgm_stereo']: # config.DATA.input:
                 model_test = scene + '_weight_threshold_' + str(weight_threshold)
                 model_test = model_test + '_' + sensor_
                 logger = get_logger(test_dir, name=model_test)
@@ -404,12 +418,20 @@ def evaluate(database, config, test_path):
                 tsdf = tsdf_path + '/' + scene + '_' + sensor_ + '.tsdf.hf5'
                 weights = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
 
+                f = h5py.File(weights, 'r')
+                weights = np.array(f['weights']).astype(np.float16)
+                # to eval routedfusion on nn mask
+                weights = np.zeros_like(weights)
+                for sensor_ in ['sgm_stereo', 'stereo']:
+                    weight_path = config.SETTINGS.experiment_path + '/' + \
+                        '211009-101812' + test_path[:-5] + '/' + scene + '_' + sensor_ + '.weights.hf5'
+                    f = h5py.File(weight_path, 'r')
+                    weights = np.logical_or(weights, np.array(f['weights']).astype(np.float16))
                 # read tsdfs and weight grids
                 f = h5py.File(tsdf, 'r')
                 tsdf = np.array(f['TSDF']).astype(np.float16)
                 # print(tsdf.astype(np.float32).sum())
-                f = h5py.File(weights, 'r')
-                weights = np.array(f['weights']).astype(np.float16)
+
                 # print(weights.astype(np.float32).sum())
 
                 # compute the L1, IOU and Acc
@@ -459,13 +481,13 @@ def evaluate(database, config, test_path):
                 # # Compute the F-score, precision and recall
                 ply_path = model_test + '.ply'
 
-                # run commandline command
+                # # run commandline command
                 os.chdir(test_dir)
 
                 print('running script: evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
                 os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
 
-                # # move the logs and plys to the evaluation dirs
+                # move the logs and plys to the evaluation dirs
                 os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
                 os.system('mv ' + test_dir + '/' + model_test + '.ply ' + test_dir + '/' + model_test + '/' + model_test + '.ply')
   
@@ -542,43 +564,39 @@ def evaluate(database, config, test_path):
       
 
 
-            if config.FILTERING_MODEL.features_to_sdf_enc or config.FILTERING_MODEL.features_to_weight_head:
-                features = dict()
-                tsdfs = dict()
-                weights = dict()
-                for sensor_ in config.DATA.input:
-                    featurename = tsdf_path + '/' + scene + '_' + sensor_ + '.features.hf5'
-                    f = h5py.File(featurename, 'r')
-                    features[sensor_] = np.array(f['features']).astype(np.float16)
-                    tsdfname = tsdf_path + '/' + scene + '_' + sensor_ + '.tsdf.hf5'
-                    f = h5py.File(tsdfname, 'r')
-                    tsdfs[sensor_] = np.array(f['TSDF']).astype(np.float16)
-                    weightname = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
-                    f = h5py.File(weightname, 'r')
-                    weights[sensor_] = np.array(f['weights']).astype(np.float16)
+            # if config.FILTERING_MODEL.features_to_sdf_enc or config.FILTERING_MODEL.features_to_weight_head:
+            #     features = dict()
+            #     tsdfs = dict()
+            #     weights = dict()
+            #     for sensor_ in config.DATA.input:
+            #         featurename = tsdf_path + '/' + scene + '_' + sensor_ + '.features.hf5'
+            #         f = h5py.File(featurename, 'r')
+            #         features[sensor_] = np.array(f['features']).astype(np.float16)
+            #         tsdfname = tsdf_path + '/' + scene + '_' + sensor_ + '.tsdf.hf5'
+            #         f = h5py.File(tsdfname, 'r')
+            #         tsdfs[sensor_] = np.array(f['TSDF']).astype(np.float16)
+            #         weightname = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
+            #         f = h5py.File(weightname, 'r')
+            #         weights[sensor_] = np.array(f['weights']).astype(np.float16)
 
-                proxy_sensor_weighting = compute_proxy_sensor_weighting_and_mesh(tsdfs, sdf_gt, test_dir, weights, voxel_size, truncation, scene)
+            #     proxy_sensor_weighting = compute_proxy_sensor_weighting_and_mesh(tsdfs, sdf_gt, test_dir, weights, voxel_size, truncation, scene)
                 
-                # load fused tsdf
-                fused_tsdf = tsdf_path + '/' + scene + '.tsdf_filtered.hf5'
-                # read tsdf
-                f = h5py.File(fused_tsdf, 'r')
-                fused_tsdf = np.array(f['TSDF_filtered']).astype(np.float16)
+            #     # load fused tsdf
+            #     fused_tsdf = tsdf_path + '/' + scene + '.tsdf_filtered.hf5'
+            #     # read tsdf
+            #     f = h5py.File(fused_tsdf, 'r')
+            #     fused_tsdf = np.array(f['TSDF_filtered']).astype(np.float16)
 
-                sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
-                f = h5py.File(sensor_weighting, 'r')
-                sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
+            #     sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
+            #     f = h5py.File(sensor_weighting, 'r')
+            #     sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
 
-                if config.FILTERING_MODEL.outlier_channel:
-                   sensor_weighting = sensor_weighting[0, :, :, :]
+            #     if config.FILTERING_MODEL.outlier_channel:
+            #        sensor_weighting = sensor_weighting[0, :, :, :]
 
-                visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, sdf_gt, tsdfs, weights, features, test_dir, voxel_size, truncation)
+            #     visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, sdf_gt, tsdfs, weights, features, test_dir, voxel_size, truncation, scene)
 
                 
-
-
-
-
 if __name__ == '__main__':
 
     # parse commandline arguments

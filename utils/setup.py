@@ -6,6 +6,8 @@ import logging
 from dataset import ShapeNet
 from dataset import Replica # core dumped
 from dataset import CoRBS
+from dataset import Scene3D
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -44,7 +46,6 @@ def get_data_config(config, mode):
 
 
 def get_data(dataset, config):
-
     try:
         return eval(dataset)(config.DATA)
     except AttributeError:

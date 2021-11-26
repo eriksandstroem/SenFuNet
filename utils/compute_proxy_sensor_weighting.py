@@ -41,8 +41,8 @@ def compute_proxy_sensor_weighting_and_mesh(tsdfs, gt_tsdf, test_dir, weights, v
 
 
 	# get mask where gt is not between sensor predictions
-	mask_not_between = np.logical_or(np.logical_and((tsdfs[sensors[0]] < gt_tsdf), (tsdfs[sensors[1]] < gt_tsdf)), \
-			 np.logical_and((tsdfs[sensors[1]] > gt_tsdf), (tsdfs[sensors[0]] > gt_tsdf)))
+	mask_not_between = np.logical_or(np.logical_and((tsdfs[sensors[0]] <= gt_tsdf), (tsdfs[sensors[1]] <= gt_tsdf)), \
+			 np.logical_and((tsdfs[sensors[1]] >= gt_tsdf), (tsdfs[sensors[0]] >= gt_tsdf)))
 	# remove the voxels where only ones sensor integrates
 	mask_not_between = np.logical_and(and_mask, mask_not_between)
 
@@ -79,28 +79,49 @@ def compute_proxy_sensor_weighting_and_mesh(tsdfs, gt_tsdf, test_dir, weights, v
 	# 	compression='gzip',
 	# 	compression_opts=9)
 
+	# plot tsdf fusion histogram
+	sensor_weighting_path = '/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211019-170325/test_no_carving/hotel_0.sensor_weighting.hf5'
+	import h5py
+	f = h5py.File(sensor_weighting_path, 'r')
+	sensor_weighting_tsdf_middle_fusion = np.array(f['sensor_weighting']).astype(np.float16)
+	hist = sensor_weighting_tsdf_middle_fusion[mask].flatten()
+	# print('hist nbr shape nn: ', hist.shape)
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cmap(c))
+	plt.savefig(test_dir + '/tsdf_fusion_sensor_weighting_grid_histogram' + scene + '.png')
+	plt.clf()
+
 	hist = sensor_weighting[mask].flatten()
 	# print('hist nbr shape nn: ', hist.shape)
-	plt.hist(hist, bins = 100)
-	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram.png')
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cmap(c))
+	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram' + scene + '.png')
 	plt.clf()
 
 	hist = sensor_weighting[mask_between].flatten()
 	# print('hist nbr shape nn: ', hist.shape)
-	plt.hist(hist, bins = 100)
-	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram_mask_between.png')
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cmap(c))
+	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram_mask_between' + scene + '.png')
 	plt.clf()
 
 	hist = sensor_weighting[mask_not_between].flatten()
 	# print('hist nbr shape nn: ', hist.shape)
-	plt.hist(hist, bins = 100)
-	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram_mask_not_between.png')
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cmap(c))
+	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram_mask_not_between' + scene + '.png')
 	plt.clf()
 
 	hist = sensor_weighting[one_sensor_mask].flatten()
 	# print('hist nbr shape nn: ', hist.shape)
-	plt.hist(hist, bins = 100)
-	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram_mask_one_sensor.png')
+	n, bins, patches = plt.hist(hist, bins = 100)
+	for c, p in zip(bins, patches):
+		plt.setp(p, 'facecolor', cmap(c))
+	plt.savefig(test_dir + '/proxy_sensor_weighting_grid_histogram_mask_one_sensor' + scene + '.png')
 	plt.clf()
 
 	# compute filtered tsdf grid
@@ -192,7 +213,7 @@ def compute_proxy_sensor_weighting_and_mesh(tsdfs, gt_tsdf, test_dir, weights, v
 	# print(np.asarray(mesh.vertex_colors).shape)
 	# print(colors.shape)
 	mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
-	o3d.io.write_triangle_mesh(test_dir + '/proxy_sensor_weighting_nn.ply', mesh)
+	o3d.io.write_triangle_mesh(test_dir + '/proxy_sensor_weighting_nn' + scene + '.ply', mesh)
 
 	# compute surface histogram histogram of "averaged" alpha values.
 	cm = plt.get_cmap('inferno')
@@ -206,7 +227,7 @@ def compute_proxy_sensor_weighting_and_mesh(tsdfs, gt_tsdf, test_dir, weights, v
 
 	# compute F-score of proxy fused mesh
 	os.chdir(test_dir)
-	os.system('evaluate_3d_reconstruction.py ' + 'proxy_sensor_weighting_nn.ply' + ' standard_trunc ' + scene)
+	os.system('evaluate_3d_reconstruction.py ' + 'proxy_sensor_weighting_nn' + scene + '.ply' + ' standard_trunc ' + scene)
 
 	return sensor_weighting
 

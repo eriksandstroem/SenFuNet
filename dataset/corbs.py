@@ -13,7 +13,7 @@ from torch.utils.data import Dataset
 
 from graphics import Voxelgrid
 import h5py
-
+import matplotlib.pyplot as plt
 # uncomment to run python dataset/corbs.py main
 # path_to_dataset_module =  '/home/esandstroem/scratch-second/euler_project/src/late_fusion/dataset/' #'/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
 # sys.path.append(path_to_dataset_module) # needed in order to load read_array and associate
@@ -70,6 +70,7 @@ class CoRBS(Dataset):
         self.truncation_strategy = config_data.truncation_strategy
         self.fusion_strategy = config_data.fusion_strategy
 
+        self._scenes = []
 
         self.__init_dataset()
 
@@ -89,12 +90,13 @@ class CoRBS(Dataset):
         with open(os.path.join(self.root_dir, self.scene_list), 'r') as file:
             for line in file: # only contains one line now since we only load one scene at a time
                 line = line.split(' ') 
-                self._scenes = [line[0].split('/')[0]] # change this into append when we use more scenes
+                self._scenes.append(line[0].split('/')[0]) # change this into append when we use more scenes
                 trajectory_file = os.path.join(self.root_dir, line[4][:-1]) # make this into a directory when we use more scenes
                 rgb_file = os.path.join(self.root_dir, line[2])
                 depth_file = os.path.join(self.root_dir, line[3])
                 self.stereo_path = os.path.join(self.root_dir, line[0])
                 self.tof_path = os.path.join(self.root_dir, line[1])
+                self.rgb_path = os.path.join(self.root_dir, line[1])
 
         
         # read all files for pose, rgb, and depth
@@ -157,15 +159,37 @@ class CoRBS(Dataset):
         timestamp_rgb = self.pose_to_rgb[timestamp_pose]
         timestamp_depth = self.pose_to_depth[timestamp_pose]
 
-             
+        # read RGB frame
+        rgb_file = os.path.join(self.rgb_path, self.rgb_frames[timestamp_rgb].replace('\\', '/'))
+        rgb_image = io.imread(rgb_file).astype(np.float32)
+
+        # plt.imsave('imagef.png', np.asarray(rgb_image)/255)
+
+        step_x = rgb_image.shape[0] / self.resolution_tof[0]
+        step_y = rgb_image.shape[1] / self.resolution_tof[1]
+            
+        index_y = [int(step_y * i) for i in
+                    range(0, int(rgb_image.shape[1] / step_y))]
+        index_x = [int(step_x * i) for i in
+                    range(0, int(rgb_image.shape[0] / step_x))]
+
+        rgb_image = rgb_image[:, index_y]
+        rgb_image = rgb_image[index_x, :]
+        sample['image'] = np.asarray(rgb_image).transpose(2, 0, 1)/255
+
+
+        # plt.imsave('image.png', np.asarray(rgb_image)/255)
+       
+
         frame_id = '{}/{}'.format(self._scenes[0], str(timestamp_pose))
         sample['frame_id'] = frame_id  
 
         # read kinect depth file
-        depth_file = os.path.join(self.root_dir, self.tof_path, self.depth_frames[timestamp_depth].replace('\\', '/'))
+        depth_file = os.path.join(self.tof_path, self.depth_frames[timestamp_depth].replace('\\', '/'))
         depth_tof = io.imread(depth_file).astype(np.float32)
         depth_tof /= 5000.
 
+        # plt.imsave('toff.png', np.asarray(depth_tof)/255)
 
         step_x = depth_tof.shape[0] / self.resolution_tof[0]
         step_y = depth_tof.shape[1] / self.resolution_tof[1]
@@ -177,17 +201,18 @@ class CoRBS(Dataset):
 
         depth_tof = depth_tof[:, index_y]
         depth_tof = depth_tof[index_x, :]
-        sample['tof_depth'] = np.asarray(depth_tof)  
+        sample['tof_depth'] = np.asarray(depth_tof) 
+        # plt.imsave('tof.png', sample['tof_depth'])
 
         # read colmap stereo depth file
         try:
-            stereo_file = os.path.join(self.root_dir, self.stereo_path, self.rgb_frames[timestamp_rgb].replace('rgb\\', '') + '.geometric.bin')
+            stereo_file = os.path.join(self.stereo_path, self.rgb_frames[timestamp_rgb].replace('rgb\\', '') + '.geometric.bin')
             depth_stereo = read_array(stereo_file)
         except:
             print('stereo frame not found')
             return None
 
-
+        # plt.imsave('stereof.png', np.asarray(depth_stereo)/255)
         step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
         step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
 
@@ -199,6 +224,7 @@ class CoRBS(Dataset):
         depth_stereo = depth_stereo[:, index_y]
         depth_stereo = depth_stereo[index_x, :]
         sample['stereo_depth'] = np.asarray(depth_stereo)
+        # plt.imsave('stereo.png', sample['stereo_depth'])
 
 
         # define mask

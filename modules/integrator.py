@@ -35,6 +35,7 @@ class Integrator(torch.nn.Module):
         values = values.contiguous().view(-1, 1).float()
 
         if self.extraction_strategy == 'trilinear_interpolation':
+            features = features.repeat(8, 1)
             values = values.repeat(1, 8)
             indices_no_border = filter_indices.contiguous().view(-1, 8, 3).long()
             indices = indices.contiguous().view(-1, 8, 3).long()
@@ -99,10 +100,17 @@ class Integrator(torch.nn.Module):
             print('wrong dim!')
         del vcache
 
+        # if using the same extraction procedure for fusion and feature updates
+        update_feat_weights = weights
+        # if you want to use nearest neighbor extraction for the feature net
+        # but trilinear for the fusion step, uncomment this line
+        # update_feat_weights = torch.ones_like(weights)
+
         # weights for tsdf
         wcache = torch.sparse.FloatTensor(index, weights, torch.Size([xs * ys * zs])).coalesce() # this line adds the values at the same index together
         indices = wcache.indices().squeeze()
         weights = wcache.values()
+
         del wcache
 
         # weights for empty indices
@@ -121,7 +129,7 @@ class Integrator(torch.nn.Module):
         feature_index = ys * zs * feature_indices[:, 0] + zs * feature_indices[:, 1] + feature_indices[:, 2]
         feature_indices_insert = torch.unique_consecutive(feature_indices[feature_index.sort()[1]], dim=0)
         fcache = torch.sparse.FloatTensor(feature_index.unsqueeze_(0), update_feat, torch.Size([xs * ys * zs, f4])).coalesce()
-        update_feat_weights = torch.ones_like(update_feat[:, 0])
+        
         feature_indices = fcache.indices().squeeze()
         update_feat = fcache.values()
         if feature_indices_insert.shape[0] != update_feat.shape[0]:
@@ -177,7 +185,6 @@ class Integrator(torch.nn.Module):
         # insert features and feature weights
         insert_values(feature_update, feature_indices_insert, features_volume) 
         insert_values(weight_update_features, feature_indices_insert, feature_weights_volume) 
-
         # insert_values(value_update_empty, indices_empty_insert, values_volume)
         # insert_values(weight_update_empty, indices_empty_insert, weights_volume)
 

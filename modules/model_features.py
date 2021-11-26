@@ -76,6 +76,7 @@ class FeatureNet(nn.Module):
         self.w_rgb = config.w_rgb
         self.w_stereo_warp_right = config.stereo_warp_right 
         self.w_intensity_gradient = config.w_intensity_gradient
+        self.w_routing_conf = config.w_routing_conf
 
 
         # layer settings
@@ -98,11 +99,11 @@ class FeatureNet(nn.Module):
         self.decoder = nn.ModuleList()
 
         if sensor == 'tof':
-            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient)
+            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
         elif sensor == 'stereo':
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right)
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right) + int(self.w_routing_conf)
         else:
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient)
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
 
         # add first encoder block
         self.encoder.append(EncoderBlock(n_channels_first,
@@ -113,21 +114,21 @@ class FeatureNet(nn.Module):
         # add first decoder block
         if sensor == 'stereo':
             self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + \
-                                             2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right),
+                                             2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right) + int(self.w_routing_conf),
                                              self.n_layers * n_channels_output,
                                              dec_activation,
                                              resolution,
                                              layernorm))
         elif sensor == 'tof':
             self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + \
-                                             2*int(self.w_intensity_gradient),
+                                             2*int(self.w_intensity_gradient) + int(self.w_routing_conf),
                                              self.n_layers * n_channels_output,
                                              dec_activation,
                                              resolution,
                                              layernorm))    
         else:
             self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + \
-                                             2*int(self.w_intensity_gradient),
+                                             2*int(self.w_intensity_gradient) + int(self.w_routing_conf),
                                              self.n_layers * n_channels_output,
                                              dec_activation,
                                              resolution,
@@ -155,7 +156,11 @@ class FeatureNet(nn.Module):
 
     def forward(self, x):
         if self.append_depth:
-            d = x
+            if self.w_rgb:
+                d = x[:, 0, :, :].unsqueeze(1)
+            else:
+                d = x
+
         # encoding
 
         for enc in self.encoder:
@@ -214,7 +219,7 @@ class FeatureResNet(nn.Module):
         self.w_rgb = config.w_rgb
         self.w_stereo_warp_right = config.stereo_warp_right 
         self.w_intensity_gradient = config.w_intensity_gradient
-
+        self.w_routing_conf = config.w_routing_conf
 
         # layer settings
         n_channels_input = self.n_features 
@@ -235,11 +240,11 @@ class FeatureResNet(nn.Module):
         self.encoder = nn.ModuleList()
 
         if sensor == 'tof':
-            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient)
+            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
         elif sensor == 'stereo':
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right)
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right) + int(self.w_routing_conf)
         else:
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) 
+            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
 
         # add first encoder block
         self.encoder.append(EncoderBlock(n_channels_first,
@@ -275,7 +280,6 @@ class FeatureResNet(nn.Module):
 
         for k, enc in enumerate(self.encoder):
             xmid = enc(x)
-            # print(xmid)
             if xmid.isnan().sum() > 0 or xmid.isinf().sum() > 0:
                 print('xmid nan: ', xmid.isnan().sum())
                 print('xmid inf: ', xmid.isinf().sum())

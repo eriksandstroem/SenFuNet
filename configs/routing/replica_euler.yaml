@@ -52,12 +52,12 @@ DATA:
   max_depth_tof: 12.3 # 3.86
   min_depth: 0.0
   max_depth: 12.3
-  fusion_strategy: routingNet # not used but needed because of replica.py
+  fusion_strategy: fusionNet # not used but needed because of replica.py
   data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid - not used, but needed here because of replica.py
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
   root_dir: TMPDIR # /cluster/work/cvl/esandstroem/data/replica/manual #
   dataset: Replica
-  input: [tof, stereo] # mono_depth, stereo_depth, tof_depth, multidepth
+  input: [sgm_stereo, stereo] # mono_depth, stereo_depth, tof_depth, multidepth
   target: depth_gt
   resx: 512
   resy: 512

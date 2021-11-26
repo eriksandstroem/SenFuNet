@@ -130,7 +130,10 @@ def train(args, config):
             unc = output[:, 1, :, :].unsqueeze_(1)
 
             if not config.LOSS.completion:
-                mask = batch['mask'].to(device).unsqueeze_(1)
+                if config.DATA.fusion_strategy != 'routingNet':
+                    mask = batch[config.DATA.input[0] + '_mask'].to(device).unsqueeze_(1)
+                else:
+                    mask = batch['mask'].to(device).unsqueeze_(1)
                 target = torch.where(mask == 0., torch.zeros_like(target), target)
 
             # compute training loss
@@ -193,7 +196,10 @@ def train(args, config):
                 # workspace.writer.add_image('Val/l1_inp_{}'.format(i), frame_inp_l1, global_step=epoch)
 
             if not config.LOSS.completion:
-                mask = batch['mask'].to(device).unsqueeze_(1)
+                if config.DATA.fusion_strategy != 'routingNet':
+                    mask = batch[config.DATA.input[0] + '_mask'].to(device).unsqueeze_(1)
+                else:
+                    mask = batch['mask'].to(device).unsqueeze_(1)
                 target = torch.where(mask == 0., torch.zeros_like(target), target)
 
             loss_t = criterion.forward(est, unc, target)

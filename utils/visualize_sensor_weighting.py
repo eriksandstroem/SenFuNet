@@ -6,7 +6,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_size, outlier_channel):
+def visualize_sensor_weighting(tsdf, sensor_weighting, test_dir, mask, truncation, length, max_resolution, resolution, voxel_size, outlier_channel):
 	cmap = plt.get_cmap("inferno")
 	# print weighting histogram - only works in the 2-sensor case! With more sensors we cannot do this in the same way
 	# bad idea to not feed the mask to this function as we will include wrongful values in the histogram which are 
@@ -23,9 +23,41 @@ def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_siz
 	n, bins, patches = plt.hist(hist, bins = 100)
 	for c, p in zip(bins, patches):
 		plt.setp(p, 'facecolor', cm(c))
-	plt.savefig(test_dir + '/sensor_weighting_grid_histogram.png')
+	plt.savefig(test_dir + '/sensor_weighting_grid_histogram_no_outlier_filter.png')
 	plt.clf()
 
+
+	# Create the mesh using the given mask
+	tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
+	tsdf_cube[:resolution[0], :resolution[1], :resolution[2]] = tsdf
+
+
+	indices_x = mask.nonzero()[0]
+	indices_y = mask.nonzero()[1]
+	indices_z = mask.nonzero()[2]
+
+	# this creates a voxelgrid with max_resolution voxels along the length length. Each 
+	# voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
+	# of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
+	# This is not a problem, however, since we will only initialize the valid indices. I.e. 
+	# the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
+	# for this, the max_resolution variable should be 1 less than it is now, making length smaller
+	# as well since length is max_resolution times voxel_size
+	volume = o3d.integration.UniformTSDFVolume(
+			length=length,
+			resolution=max_resolution,
+			sdf_trunc=truncation,
+			color_type=o3d.integration.TSDFVolumeColorType.RGB8)
+	
+	for i in range(indices_x.shape[0]):
+		volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
+		volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
+
+	print("Extract a triangle mesh from the volume and visualize it.")
+	mesh = volume.extract_triangle_mesh()
+
+	del volume
+	mesh.compute_vertex_normals()
 
 	# read vertices from mesh
 	vertices = mesh.vertices
@@ -100,12 +132,12 @@ def visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_siz
 	# print(np.asarray(mesh.vertex_colors).shape)
 	# print(colors.shape)
 	mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
-	o3d.io.write_triangle_mesh(test_dir + '/sensor_weighting_nn.ply', mesh)
+	o3d.io.write_triangle_mesh(test_dir + '/sensor_weighting_nn_no_outlier_filter.ply', mesh)
 
 	# compute surface histogram
-	n, bins, patches = plt.hist(hist, bins = 100)
+	n, bins, patches = plt.hist(vals.flatten(), bins = 100)
 	for c, p in zip(bins, patches):
 		plt.setp(p, 'facecolor', cm(c))
-	plt.savefig(test_dir + '/sensor_weighting_surface_histogram.png')
+	plt.savefig(test_dir + '/sensor_weighting_surface_histogram_no_outlier_filter.png')
 	plt.clf()
 

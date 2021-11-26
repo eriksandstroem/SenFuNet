@@ -40,8 +40,8 @@ def count_parameters(model): return sum(p.numel() for p in model.parameters() if
 def test_fusion(config):
     
     # define output dir
-    test_path = '/test'
-    time = datetime.datetime.now().strftime('%y%m%d-%H%M%S')
+    test_path = '/test_no_carving'
+    time = '211019-170325' #datetime.datetime.now().strftime('%y%m%d-%H%M%S')
     print(time)
     test_dir = config.SETTINGS.experiment_path + '/' + time + test_path
  
@@ -78,12 +78,18 @@ def test_fusion(config):
     pipeline = pipeline.to(device)
 
     # only parameters when using routing network
-    if config.ROUTING.do: # early fusion
-        routing_checkpoint = torch.load(config.TESTING.routing_model_path)
-        # print(routing_checkpoint)
-        # load_model(config.TESTING.routing_model_path, pipeline._routing_network)
-        # Keep line below until I see that the new loading function works.
-        pipeline.fuse_pipeline._routing_network.load_state_dict(routing_checkpoint['pipeline_state_dict'])
+    if config.ROUTING.do:
+        if config.DATA.fusion_strategy == 'routingNet': # early fusion
+            routing_checkpoint = torch.load(config.TESTING.routing_model_path)
+            # print(routing_checkpoint)
+            # load_model(config.TESTING.routing_model_path, pipeline._routing_network)
+            # Keep line below until I see that the new loading function works.
+            pipeline.fuse_pipeline._routing_network.load_state_dict(routing_checkpoint['pipeline_state_dict'])
+        elif config.DATA.fusion_strategy == 'fusionNet':
+            for sensor_ in config.DATA.input:
+                checkpoint = torch.load(eval('config.TRAINING.routing_' + sensor_ + '_model_path'))
+                pipeline.fuse_pipeline._routing_network[sensor_].load_state_dict(checkpoint['pipeline_state_dict'])
+
 
     pipeline.eval()
 
@@ -207,99 +213,99 @@ def evaluate(database, config, test_dir):
     
 
             # Create the mesh using the given mask
-            tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-            tsdf_cube[:resolution[0], :resolution[1], :resolution[2]] = tsdf
+            # tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
+            # tsdf_cube[:resolution[0], :resolution[1], :resolution[2]] = tsdf
 
 
-            indices_x = mask.nonzero()[0]
-            indices_y = mask.nonzero()[1]
-            indices_z = mask.nonzero()[2]
+            # indices_x = mask.nonzero()[0]
+            # indices_y = mask.nonzero()[1]
+            # indices_z = mask.nonzero()[2]
 
-            # this creates a voxelgrid with max_resolution voxels along the length length. Each 
-            # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
-            # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
-            # This is not a problem, however, since we will only initialize the valid indices. I.e. 
-            # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
-            # for this, the max_resolution variable should be 1 less than it is now, making length smaller
-            # as well since length is max_resolution times voxel_size
-            volume = o3d.integration.UniformTSDFVolume(
-                    length=length,
-                    resolution=max_resolution,
-                    sdf_trunc=truncation,
-                    color_type=o3d.integration.TSDFVolumeColorType.RGB8)
+            # # this creates a voxelgrid with max_resolution voxels along the length length. Each 
+            # # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
+            # # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
+            # # This is not a problem, however, since we will only initialize the valid indices. I.e. 
+            # # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
+            # # for this, the max_resolution variable should be 1 less than it is now, making length smaller
+            # # as well since length is max_resolution times voxel_size
+            # volume = o3d.integration.UniformTSDFVolume(
+            #         length=length,
+            #         resolution=max_resolution,
+            #         sdf_trunc=truncation,
+            #         color_type=o3d.integration.TSDFVolumeColorType.RGB8)
             
-            for i in range(indices_x.shape[0]):
-                volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
-                volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
+            # for i in range(indices_x.shape[0]):
+            #     volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
+            #     volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
 
-            print("Extract a triangle mesh from the volume and visualize it.")
-            mesh = volume.extract_triangle_mesh()
+            # print("Extract a triangle mesh from the volume and visualize it.")
+            # mesh = volume.extract_triangle_mesh()
 
-            del volume
-            mesh.compute_vertex_normals()
-            # o3d.visualization.draw_geometries([mesh])
-            o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + '.ply'), mesh)
-            mask_filtered = mask
+            # del volume
+            # mesh.compute_vertex_normals()
+            # # o3d.visualization.draw_geometries([mesh])
+            # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + '.ply'), mesh)
+            # mask_filtered = mask
+
+            # # return
+            # if len(config.DATA.input) > 1:
+            #     # Generate visualization of the sensor weighting
+            #     # load weighting sensor grid
+            #     sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
+            #     f = h5py.File(sensor_weighting, 'r')
+            #     sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
+
+            #     # compute sensor weighting histogram and mesh visualization
+            #     visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_size, config.FILTERING_MODEL.outlier_channel)
+
+
+            # # Compute the F-score, precision and recall
+            # ply_path = model_test + '.ply'
+
+            # # run commandline command
+            # os.chdir(test_dir)
+
+            # print('running script: evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
+            # os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
+
+            # # move the logs and plys to the evaluation dirs
+            # os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
+            # os.system('mv ' + test_dir + '/' + model_test + '.ply ' + test_dir + '/' + model_test + '/' + model_test + '.ply')
+            # if len(config.DATA.input) > 1:
+            #     os.system('mv ' + test_dir + '/sensor_weighting_nn.ply ' + test_dir + '/' + model_test + '/sensor_weighting_nn.ply')
+            #     os.system('mv ' + test_dir + '/sensor_weighting_grid_histogram.png ' + test_dir + '/' + model_test + '/sensor_weighting_grid_histogram.png')
+            #     os.system('mv ' + test_dir + '/sensor_weighting_surface_histogram.png ' + test_dir + '/' + model_test + '/sensor_weighting_surface_histogram.png')
 
             # return
-            if len(config.DATA.input) > 1:
-                # Generate visualization of the sensor weighting
-                # load weighting sensor grid
-                sensor_weighting = tsdf_path + '/' + scene + '.sensor_weighting.hf5'
-                f = h5py.File(sensor_weighting, 'r')
-                sensor_weighting = np.array(f['sensor_weighting']).astype(np.float16)
+            for sensor_ in config.DATA.input:
+                model_test = scene + '_weight_threshold_' + str(weight_threshold)
+                model_test = model_test + '_' + sensor_
+                logger = get_logger(test_dir, name=model_test)
 
-                # compute sensor weighting histogram and mesh visualization
-                visualize_sensor_weighting(mesh, sensor_weighting, test_dir, mask, voxel_size, config.FILTERING_MODEL.outlier_channel)
+                tsdf = tsdf_path + '/' + scene + '_' + sensor_ + '.tsdf.hf5'
+                weights = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
 
+                # read tsdfs and weight grids
+                f = h5py.File(tsdf, 'r')
+                tsdf = np.array(f['TSDF']).astype(np.float16)
+                # print(tsdf.astype(np.float32).sum())
+                f = h5py.File(weights, 'r')
+                weights = np.array(f['weights']).astype(np.float16)
+                # print(weights.astype(np.float32).sum())
 
-            # Compute the F-score, precision and recall
-            ply_path = model_test + '.ply'
-
-            # run commandline command
-            os.chdir(test_dir)
-
-            print('running script: evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
-            os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
-
-            # move the logs and plys to the evaluation dirs
-            os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
-            os.system('mv ' + test_dir + '/' + model_test + '.ply ' + test_dir + '/' + model_test + '/' + model_test + '.ply')
-            if len(config.DATA.input) > 1:
-                os.system('mv ' + test_dir + '/sensor_weighting_nn.ply ' + test_dir + '/' + model_test + '/sensor_weighting_nn.ply')
-                os.system('mv ' + test_dir + '/sensor_weighting_grid_histogram.png ' + test_dir + '/' + model_test + '/sensor_weighting_grid_histogram.png')
-                os.system('mv ' + test_dir + '/sensor_weighting_surface_histogram.png ' + test_dir + '/' + model_test + '/sensor_weighting_surface_histogram.png')
-
-            # return
-            # for sensor_ in config.DATA.input:
-            #     model_test = scene + '_weight_threshold_' + str(weight_threshold)
-            #     model_test = model_test + '_' + sensor_
-            #     logger = get_logger(test_dir, name=model_test)
-
-            #     tsdf = tsdf_path + '/' + scene + '_' + sensor_ + '.tsdf.hf5'
-            #     weights = tsdf_path + '/' + scene + '_' + sensor_ + '.weights.hf5'
-
-            #     # read tsdfs and weight grids
-            #     f = h5py.File(tsdf, 'r')
-            #     tsdf = np.array(f['TSDF']).astype(np.float16)
-            #     # print(tsdf.astype(np.float32).sum())
-            #     f = h5py.File(weights, 'r')
-            #     weights = np.array(f['weights']).astype(np.float16)
-            #     # print(weights.astype(np.float32).sum())
-
-            #     # compute the L1, IOU and Acc
+                # compute the L1, IOU and Acc
             
-            #     mask = weights > weight_threshold
+                mask = weights > weight_threshold
 
-            #     # erode masks appropriately
-            #     if config.FILTERING_MODEL.erosion:
-            #         mask = ndimage.binary_erosion(mask, structure=np.ones((3,3,3)), iterations=1)
+                # erode masks appropriately
+                if config.FILTERING_MODEL.erosion:
+                    mask = ndimage.binary_erosion(mask, structure=np.ones((3,3,3)), iterations=1)
 
-            #     eval_results_scene = evaluation(tsdf, sdf_gt, mask)
+                eval_results_scene = evaluation(tsdf, sdf_gt, mask)
 
-            #     logger.info('Test Scores for scene: ' + scene)
-            #     for key in eval_results_scene:
-            #         logger.info(key + ': ' + str(eval_results_scene[key]))
+                logger.info('Test Scores for scene: ' + scene)
+                for key in eval_results_scene:
+                    logger.info(key + ': ' + str(eval_results_scene[key]))
         
 
             #     # Create the mesh using the given mask

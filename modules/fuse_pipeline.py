@@ -90,8 +90,10 @@ class Fuse_Pipeline(torch.nn.Module):
 
             est = self._routing_network.forward(inputs)
 
+            frame = est[:, 0, :, :]
+            confidence = torch.exp(-1. * est[:, 1, :, :])
         else:
-            inputs = data[data['sensor'] + '_depth'].unsqueeze_(1)
+            inputs = data['depth'].unsqueeze_(1)
 
             if self.config.DATA.intensity_grad:
                 intensity = data['intensity'].unsqueeze_(1)
@@ -100,24 +102,32 @@ class Fuse_Pipeline(torch.nn.Module):
             
             inputs = inputs.to(self.device)
 
-            est = self._routing_network[data['sensor']].forward(inputs)
+            est = self._routing_network[data['routingNet']].forward(inputs)
 
-        frame = est[:, 0, :, :]
-        confidence = torch.exp(-1. * est[:, 1, :, :])
+            if self.config.ROUTING.dont_smooth_where_uncertain:
+                frame = est[:, 0, :, :]
+                confidence = torch.exp(-1. * est[:, 1, :, :])
+                input_depth = data['depth'][:, 0, :, :][confidence < self.config.ROUTING.threshold]
+                frame[confidence < self.config.ROUTING.threshold] = input_depth.to(self.device)
+            else:
+                frame = est[:, 0, :, :]
+                confidence = torch.exp(-1. * est[:, 1, :, :])
+
+
 
         return frame, confidence
 
-    def _fusion(self, input_, input_features, values, sensor, gt_depth=None, extraction_band=11): # TODO: adapt to when not using features
+    def _fusion(self, input_, input_features, values, sensor, fusionNet, gt_depth=None, extraction_band=11): # TODO: adapt to when not using features
         output = dict()
         b, c, h, w = input_.shape
         if self.config.FUSION_MODEL.use_fusion_net:
             if self.config.FUSION_MODEL.fixed:
                 with torch.no_grad():
                     # print('in: ', input_.sum())
-                    tsdf_pred = self._fusion_network[sensor].forward(input_)
+                    tsdf_pred = self._fusion_network[fusionNet].forward(input_)
                     # print('out: ', tsdf_pred.sum())
             else:
-                tsdf_pred = self._fusion_network[sensor].forward(input_)
+                tsdf_pred = self._fusion_network[fusionNet].forward(input_)
         else: # TSDF Fusion
             # if sensor == 'left_depth_gt': # side step learned fusion net - use tsdf fusion prediction
             # print(tsdf_pred[:, :, 200, 200])
@@ -153,12 +163,11 @@ class Fuse_Pipeline(torch.nn.Module):
             #     feat_pred = feat_pred[sensor] / normalization_factor
 
             # else:
-            if self.config.FEATURE_MODEL.bypass:
-                feat_pred = dict()
-                feat_pred['feature'] = input_features[sensor]
-            else:
-                feat_pred =  self._feature_network[sensor].forward(input_features[sensor])
+            feat_pred =  self._feature_network[sensor].forward(input_features[sensor])
         else:
+            feat_pred = dict()
+            feat_pred['feature'] = input_features[sensor]
+
             if self.config.FEATURE_MODEL.append_pixel_conf:
                 if sensor == 'gauss_close_cont':
                     gt = torch.unsqueeze(gt_depth, -1)
@@ -170,10 +179,7 @@ class Fuse_Pipeline(torch.nn.Module):
                     gt = gt.permute(0, -1, 1, 2)
                     feat_pred = gt < 1.75
                     # feat_pred = input_features[sensor] < 1.75
-
                 feat_pred = torch.cat((feat_pred, input_features[sensor]), dim=1)
-            else:
-                feat_pred = input_features[sensor]
 
 
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
@@ -184,7 +190,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         # # save feature maps
         # for i in range(feat_pred.shape[-1]):
-        #     plt.imsave(sensor + '/' + str(i)+ '_'+ sensor+   '.jpeg', feat_pred[0, :, :, i].cpu().detach().numpy())
+        #     plt.imsave('/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/' + sensor + '/' + str(i)+ '_'+ sensor+   '.jpeg', feat_pred[0, :, :, i].cpu().detach().numpy())
 
         # save confidence prediction
         # using exp(-relu(x)) activation
@@ -194,7 +200,7 @@ class Fuse_Pipeline(torch.nn.Module):
         
         # for i in range(input_features[sensor].shape[1]):
         #     m = input_features[sensor][:, i, :, :].squeeze()
-        #     plt.imsave(sensor + '/input_' + str(i)+ '_'+ sensor+   '.jpeg', m.cpu().detach().numpy())
+        #     plt.imsave('/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/' + sensor + '/input_' + str(i)+ '_'+ sensor+   '.jpeg', m.cpu().detach().numpy())
 
         try:
             n_points = eval('self.config.FUSION_MODEL.n_points_' + sensor)
@@ -206,7 +212,6 @@ class Fuse_Pipeline(torch.nn.Module):
                                -self.config.DATA.trunc_value,
                                self.config.DATA.trunc_value)
 
-        # print(feat_pred.shape)
         feature_est = feat_pred.view(b, h * w, 1, self.n_features)
         feature_est = feature_est.repeat(1, 1, n_points, 1)
 
@@ -245,20 +250,25 @@ class Fuse_Pipeline(torch.nn.Module):
             rgb = rgb.permute(3, 1, 2, 0) # never use view here - that fucked up the order!
 
         feature_input = dict()
-        for sensor_ in self.config.DATA.input:
-            feature_input[sensor_] = torch.unsqueeze(frame, -1)
-            if rgb is not None:
-                if sensor_ == 'tof' and self.config.FEATURE_MODEL.w_rgb_tof:
-                    feature_input[sensor_] = torch.cat((feature_input[sensor_], rgb), dim=3)
-                elif sensor_ != 'tof':
-                    feature_input[sensor_] = torch.cat((feature_input[sensor_], rgb), dim=3)
+        feature_input[sensor] = torch.unsqueeze(frame, -1)
+        if rgb is not None:
+            if sensor == 'tof' and self.config.FEATURE_MODEL.w_rgb_tof:
+                feature_input[sensor] = torch.cat((feature_input[sensor], rgb), dim=3)
+            elif sensor != 'tof':
+                feature_input[sensor] = torch.cat((feature_input[sensor], rgb), dim=3)
 
-            if sensor_ == 'stereo' and rgb_warp is not None:
-                feature_input[sensor_] = torch.cat((feature_input[sensor_], rgb_warp), dim=3)
+        if confidence is not None and self.config.FEATURE_MODEL.w_routing_conf:
+            confidence = torch.unsqueeze(confidence, -1)
+            # confidence = confidence.permute(0, 3, 1, 2) # never use view here - that fucked up the order!
+            # print(confidence.shape)
+            feature_input[sensor] = torch.cat((feature_input[sensor], confidence), dim=3)
+
+        if sensor == 'stereo' and rgb_warp is not None:
+            feature_input[sensor] = torch.cat((feature_input[sensor], rgb_warp), dim=3)
 
             # del features, feature_weights_sensor
-            # permuting input
-            feature_input[sensor_] = feature_input[sensor_].permute(0, -1, 1, 2)
+        # permuting input
+        feature_input[sensor] = feature_input[sensor].permute(0, -1, 1, 2)
 
         del rgb
         # stacking input data
@@ -386,13 +396,17 @@ class Fuse_Pipeline(torch.nn.Module):
                 frame = depth.squeeze_(1)
                 confidence = None # Need to implement this if I want to use it again
             else:
+                # if batch['sensor'] == 'tof': # ONLY FOR A FUN TEST
+                #     frame = batch[batch['sensor'] + '_depth'].squeeze_(1).to(device)
+                #     confidence = None
+                # else:
                 depth, conf = self._routing(batch) # I don't think I need the depth of both sensors now
                 # since I don't do relative normalization, but I leave it for now
                 frame = depth.squeeze_(1)
-                confidence = None # Need to implement this if I want to use it again
+                confidence = conf.squeeze_(1) # Need to implement this if I want to use it again
     
         else:
-            frame = batch[batch['sensor'] + '_depth'].squeeze_(1)
+            frame = batch['depth'].squeeze_(1)
             frame= frame.to(device)
             confidence = None
 
@@ -447,7 +461,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
 
         fusion_output = self._fusion(tsdf_input, feature_input, extracted_values[batch['sensor']], \
-                                             batch['sensor'], batch['gt'].to(device), n_points)
+                                             batch['sensor'], batch['fusionNet'], extraction_band=n_points)
 
         # masking invalid losses
         tsdf_est = fusion_output['tsdf_est']
@@ -514,13 +528,17 @@ class Fuse_Pipeline(torch.nn.Module):
                 frame = depth.squeeze_(1)
                 confidence = None # Need to implement this if I want to use it again
             else:
+                # if batch['sensor'] == 'tof': # ONLY FOR A FUN TEST
+                #     frame = batch[batch['sensor'] + '_depth'].squeeze_(1).to(device)
+                #     confidence = None
+                # else:
                 depth, conf = self._routing(batch) # I don't think I need the depth of both sensors now
                 # since I don't do relative normalization, but I leave it for now
                 frame = depth.squeeze_(1)
-                confidence = None # Need to implement this if I want to use it again
-    
+                confidence = conf # Need to implement this if I want to use it again
+
         else:
-            frame = batch[batch['sensor'] + '_depth'].squeeze_(1)
+            frame = batch['depth'].squeeze_(1)
             frame= frame.to(device)
             confidence = None
 
@@ -592,7 +610,7 @@ class Fuse_Pipeline(torch.nn.Module):
         
         # tsdf_target = tsdf_target.view(b, h, w, eval('self.config.FUSION_MODEL.n_points_' + batch['sensor']))
         fusion_output = self._fusion(tsdf_input, feature_input, extracted_values[batch['sensor']], batch['sensor'], \
-                                         batch['gt'].to(device), n_points)
+                                         batch['fusionNet'], extraction_band=n_points)
 
         if self.config.LOSS.alpha_2d_supervision:
             output['confidence_2d'] = fusion_output['confidence_2d']

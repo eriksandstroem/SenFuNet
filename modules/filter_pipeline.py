@@ -306,6 +306,7 @@ class Filter_Pipeline(torch.nn.Module):
         self.device = device
 
         indices = input_dir['indices'].cpu()
+        # print('ind fed: ', indices.shape)
         del input_dir['indices']
 
         # if epoch > 0: # CHANGE
@@ -449,13 +450,21 @@ class Filter_Pipeline(torch.nn.Module):
             if x_size / self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size > 1:
                 bbox[0, 0] =  np.random.random_integers(bbox_input[0, 0], bbox_input[0, 1] - self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size)
                 bbox[0, 1] =  bbox[0, 0] + self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size
+            else:
+                bbox[0, 0] = bbox_input[0, 0]
+                bbox[0, 1] = bbox_input[0, 1]
             if y_size / self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size > 1:
                 bbox[1, 0] =  np.random.random_integers(bbox_input[1, 0], bbox_input[1, 1] - self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size)
                 bbox[1, 1] =  bbox[1, 0] + self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size
+            else:
+                bbox[1, 0] = bbox_input[1, 0]
+                bbox[1, 1] = bbox_input[1, 1]
             if z_size / self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size > 1:
                 bbox[2, 0] =  np.random.random_integers(bbox_input[2, 0], bbox_input[2, 1] - self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size)
                 bbox[2, 1] =  bbox[2, 0] + self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size
-            # print('1',bbox)
+            else:
+                bbox[2, 0] = bbox_input[2, 0]
+                bbox[2, 1] = bbox_input[2, 1]
 
             # make sure that each dimension of the bounding box is divisible by 8 (requires to do 3 max pooling layers, otherwise subtract
             # appropriate dimensions. When doing the extraction we will extract the 'correct' indices with this technique. No plus 1 needed since
@@ -470,7 +479,6 @@ class Filter_Pipeline(torch.nn.Module):
             if (bbox[2, 1] - bbox[2, 0]) % 2**self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth != 0:
                 bbox[2, 1] -= (bbox[2, 1] - bbox[2, 0]) % 2**self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth
 
-
             # compute a mask determining what indices should be used in the loss out of all indices in the bbox. Note
             # that the bbox is not the full min bounding volume of the indices, but only a random extraction
             # according to the chunk size. Thus, we need to select the valid indices within the chunk volume. No, we should
@@ -480,7 +488,7 @@ class Filter_Pipeline(torch.nn.Module):
             # if we train the fusion network jointly with the filtering network, the fusion network will compute
             # very few gradients from the total chunk bbox while the loss is computed for the entire bbox so the 
             # fusion net might not train well given this low information flow i.e. we may need to increase the 
-            # hyperparamter that controls the intermediate loss.
+            # hyperparamter that controls the intermediate loss. Well the feature net is affected equally by this.
             valid_indices = ((indices[:, 0] >= bbox[0, 0]) &
                     (indices[:, 0] < bbox[0, 1]) & # I think I can use equals and less than here since the bbox
                     # is defined by the max index value
@@ -499,7 +507,6 @@ class Filter_Pipeline(torch.nn.Module):
             if epoch == 0: # CHANGE
                 self.defined_bboxes[sensor]['bbox'][frame] = bbox # CHANGE
                 self.defined_bboxes[sensor]['valid_indices'][frame] = valid_indices # CHANGE
-
 
             if valid_indices.shape[0] > idx_threshold:
                 return bbox, valid_indices

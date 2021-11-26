@@ -31,7 +31,7 @@ def save_checkpoint(state, is_best, checkpoint, is_best_filt=None):
     if is_best_filt:
       shutil.copyfile(filepath, os.path.join(checkpoint, 'best.pth.tar'))
 
-    if isinstance(is_best, list):
+    if isinstance(is_best, dict):
       for sensor in is_best.keys():
         if is_best[sensor]:
           shutil.copyfile(filepath, os.path.join(checkpoint, 'best_' +  sensor + '.pth.tar'))

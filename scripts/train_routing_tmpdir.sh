@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#BSUB -W 4:00
+#BSUB -W 24:00
 #BSUB -R "rusage[mem=3000, ngpus_excl_p=1]"
 #BSUB -R "select[gpu_mtotal0<=15000]"
 #BSUB -n 20

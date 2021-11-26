@@ -21,11 +21,11 @@ class Replica(Dataset):
 
     def __init__(self, config_data):
         self.root_dir = os.getenv(config_data.root_dir)
-        if self.root_dir:
-            self.root_dir += '/cluster/work/cvl/esandstroem/data/replica/manual' # when training on local scratch
-        # os.getenv returns none when the input does not exist. When 
-        # it returns none, we want to train on the work folder
-        else:
+        # if self.root_dir:
+        #     self.root_dir += '/cluster/work/cvl/esandstroem/data/replica/manual' # when training on local scratch
+        # # os.getenv returns none when the input does not exist. When 
+        # # it returns none, we want to train on the work folder
+        if not self.root_dir:
             self.root_dir  = config_data.root_dir
 
         self.sampling_density_stereo = config_data.sampling_density_stereo
@@ -66,10 +66,11 @@ class Replica(Dataset):
 
         self.sensor_line_mapping = {'left_depth_gt': 0, 'left_depth_gt_2': 0, 'left_rgb_aug': -3,
                                     'left_rgb': -2, 'left_camera_matrix': -1,
-                                    'tof': 1, 'mono': 2, 'stereo': 3, 'gauss_close_thresh': 4,
-                                    'gauss_far_thresh': 5, 'gauss_close_cont': 6,
-                                    'gauss_far_cont': 7, 'gauss_red': 8, 'gauss_blue': 9, 'gauss_red_aug': 10,
-                                    'gauss_blue_aug': 11, 'sgm_stereo': 12}
+                                    'tof': 1, 'tof_2': 1, 'mono': 2, 'stereo': 3, 'stereo_2': 3, 'sgm_stereo': 4,
+                                    'lea_stereo': 5, 'gauss_close_thresh': 6,
+                                    'gauss_far_thresh': 7, 'gauss_close_cont': 8,
+                                    'gauss_far_cont': 9, 'gauss_red': 10, 'gauss_blue': 11, 'gauss_red_aug': 12,
+                                    'gauss_blue_aug': 13}
 
         if config_data.data_load_strategy == 'hybrid':
             self.nbr_load_scenes = config_data.load_scenes_at_once
@@ -230,7 +231,6 @@ class Replica(Dataset):
         for sensor_ in self.depth_images.keys():
             self.depth_images[sensor_]  = sorted(self.depth_images[sensor_] , key=lambda x: int(os.path.splitext(x.split('/')[-1])[0]))
 
-            print(len(self.depth_images[sensor_]))
         if self.mode == 'val':
             for sensor_ in self.depth_images.keys():
                 self.depth_images[sensor_]  = self.depth_images[sensor_][::10]
@@ -457,7 +457,6 @@ class Replica(Dataset):
         # load noisy depth maps
         for sensor_ in self.input:
             file = self.depth_images[sensor_][item]
-
             depth = io.imread(file).astype(np.float32)
 
             try:
@@ -530,8 +529,8 @@ class Replica(Dataset):
                     sample[sensor_ + '_mask'] = mask
 
         if self.fusion_strategy == 'routingNet':
-            mask = np.logical_or((sample['tof_depth'] > self.min_depth), (sample['stereo_depth'] > self.min_depth))
-            mask = np.logical_and(mask, np.logical_or(sample['tof_depth'] < self.max_depth, sample['stereo_depth'] < self.max_depth))
+            mask = np.logical_or((sample['sgm_stereo_depth'] > self.min_depth), (sample['stereo_depth'] > self.min_depth))
+            mask = np.logical_and(mask, np.logical_or(sample['sgm_stereo_depth'] < self.max_depth, sample['stereo_depth'] < self.max_depth))
             # remove strong artifacts coming from pixels close to missing pixels
             # the routing network computes bad depths for these pixels that are
             # not missing in the original image due to the convolutions over

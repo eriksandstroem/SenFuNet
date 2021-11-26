@@ -64,7 +64,7 @@ class Extractor(nn.Module):
 
         ray_pts, empty_points = self.extract_values(coords, eye_w, origin, resolution, n_points=int((self.n_points - 1)/2), n_empty_space_voting=self.n_empty_space_voting) # ray_pts are the extracted points in floating point voxel space
 
-        if self.extraction_strategy == 'trilinear_interplation':
+        if self.extraction_strategy == 'trilinear_interpolation':
             fusion_values, indices, weights, indices_empty, weights_empty, \
             fusion_weights = self.trilinear_interpolation(ray_pts, empty_points, tsdf_volume, weights_volume)
 

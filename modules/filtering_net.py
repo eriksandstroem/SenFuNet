@@ -547,6 +547,7 @@ class FilteringNet(nn.Module):
         self.feature_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
         self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head 
         self.weight_to_weight_head = config.FILTERING_MODEL.weights_to_weight_head 
+        self.sdf_to_weight_head = config.FILTERING_MODEL.sdf_to_weight_head
         self.weighting_complexity = config.FILTERING_MODEL.CONV3D_MODEL.weighting_complexity
         self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation) 
         self.n_features = config.FEATURE_MODEL.n_features
@@ -578,43 +579,63 @@ class FilteringNet(nn.Module):
 
         # alpha layer
         if len(config.DATA.input) > 1:
-            if self.feature_to_weight_head:
-                if self.weighting_complexity == '1layer':
-                    self.weight_decoder = nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*self.n_features, 1, 1, padding=0, bias=bias_wn)
-                elif self.weighting_complexity == '3layer':
-                    self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*self.n_features, 32, 3, 
-                                                                        padding=1, padding_mode='replicate', bias=bias_wn),
-                                                        self.activation,
-                                                        nn.Conv3d(32, 16, 3, padding=1, padding_mode='replicate', bias=bias_wn),
-                                                        self.activation,
-                                                        nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn))
-                elif self.weighting_complexity == '5layer':
-                    self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.n_features + self.weight_to_weight_head), 32, 3, 
-                                                                        padding=1, padding_mode='replicate', bias=bias_wn),
-                                                        self.activation,
-                                                        nn.Conv3d(32, 32, 3, padding=1, padding_mode='replicate', bias=bias_wn),
-                                                        self.activation,
-                                                        nn.Conv3d(32, 32, 3, padding=1, padding_mode='replicate', bias=bias_wn),
-                                                        self.activation,
-                                                        nn.Conv3d(32, 16, 3, padding=1, padding_mode='replicate', bias=bias_wn),
-                                                        self.activation,
-                                                        nn.Conv3d(16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn))
-                elif self.weighting_complexity == 'residual_5layer':
-                    self.weight_decoder = residual_5layer(config)
-                elif self.weighting_complexity == 'concat_5layer':
-                    self.weight_decoder = concat_5layer(config)
-                elif self.weighting_complexity == 'unet':
-                    self.weight_decoder = Weighting_Decoder(config)
-                elif self.weighting_complexity == 'encode_features_first':
-                    self.weight_decoder = Weighting_Decoder2(config)
-                    # the negatith concatenating the sdf encoding and the features is that 
-                    # the sdf encoding already is neighborhood aware with a receptive field big enough.
-                    # applying more convolutions to this encoding does not make sense. But we need to apply 
-                    # processing steps to the 2D features to make then neighborhood aware. This means that 
-                    # it makes more sense to process the 2D features through a unet separately and then
-                    # feed them with the sdf encoding through a final prediction layer/s.
-            else:
-                self.weight_decoder = nn.Conv3d(32, 1, 1, padding=0, bias=bias_wn)
+            if self.weighting_complexity == '1layer':
+                self.weight_decoder = nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.n_features + self.weight_to_weight_head), 1, 1, padding=0, bias=bias_wn)
+            elif self.weighting_complexity == '3layer':
+                self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.sdf_to_weight_head + self.n_features*self.feature_to_weight_head + self.weight_to_weight_head), 32, 3, 
+                                                                    padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(32, 16, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn))
+            elif self.weighting_complexity == '3layer_1extra1conv':
+                self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.n_features*self.feature_to_weight_head + self.weight_to_weight_head), 32, 3, 
+                                                padding=1, padding_mode='replicate', bias=bias_wn),
+                                                self.activation,
+                                                nn.Conv3d(32, 32, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                                    self.activation,
+                                                nn.Conv3d(32, 16, 1, padding=0, bias=bias_wn),
+                                                self.activation,
+                                                nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn))
+            elif self.weighting_complexity == '5layer':
+                self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.n_features + self.weight_to_weight_head), 32, 3, 
+                                                                    padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(32, 32, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(32, 32, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(32, 16, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn))
+            elif self.weighting_complexity == '4layer':
+                self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.n_features + self.weight_to_weight_head), 32, 3, 
+                                                                    padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(32, 32, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(32, 16, 3, padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn))
+            elif self.weighting_complexity == '2layer':
+                self.weight_decoder = nn.Sequential(nn.Conv3d(16*len(self.sensors)*self.sdf_enc_to_weight_head + len(self.sensors)*(self.n_features + self.weight_to_weight_head), 16, 3, \
+                                                                    padding=1, padding_mode='replicate', bias=bias_wn),
+                                                    self.activation,
+                                                    nn.Conv3d(16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn))
+            elif self.weighting_complexity == 'residual_5layer':
+                self.weight_decoder = residual_5layer(config)
+            elif self.weighting_complexity == 'concat_5layer':
+                self.weight_decoder = concat_5layer(config)
+            elif self.weighting_complexity == 'unet':
+                self.weight_decoder = Weighting_Decoder(config)
+            elif self.weighting_complexity == 'encode_features_first':
+                self.weight_decoder = Weighting_Decoder2(config)
+                # the negatith concatenating the sdf encoding and the features is that 
+                # the sdf encoding already is neighborhood aware with a receptive field big enough.
+                # applying more convolutions to this encoding does not make sense. But we need to apply 
+                # processing steps to the 2D features to make then neighborhood aware. This means that 
+                # it makes more sense to process the 2D features through a unet separately and then
+                # feed them with the sdf encoding through a final prediction layer/s.
 
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
@@ -664,6 +685,11 @@ class FilteringNet(nn.Module):
                 inp = None
                 if self.sdf_enc_to_weight_head:
                     inp = enc[sensor_]
+                if self.sdf_to_weight_head:
+                    if inp is None:
+                        inp = neighborhood[sensor_][:, 0, :, :, :].unsqueeze(1)
+                    else:
+                        inp = torch.cat((inp, neighborhood[sensor_][:, 0, :, :, :].unsqueeze(1)), dim=1)
                 if self.feature_to_weight_head:
                     if inp is None:
                         inp = neighborhood[sensor_][:, 2:, :, :, :]

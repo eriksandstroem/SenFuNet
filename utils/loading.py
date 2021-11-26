@@ -104,7 +104,7 @@ def load_pipeline(file, model): # loads all paramters that can be loaded in the 
             checkpoint = torch.load(checkpoint)
         else:
             checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
-        # print(checkpoint['pipeline_state_dict'].keys())
+        
         model.load_state_dict(checkpoint['pipeline_state_dict'])
         print('loading full model')
     except:

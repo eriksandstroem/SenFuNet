@@ -6,8 +6,8 @@ SETTINGS:
   log_freq: 442 #957 383 # how many global steps before logging the training loss
   seed: 52
 FUSION_MODEL:
-  use_fusion_net: False
-  fixed: True
+  use_fusion_net: True
+  fixed: False
   output_scale: 1.0
   n_points: 11 # when using the toy noise we use this defauly value
   n_tail_points: 9 # when using the toy noise we use this defauly value
@@ -19,9 +19,9 @@ FUSION_MODEL:
   n_empty_space_voting: 10
   with_peek: False
   max_weight: 500
-  extraction_strategy: 'nearest_neighbor' # nearest_neighbor or trilinear_interpolation
+  extraction_strategy: 'trilinear_interpolation' # nearest_neighbor or trilinear_interpolation
 FEATURE_MODEL:
-  bypass: False
+  w_routing_conf: False
   stereo_warp_right: False
   network: resnet
   learned_features: True
@@ -32,7 +32,7 @@ FEATURE_MODEL:
   w_intensity_gradient: False
   normalize: True
   relative_normalization: False
-  fixed: False
+  fixed: True
   n_features: 4
   n_layers: 6
   enc_activation: torch.nn.Tanh()
@@ -48,17 +48,18 @@ ROUTING_MODEL:
   normalization: False
 FILTERING_MODEL:
   outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. Only works with 5layer model
-  use_outlier_filter: True # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
+  use_outlier_filter: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
   residual_learning: False
   alpha_force: False # I can remove this now!
-  model: 3dconv # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
+  model: 'routedfusion_middle' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
   setting: translate # or avg (relevant only for the mlp model)
   features_to_sdf_enc: False # feed 2D features to sdf encoding head
   features_to_weight_head: True # feed 2D features directly to sensor weighting head
   sdf_enc_to_weight_head: False # feed sdf encoding to sensor weighting head - this feeds the sdf enc directly to the alpha head
+  sdf_to_weight_head: False
   weights_to_weight_head: True # wheather or not to feed the tsdf weights to the sensor weighting head- only works for 5layer model now!
   output_scale: 0.12
-  fixed: False
+  fixed: True
   erosion: False 
   tanh_weight: True
   inverted_weight: False # when tanh_weight is true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head is true
@@ -78,7 +79,7 @@ FILTERING_MODEL:
     nbr_groups: 2
     grouping_strategy: 'absolute'
     network_depth: 2
-    weighting_complexity: '5layer' # low means one layer, high means several layers
+    weighting_complexity: '3layer' # low means one layer, high means several layers
     network_depth_sensor_weighting: 2 # only used when weighting complexity is encode features first
 LOSS:
   alpha_single_sensor_supervision: True
@@ -98,7 +99,7 @@ LOSS:
 TRAINING:
   reset_strategy: True # True or False 
   reset_prob: 0.01 # in percent (used if reset_strategy: True)
-  pretraining: True
+  pretraining: False
   # pretraining_fusion_gauss_close_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210517-112920/model/best_gauss_close_thresh.pth.tar
   # pretraining_fusion_gauss_far_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210517-112920/model/best_gauss_far_thresh.pth.tar
   pretraining_fusion_gauss_close_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210505-232837/model/best_gauss_close_thresh.pth.tar
@@ -108,12 +109,17 @@ TRAINING:
   pretraining_fusion_left_depth_gt_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210708-111836/model/best_left_depth_gt.pth.tar # if path exists, will load these weights at the start of training
   pretraining_fusion_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion/workspace/fusion/210426-153135/model/best_tof.pth.tar # if p
   pretraining_fusion_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion/workspace/fusion/210426-153135/model/best_stereo.pth.tar
+  pretraining_fusionrouting_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210920-230302/model/best_tof.pth.tar # if p
+  pretraining_fusionrouting_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210920-230302/model/best_stereo.pth.tar
   pretraining_fusion_gauss_red_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-085449/model/best_gauss_red.pth.tar
   pretraining_fusion_gauss_blue_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-085449/model/best_gauss_blue.pth.tar
   pretraining_fusion_gauss_red_aug_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-091500/model/best_gauss_red_aug.pth.tar
   pretraining_fusion_gauss_blue_aug_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-091500/model/best_gauss_blue_aug.pth.tar
-  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/stereo/model/best.pth.tar
-  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar
+  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/stereo/model/best.pth.tar # 210914-144957
+  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar # 210914-144118
+  routing_tof_2_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar
+  routing_sgm_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-095139/model/best.pth.tar
+  routing_lea_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-100411/model/best.pth.tar 
   train_batch_size: 1
   train_shuffle: True
   val_batch_size: 1
@@ -124,12 +130,13 @@ TESTING:
   test_batch_size: 1
   test_shuffle: False
   pretrain_filtering_net: False
-  routing_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210907-002732/model/best.pth.tar
-  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210831-122015/model/best.pth.tar # 210330-231415
-  weight_thresholds: [0.0, 1.0]
+  routing_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210930-120658/model/best.pth.tar # 210930-120658 (sgm stereo and psmnet stereo) 210913-093715 (tof and psmnet stereo fusion) 210927-183313 (mono and psmnet stereo fusion) #210907-002732
+  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211105-165218/model/best.pth.tar
+  weight_thresholds: [0.0]
 ROUTING:
   do: False
-  threshold: 0.0 # note that confidence threshold for multidepth routingNet is 0.25
+  dont_smooth_where_uncertain: False
+  threshold: 0.15 # note that confidence threshold for multidepth routingNet is 0.25
   threshold_mono: 0.0
   threshold_stereo: 0.0
   threshold_tof: 0.0
@@ -150,6 +157,8 @@ OPTIMIZATION:
   alternate: False
   alternate_steps: 5
 DATA:
+  collaborative_reconstruction: False
+  frames_per_chunk: 100 # used when colaborative reconstruction is true
   sampling_density_stereo: 1
   sampling_density_tof: 1
   mask_stereo_height: 10 #35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
@@ -170,9 +179,9 @@ DATA:
   data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid (Note: if X_shuffle is true, this option serves no purpose)
   load_scenes_at_once: 1
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
-  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual #/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
+  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual # /cluster/work/cvl/esandstroem/data/corbs ## # #TMPDIR # ## #  # /cluster/work/cvl/esandstroem/data/corbs # TMPDIR ##TMPDIR # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
   dataset: Replica
-  input: [tof, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
+  input: [sgm_stereo, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
   target: gt
   resx_stereo: 256
   resy_stereo: 256
@@ -180,10 +189,10 @@ DATA:
   resy_tof: 256
   resx: 256 # default settings
   resy: 256
-  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt
-  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt
-  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt # /home/esandstroem/scratch-second/euler_project/src/late_fusion_w_featurefusion/lists/replica/test_office_1.txt #
+  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/train.txt
+  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/val.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_4_hotel_0_office_0.txt
   transform: ToTensor()
   init_value: 0.0 # init value of tsdf grids
-  trunc_value: 0.1 # truncation distance
+  trunc_value: 0.05 # truncation distance
   truncation_strategy: standard # standard, artificial or none

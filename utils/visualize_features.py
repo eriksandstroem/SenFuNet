@@ -11,7 +11,7 @@ import trimesh
 import math
 import os
 
-def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_tsdf, tsdfs, weights, features, test_dir, voxel_size, truncation):
+def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_tsdf, tsdfs, weights, features, test_dir, voxel_size, truncation, scene):
     # how should I go from 2 features to rgb colors. The most obvious is: get the maximum norm of the features
     # in both grids and normalize with this value. This means later that the vector length is the alpha in 
     # (RGBA). The phase is then the input to the cmap.
@@ -79,9 +79,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
         del volume
         mesh.compute_vertex_normals()
-        mesh_paths[sensor_] = test_dir + '/downsampled_' + sensor_ + '.ply'
+        mesh_paths[sensor_] = test_dir + '/downsampled_' + sensor_ + '_' + scene + '.ply'
         # o3d.visualization.draw_geometries([mesh])
-        o3d.io.write_triangle_mesh(test_dir + '/downsampled_' + sensor_ + '.ply', mesh) # will remove this written mesh later
+        o3d.io.write_triangle_mesh(test_dir + '/downsampled_' + sensor_ + '_' + scene + '.ply', mesh) # will remove this written mesh later
    
         # My reason for using trimesh here and not open3d was that trimesh can save rgba colors while open3d cant. But 
         # it turns out that meshlab cannot display rgba colors so this is useless, but I keep it for now.
@@ -209,8 +209,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
     # ax.legend(loc='best')
 
-    plt.savefig(test_dir + '/tsne_visualization_both_sensors_color_error.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_both_sensors_color_error.png')
     plt.clf()
+    plt.close()
 
     fig, ax = plt.subplots(1,1)
     for sensor_, color in sensor_to_color.items():
@@ -227,8 +228,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
     # ax.legend(loc='best')
 
-    plt.savefig(test_dir + '/tsne_visualization_both_sensors_color_phase.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_both_sensors_color_phase.png')
     plt.clf()
+    plt.close()
 
     fig, ax = plt.subplots(1,1)
     for sensor_, color in sensor_to_color.items():
@@ -246,8 +248,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
     # ax.legend(loc='best')
 
-    plt.savefig(test_dir + '/tsne_visualization_both_sensors_color_norm.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_both_sensors_color_norm.png')
     plt.clf()
+    plt.close()
 
     # if the categories overlap, it is tricky to see each one
     # thus plot the categories individually as well
@@ -266,8 +269,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
         # ax.legend(loc='best')
 
-        plt.savefig(test_dir + '/tsne_visualization_both_sensors_' + sensor_ + 'color_error.png')
+        plt.savefig(test_dir + '/' + scene + '_tsne_visualization_both_sensors_' + sensor_ + 'color_error.png')
         plt.clf()
+        plt.close()
 
     for sensor_, color in sensor_to_color.items():
         fig, ax = plt.subplots(1,1)
@@ -283,8 +287,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
         # ax.legend(loc='best')
 
-        plt.savefig(test_dir + '/tsne_visualization_both_sensors_' + sensor_ + 'color_phase.png')
+        plt.savefig(test_dir + '/' + scene + '_tsne_visualization_both_sensors_' + sensor_ + 'color_phase.png')
         plt.clf()
+        plt.close()
 
     for sensor_, color in sensor_to_color.items():
         fig, ax = plt.subplots(1,1)
@@ -302,8 +307,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
         # ax.legend(loc='best')
 
-        plt.savefig(test_dir + '/tsne_visualization_both_sensors_' + sensor_ + 'color_norm.png')
+        plt.savefig(test_dir + '/' + scene + '_tsne_visualization_both_sensors_' + sensor_ + 'color_norm.png')
         plt.clf()
+        plt.close()
 
     # we need to subtract half a voxel size from the vertices to get to the voxel points 
     # since the marching cubes algorithm of open3d thinks that the tsdf voxel vertices are
@@ -320,11 +326,11 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
 
         mesh_phase.visual.vertex_colors = color_per_sensor[sensor_]['phase']
         mesh_phase.remove_degenerate_faces()
-        mesh_phase.export(test_dir + '/inter_feature_visualization_' + sensor_ + '_phase.ply')
+        mesh_phase.export(test_dir + '/' + scene + '_inter_feature_visualization_' + sensor_ + '_phase.ply')
 
         mesh_norm.visual.vertex_colors = color_per_sensor[sensor_]['norm']
         mesh_norm.remove_degenerate_faces()
-        mesh_norm.export(test_dir + '/inter_feature_visualization_' + sensor_ + '_norm.ply')
+        mesh_norm.export(test_dir + '/' + scene + '_inter_feature_visualization_' + sensor_ + '_norm.ply')
         os.system('rm ' + mesh_paths[sensor_]) # clean up
 
             
@@ -412,8 +418,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
     # this plots the error of the fused result, but this is also not that interesting. We want to plot 
     # the features with the relative error of one of the sensors so that we can see if there is a
     # correlation between the sensor error and the alpha. I also need to plot the alpha as coloring!
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_error.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_error.png')
     plt.clf()
+    plt.close()
 
     # plot the error visualization again, but now the points which belong to predicted outliers. We
     # do this to see how many of the yellow outliers we catch with the heuristic outlier filter and where they are
@@ -455,7 +462,7 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
     # this plots the error of the fused result, but this is also not that interesting. We want to plot 
     # the features with the relative error of one of the sensors so that we can see if there is a
     # correlation between the sensor error and the alpha. I also need to plot the alpha as coloring!
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_error_remove_outliers.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_error_remove_outliers.png')
     plt.clf()
 
     fig, ax = plt.subplots(1,1)
@@ -463,8 +470,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
     ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, 
             c=alpha, cmap='inferno', norm=normalize)
 
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_alpha.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_alpha.png')
     plt.clf()
+    plt.close()
 
     fig, ax = plt.subplots(1,1)
     # compute the phase of all points
@@ -477,8 +485,9 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
     ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, 
             c=phase, cmap='hsv', norm=normalize) #, label=sensor_)
 
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_phase.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_phase.png')
     plt.clf()
+    plt.close()
 
     fig, ax = plt.subplots(1,1)
     norm = np.linalg.norm(tsne_result, axis=1)
@@ -492,34 +501,54 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
     ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, 
             c=norm, cmap='inferno') #, label=sensor_)
 
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_norm.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_norm.png')
     plt.clf()
+    plt.close()
 
     fig, ax = plt.subplots(1,1)
     alpha = sensor_weighting[voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2]]
     ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, 
             c=alpha, cmap='inferno', norm=normalize)
 
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_alpha.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_alpha.png')
     plt.clf()
+    plt.close()
 
     fig, ax = plt.subplots(1,1)
     alpha = proxy_sensor_weighting[voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2]]
     ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, 
             c=alpha, cmap='inferno', norm=normalize)
 
-    plt.savefig(test_dir + '/tsne_visualization_fused_color_proxy_alpha.png')
+    plt.savefig(test_dir + '/' + scene + '_tsne_visualization_fused_color_proxy_alpha.png')
     plt.clf()
+    plt.close()
+
+    # paste the tsdf middle fusion sensor weighting on the fused tsne plot to compare it against our 
+    # learned method. Note that this is just a hard coding!
+    # sensor_weighting_path = '/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211019-170325/test_no_carving/hotel_0.sensor_weighting.hf5'
+    # import h5py
+    # f = h5py.File(sensor_weighting_path, 'r')
+    # sensor_weighting_tsdf_middle_fusion = np.array(f['sensor_weighting']).astype(np.float16)
+    # fig, ax = plt.subplots(1,1)
+    # # downsample sensor weighting grid
+    # sensor_weighting_tsdf_middle_fusion = sensor_weighting_tsdf_middle_fusion[::downsampling_factor, ::downsampling_factor, ::downsampling_factor]
+    # alpha = sensor_weighting_tsdf_middle_fusion[voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2]]
+    # ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, 
+    #         c=alpha, cmap='inferno', norm=normalize)
+
+    # plt.savefig(test_dir + '/' + 'hotel_0_' + '_tsne_visualization_fused_color_tsdf_middle_fusion_alpha.png')
+    # plt.clf()
+    # plt.close()
 
     # paste the phase and norm colors on the fused mesh
     mesh.compute_vertex_normals()
 
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors['phase'])
-    o3d.io.write_triangle_mesh(test_dir + '/fused_feature_visualization_phase.ply', mesh) # will remove this written mesh later
+    o3d.io.write_triangle_mesh(test_dir + '/' + scene + '_fused_feature_visualization_phase.ply', mesh) # will remove this written mesh later
 
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors['norm'])
 
-    o3d.io.write_triangle_mesh(test_dir + '/fused_feature_visualization_norm.ply', mesh) # will remove this written mesh later
+    o3d.io.write_triangle_mesh(test_dir + '/' + scene + '_fused_feature_visualization_norm.ply', mesh) # will remove this written mesh later
   
     # sanity check - put the error as a color on the downsampled mesh and compare to the not downsampled mesh
     error = np.abs(fused_tsdf[voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2]] - 
@@ -533,7 +562,7 @@ def visualize_features(proxy_sensor_weighting, sensor_weighting, fused_tsdf, gt_
     cm = plt.get_cmap('hsv')
     mesh.vertex_colors = o3d.utility.Vector3dVector(cm(c)[:, :-1])
 
-    o3d.io.write_triangle_mesh(test_dir + '/fused_feature_visualization_error.ply', mesh) # will remove this written mesh later
+    o3d.io.write_triangle_mesh(test_dir + '/' + scene + '_fused_feature_visualization_error.ply', mesh) # will remove this written mesh later
   
 
 # def visualize_features(tsdfs, mesh_paths, features, test_dir, mask, voxel_size):
