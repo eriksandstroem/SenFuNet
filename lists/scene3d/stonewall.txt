@@ -1,0 +1,1 @@
+stonewall/images stonewall/stonewall_png/depth stonewall/dense/stereo/depth_maps stonewall/stonewall_trajectory.log

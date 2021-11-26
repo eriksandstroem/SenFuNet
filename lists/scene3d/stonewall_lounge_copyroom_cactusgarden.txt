@@ -1,0 +1,5 @@
+lounge/images lounge/lounge_png/depth lounge/dense/stereo/depth_maps lounge/lounge_trajectory.log
+stonewall/images stonewall/stonewall_png/depth stonewall/dense/stereo/depth_maps stonewall/stonewall_trajectory.log
+cactusgarden/images cactusgarden/cactusgarden_png/depth cactusgarden/dense/stereo/depth_maps cactusgarden/cactusgarden_trajectory.log
+copyroom/images copyroom/copyroom_png/depth copyroom/dense/stereo/depth_maps copyroom/copyroom_trajectory.log
+

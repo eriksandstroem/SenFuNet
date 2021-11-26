@@ -1,0 +1,2 @@
+copyroom/images copyroom/copyroom_png/depth copyroom/dense/stereo/depth_maps copyroom/copyroom_trajectory.log
+
