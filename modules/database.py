@@ -89,8 +89,8 @@ class Database(Dataset):
                 #     self.tsdf_refined[sensor][s] = Voxelgrid(self.scenes_gt[s].resolution)
                 #     self.tsdf_refined[sensor][s].from_array(init_volume, self.scenes_gt[s].bbox)
 
-            self.tsdf['sgm_stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
-            self.tsdf['sgm_stereo'][s].from_array(init_volume, self.scenes_gt[s].bbox)
+            self.tsdf['tof'][s] = Voxelgrid(self.scenes_gt[s].resolution)
+            self.tsdf['tof'][s].from_array(init_volume, self.scenes_gt[s].bbox)
             self.tsdf['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
             self.tsdf['stereo'][s].from_array(init_volume2, self.scenes_gt[s].bbox)
 

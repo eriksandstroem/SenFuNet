@@ -2,9 +2,11 @@ import torch
 import os
 import logging
 
-# import dataset
-from dataset import ShapeNet
-from dataset import Replica # core dumped
+from dataset import Replica # can be imported because the __init__.py file
+# in the dataset file imports the Replica class from the module replica.
+# we can import dataset in the package utils because the setup.py 
+# module is only called from the train or test scripts i.e. from a higher
+# level.
 from dataset import CoRBS
 from dataset import Scene3D
 
@@ -17,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 import trimesh
 import skimage.measure
 # 
-from modules.database import Database # core dumped
+from modules.database import Database
 
 from utils import transform
 

@@ -112,8 +112,8 @@ def test_fusion(config, scene):
          
             # intr = batch['intrinsics_tof'].squeeze()
             # print(intr)
-            if k < 405:
-                continue
+            # if k < 405:
+            #     continue
             # intrinsic_obj.set_intrinsics(resx, resy, intr[0,0]/resx, intr[1,1]/resy, intr[0,2], intr[1,2])
             intrinsic_obj.set_intrinsics(512, 512, 512/2, 512/2, 512/2 - 0.5, 512/2 - 0.5)
 
