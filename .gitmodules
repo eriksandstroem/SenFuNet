@@ -1,1 +1,4 @@
 
+[submodule "deps/evaluate_3d_reconstruction"]
+	path = deps/evaluate_3d_reconstruction
+	url = https://github.com/tfy14esa/evaluate_3d_reconstruction.git
