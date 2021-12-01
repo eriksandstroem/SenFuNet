@@ -399,12 +399,12 @@ def evaluate(database, config, test_path):
 
             # run commandline command
             # legacy code: used when 3d evaluation was an executable
-            # os.chdir(test_dir)
+            
             # print('running script: evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
             # os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
 
             # evaluate F-score
-            run_evaluation(ply_path, 'standard_trunc', scene, test_dir)
+            run_evaluation(ply_path, test_dir, scene)
 
             # move the logs and plys to the evaluation dirs
             os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
@@ -493,7 +493,7 @@ def evaluate(database, config, test_path):
             #     os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
 
             #     evaluate F-score
-            #     run_evaluation(ply_path, 'standard_trunc', scene, test_dir)
+            #     run_evaluation(ply_path, test_dir, scene)
 
             #     # move the logs and plys to the evaluation dirs
             #     os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
@@ -568,7 +568,7 @@ def evaluate(database, config, test_path):
             #         os.system('evaluate_3d_reconstruction.py ' + ply_path + ' standard_trunc ' + scene)
 
             #         evaluate F-score
-            #         run_evaluation(ply_path, 'standard_trunc', scene, test_dir)
+            #         run_evaluation(ply_path, test_dir, scene)
 
             #         # # move the logs and plys to the evaluation dirs
             #         os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
