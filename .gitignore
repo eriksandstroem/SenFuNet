@@ -128,7 +128,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# ignore folders
+# ignore folders and files
 videos
 .idea
 .vscode
+deps/graphics_new
+utils/invert_colormap.py
+compute_attention_similarity.py

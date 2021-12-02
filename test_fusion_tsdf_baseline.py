@@ -265,7 +265,7 @@ def evaluate(database, config, test_dir):
             ply_path = model_test + '.ply'
 
             # evaluate F-score
-            run_evaluation(ply_path, 'standard_trunc', scene, test_dir)
+            run_evaluation(ply_path, test_dir, scene)
 
             # move the logs and plys to the evaluation dirs
             os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
@@ -340,7 +340,7 @@ def evaluate(database, config, test_dir):
                 ply_path = model_test + '.ply'
 
                 # evaluate F-score
-                run_evaluation(ply_path, 'standard_trunc', scene, test_dir)
+                run_evaluation(ply_path, test_dir, scene)
 
                 # # move the logs and plys to the evaluation dirs
                 os.system('mv ' + test_dir + '/' + model_test + '.logs ' + test_dir + '/' + model_test + '/' + model_test + '.logs')
