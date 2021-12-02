@@ -1,13 +1,13 @@
 SETTINGS:
   gpu: True
   experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion # path where the logging is done and the models are saved.
-  test_mode: True # Does not serve any purpose right now really. Need to code so that the train database does not use the alpha channel but the validation and test database does. make sure this is set to "test" when using test_fusion.py. This makes sure that we visualize the alpha weighting between the sensors if we use more than one sensor
+  test_mode: True # To be removed. Does not serve any purpose right now really. Need to code so that the train database does not use the alpha channel but the validation and test database does. make sure this is set to "test" when using test_fusion.py. This makes sure that we visualize the alpha weighting between the sensors if we use more than one sensor
   eval_freq: 442 # how many global steps before evaluation and saving the model
   log_freq: 442 #957 383 # how many global steps before logging the training loss
   seed: 52
 FUSION_MODEL:
-  use_fusion_net: True
-  fixed: False
+  use_fusion_net: False
+  fixed: True
   output_scale: 1.0
   n_points: 11 # when using the toy noise we use this defauly value
   n_tail_points: 9 # when using the toy noise we use this defauly value
@@ -17,9 +17,9 @@ FUSION_MODEL:
   n_tail_points_stereo: 9
   confidence: False
   n_empty_space_voting: 10
-  with_peek: False
+  with_peek: False # to be removed
   max_weight: 500
-  extraction_strategy: 'trilinear_interpolation' # nearest_neighbor or trilinear_interpolation
+  extraction_strategy: 'nearest_neighbor' # nearest_neighbor or trilinear_interpolation
 FEATURE_MODEL:
   w_routing_conf: False
   stereo_warp_right: False
@@ -32,7 +32,7 @@ FEATURE_MODEL:
   w_intensity_gradient: False
   normalize: True
   relative_normalization: False
-  fixed: True
+  fixed: False
   n_features: 4
   n_layers: 6
   enc_activation: torch.nn.Tanh()
@@ -51,7 +51,7 @@ FILTERING_MODEL:
   use_outlier_filter: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
   residual_learning: False
   alpha_force: False # I can remove this now!
-  model: 'routedfusion_middle' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
+  model: '3dconv' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
   setting: translate # or avg (relevant only for the mlp model)
   features_to_sdf_enc: False # feed 2D features to sdf encoding head
   features_to_weight_head: True # feed 2D features directly to sensor weighting head
@@ -59,7 +59,7 @@ FILTERING_MODEL:
   sdf_to_weight_head: False
   weights_to_weight_head: True # wheather or not to feed the tsdf weights to the sensor weighting head- only works for 5layer model now!
   output_scale: 0.12
-  fixed: True
+  fixed: False
   erosion: False 
   tanh_weight: True
   inverted_weight: False # when tanh_weight is true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head is true
@@ -79,7 +79,7 @@ FILTERING_MODEL:
     nbr_groups: 2
     grouping_strategy: 'absolute'
     network_depth: 2
-    weighting_complexity: '3layer' # low means one layer, high means several layers
+    weighting_complexity: '2layer' # number of 3d convolutions with kernel size 3
     network_depth_sensor_weighting: 2 # only used when weighting complexity is encode features first
 LOSS:
   alpha_single_sensor_supervision: True
@@ -131,7 +131,7 @@ TESTING:
   test_shuffle: False
   pretrain_filtering_net: False
   routing_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210930-120658/model/best.pth.tar # 210930-120658 (sgm stereo and psmnet stereo) 210913-093715 (tof and psmnet stereo fusion) 210927-183313 (mono and psmnet stereo fusion) #210907-002732
-  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211105-165218/model/best.pth.tar
+  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211014-205819/model/best.pth.tar
   weight_thresholds: [0.0]
 ROUTING:
   do: False
@@ -179,9 +179,9 @@ DATA:
   data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid (Note: if X_shuffle is true, this option serves no purpose)
   load_scenes_at_once: 1
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
-  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual # /cluster/work/cvl/esandstroem/data/corbs ## # #TMPDIR # ## #  # /cluster/work/cvl/esandstroem/data/corbs # TMPDIR ##TMPDIR # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
-  dataset: Replica
-  input: [sgm_stereo, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
+  root_dir: /cluster/work/cvl/esandstroem/data/corbs #/cluster/work/cvl/esandstroem/data/replica/manual #  ## # #TMPDIR # ## #  # /cluster/work/cvl/esandstroem/data/corbs # TMPDIR ##TMPDIR # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
+  dataset: CoRBS
+  input: [tof, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
   target: gt
   resx_stereo: 256
   resy_stereo: 256
@@ -191,7 +191,7 @@ DATA:
   resy: 256
   train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/train.txt
   val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/val.txt
-  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_4_hotel_0_office_0.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/human.txt #replica/test_office_4_hotel_0_office_0.txt
   transform: ToTensor()
   init_value: 0.0 # init value of tsdf grids
   trunc_value: 0.05 # truncation distance
