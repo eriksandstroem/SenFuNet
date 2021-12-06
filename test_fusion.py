@@ -300,34 +300,47 @@ def evaluate(database, config, test_path):
             tsdf_cube[:resolution[0], :resolution[1], :resolution[2]] = tsdf
 
 
-            indices_x = mask.nonzero()[0]
-            indices_y = mask.nonzero()[1]
-            indices_z = mask.nonzero()[2]
+            # OPEN3D MARCHING CUBES
+            # ---------------------------------------------
+            # indices_x = mask.nonzero()[0]
+            # indices_y = mask.nonzero()[1]
+            # indices_z = mask.nonzero()[2]
 
-            # this creates a voxelgrid with max_resolution voxels along the length length. Each 
-            # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
-            # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
-            # This is not a problem, however, since we will only initialize the valid indices. I.e. 
-            # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
-            # for this, the max_resolution variable should be 1 less than it is now, making length smaller
-            # as well since length is max_resolution times voxel_size
-            volume = o3d.integration.UniformTSDFVolume(
-                    length=length,
-                    resolution=max_resolution,
-                    sdf_trunc=truncation,
-                    color_type=o3d.integration.TSDFVolumeColorType.RGB8)
+            # # this creates a voxelgrid with max_resolution voxels along the length length. Each 
+            # # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
+            # # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
+            # # This is not a problem, however, since we will only initialize the valid indices. I.e. 
+            # # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
+            # # for this, the max_resolution variable should be 1 less than it is now, making length smaller
+            # # as well since length is max_resolution times voxel_size
+            # volume = o3d.integration.UniformTSDFVolume(
+            #         length=length,
+            #         resolution=max_resolution,
+            #         sdf_trunc=truncation,
+            #         color_type=o3d.integration.TSDFVolumeColorType.RGB8)
             
-            for i in range(indices_x.shape[0]):
-                volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
-                volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
+            # for i in range(indices_x.shape[0]):
+            #     volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
+            #     volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])               
 
-            print("Extract a triangle mesh from the volume and visualize it.")
-            mesh = volume.extract_triangle_mesh()
+            # print("Extract a triangle mesh from the volume and visualize it.")
+            # mesh = volume.extract_triangle_mesh()
 
-            del volume
-            mesh.compute_vertex_normals()
-            # o3d.visualization.draw_geometries([mesh])
-            o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + '.ply'), mesh)
+            # del volume
+            # mesh.compute_vertex_normals()
+            # # o3d.visualization.draw_geometries([mesh])
+            # o3d.io.write_triangle_mesh(os.path.join(test_dir, model_test + '.ply'), mesh)
+            # ---------------------------------------------
+
+            # Skimage marching cubes
+            # ---------------------------------------------
+            import skimage.measure
+            verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(tsdf, level=0, spacing=(0.01, 0.01, 0.01), mask=mask)
+            import trimesh
+            mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
+
+            mesh.export(os.path.join(test_dir, model_test + '.ply'))
+            # ---------------------------------------------
 
 
             # # volume = o3d.integration.UniformTSDFVolume(
