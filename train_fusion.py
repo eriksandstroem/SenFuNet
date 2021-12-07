@@ -200,7 +200,8 @@ def train_fusion(args):
         # best_iou[sensor] = 10000 # USE THIS FOR FEATURE NETWORK TRAINING
         is_best[sensor] = False
 
-    # when using fuse sensors true make sure we use both sensors here in variable sensors
+    # copy sensor list so that we can shuffle the sensors but still have the same
+    # sensor at index 0 and index 1 as originally in the config file input
     sensors = config.DATA.input.copy()
 
     for epoch in range(0, config.TRAINING.n_epochs):
@@ -270,21 +271,21 @@ def train_fusion(args):
             if config.DATA.collaborative_reconstruction:
                 if math.ceil(int(batch['frame_id'][0].split('/')[-1])/ \
                     config.DATA.frames_per_chunk) % 2  == 0:
-                    sensor = sensors[0]
+                    sensor = config.DATA.input[0]
                 else:
-                    sensor = sensors[1]
+                    sensor = config.DATA.input[1]
 
                 batch['depth'] =  batch[sensor + '_depth']
                 # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
                 batch['mask'] = batch[sensor + '_mask']
-                if config.FILTERING_MODEL.model == 'routedfusion_middle':
-                    batch['sensor'] = 'tof'
+                if config.FILTERING_MODEL.model == 'routedfusion':
+                    batch['sensor'] = config.DATA.input[0]
                 else:
                     batch['sensor'] = sensor
 
-                batch['routingNet'] = sensor # used to be able to train routedfusion_middle
-                batch['fusionNet'] = sensor # used to be able to train routedfusion_middle
-                output = pipeline(batch, train_database, epoch, device) # CHANGE
+                batch['routingNet'] = sensor # used to be able to train routedfusion
+                batch['fusionNet'] = sensor # used to be able to train routedfusion
+                output = pipeline(batch, train_database, epoch, device) 
 
                 # optimization
                 if output is None: # output is None when no valid indices were found for the filtering net within the random
@@ -342,19 +343,19 @@ def train_fusion(args):
                 # fusion pipeline
                 # randomly integrate the selected sensors
                 random.shuffle(sensors)
-                # sensors = ['gauss_far_cont']
+
                 for sensor in sensors:
                     batch['depth'] =  batch[sensor + '_depth']
                     # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
                     batch['mask'] = batch[sensor + '_mask']
                     
-                    if config.FILTERING_MODEL.model == 'routedfusion_middle':
-                        batch['sensor'] = 'tof'
+                    if config.FILTERING_MODEL.model == 'routedfusion':
+                        batch['sensor'] = config.DATA.input[0]
                     else:
                         batch['sensor'] = sensor
-                    batch['routingNet'] = sensor # used to be able to train routedfusion_middle
-                    batch['fusionNet'] = sensor # used to be able to train routedfusion_middle
-                    output = pipeline(batch, train_database, epoch, device) # CHANGE
+                    batch['routingNet'] = sensor # used to be able to train routedfusion
+                    batch['fusionNet'] = sensor # used to be able to train routedfusion
+                    output = pipeline(batch, train_database, epoch, device)
 
                     # optimization
                     if output is None: # output is None when no valid indices were found for the filtering net within the random
@@ -545,7 +546,6 @@ def train_fusion(args):
                                                    norm_type=2)
 
             if (i + 1) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
-                print('update weights')
                 if config.FILTERING_MODEL.features_to_sdf_enc or config.FILTERING_MODEL.features_to_weight_head:
                     optimizer_feature.step()
                     scheduler_feature.step()
@@ -587,7 +587,7 @@ def train_fusion(args):
                 pipeline.eval()
 
 
-                pipeline.test(val_loader, val_dataset, val_database, sensors, device)
+                pipeline.test(val_loader, val_dataset, val_database, config.DATA.input, device)
 
                 # val_database.filter(value=1.) # the more frames you integrate, the higher can the value be
                 val_eval, val_eval_fused = val_database.evaluate(mode='val', workspace=workspace)
@@ -638,7 +638,7 @@ def train_fusion(args):
                                                 'epoch': epoch},
                                                is_best=is_best, is_best_filt=is_best_filt)
 
-                pipeline.train() # CHANGE CHECK
+                pipeline.train()
                 if config.ROUTING.do:
                     pipeline.fuse_pipeline._routing_network.eval()
                 if config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
