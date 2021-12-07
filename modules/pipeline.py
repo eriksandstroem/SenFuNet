@@ -28,31 +28,28 @@ class Pipeline(torch.nn.Module):
         elif config.FILTERING_MODEL.model == '3dconv': 
             self.filter_pipeline = Filter_Pipeline(config)
         else:
-            self.filter_pipeline = None # used when we run the tsdf baseline tests
+            self.filter_pipeline = None # used when we run the tsdf fusion or routedfusion
 
 
     def forward(self, batch, database, epoch, device): # train step
         scene_id = batch['frame_id'][0].split('/')[0]
-        # print(scene_id)
-        frame = batch['frame_id'][0].split('/')[-1] # CHANGE
-        # print('1m: ', torch.cuda.max_memory_allocated(device=device))
-        # print('1: ', torch.cuda.memory_allocated(device=device))
+
+        frame = batch['frame_id'][0].split('/')[-1]
+
         fused_output = self.fuse_pipeline.fuse_training(batch, database, device)
-        # print('2m: ', torch.cuda.max_memory_allocated(device=device))
-        # print('2: ', torch.cuda.memory_allocated(device=device))
+
         if self.filter_pipeline is not None:
             filtered_output = self.filter_pipeline.filter_training(fused_output, database, epoch, frame, scene_id, batch['sensor'], device) # CHANGE
         else:
             filtered_output = None
-        # print('3m: ', torch.cuda.max_memory_allocated(device=device))
-        # print('3: ', torch.cuda.memory_allocated(device=device))
+
         if filtered_output == 'save_and_exit':
             return 'save_and_exit'
 
         if filtered_output is not None:
             fused_output['filtered_output'] = filtered_output
         else:
-            if not self.config.FILTERING_MODEL.model == 'routedfusion_middle':
+            if not self.config.FILTERING_MODEL.model == 'routedfusion':
                 return None
 
         if self.config.LOSS.alpha_2d_supervision:
@@ -67,11 +64,6 @@ class Pipeline(torch.nn.Module):
     def test(self, val_loader, val_dataset, val_database, sensors, device):
                 
         for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
-            # print(k)
-            # if k == 466:
-            # validation step - fusion
-            # randomly integrate the selected sensors
-            # random.shuffle(sensors)
             if self.config.DATA.collaborative_reconstruction:
                 if math.ceil(int(batch['frame_id'][0].split('/')[-1])/ \
                     self.config.DATA.frames_per_chunk) % 2  == 0:
@@ -83,13 +75,13 @@ class Pipeline(torch.nn.Module):
                 # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
                 batch['routing_net'] = 'self._routing_network_' + sensor_
                 batch['mask'] = batch[sensor_ + '_mask']
-                if self.config.FILTERING_MODEL.model == 'routedfusion_middle':
-                    batch['sensor'] = 'sgm_stereo'
+                if self.config.FILTERING_MODEL.model == 'routedfusion':
+                    batch['sensor'] = self.config.DATA.input[0]
                 else:
                     batch['sensor'] = sensor_
 
-                batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-                batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+                batch['routingNet'] = sensor_ # used to be able to train routedfusion
+                batch['fusionNet'] = sensor_ # used to be able to train routedfusion
                 output = self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 # print(batch['frame_id'])
@@ -99,13 +91,13 @@ class Pipeline(torch.nn.Module):
                     # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
                     batch['routing_net'] = 'self._routing_network_' + sensor_
                     batch['mask'] = batch[sensor_ + '_mask']
-                    if self.config.FILTERING_MODEL.model == 'routedfusion_middle':
-                        batch['sensor'] = 'sgm_stereo'
+                    if self.config.FILTERING_MODEL.model == 'routedfusion':
+                        batch['sensor'] = self.config.DATA.input[0]
                     else:
                         batch['sensor'] = sensor_
 
-                    batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-                    batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+                    batch['routingNet'] = sensor_ # used to be able to train routedfusion
+                    batch['fusionNet'] = sensor_ # used to be able to train routedfusion
                     output = self.fuse_pipeline.fuse(batch, val_database, device)
 
                     # return
@@ -158,14 +150,10 @@ class Pipeline(torch.nn.Module):
                         # rem_indices = rem_indices.astype(dtype=bool)
                         val_database[scene]['weights_' + sensor_][rem_indices] = 0
         
-    def test_tsdf_baseline(self, val_loader, val_dataset, val_database, sensors, device):
+    def test_tsdf(self, val_loader, val_dataset, val_database, sensors, device):
                 
         for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
-            # print(k)
-            # if k == 466:
-            # validation step - fusion
-            # randomly integrate the selected sensors
-            # random.shuffle(sensors)
+
             if self.config.ROUTING.do and self.config.FILTERING_MODEL.model == 'tsdf_early_fusion':
                 # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
                 batch['routing_net'] = 'self._routing_network'
@@ -179,8 +167,8 @@ class Pipeline(torch.nn.Module):
                     batch['routing_net'] = 'self._routing_network_' + sensor_
                     batch['mask'] = batch[sensor_ + '_mask']
                     batch['sensor'] = sensor_
-                    batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-                    batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+                    batch['routingNet'] = sensor_ # used to be able to train routedfusion
+                    batch['fusionNet'] = sensor_ # used to be able to train routedfusion
                     output = self.fuse_pipeline.fuse(batch, val_database, device)
 
             # if k == 10:
@@ -200,7 +188,7 @@ class Pipeline(torch.nn.Module):
                 val_database.filtered[scene].volume = np.divide(val_database.filtered[scene].volume, weight_sum, out=np.zeros_like(weight_sum), where=weight_sum!=0.0)
 
                 val_database.sensor_weighting[scene] = np.divide(val_database.fusion_weights[sensors[0]][scene], weight_sum, out=np.zeros_like(weight_sum), where=weight_sum!=0.0)
-                print(val_database.sensor_weighting[scene].max())
+
         elif self.config.FILTERING_MODEL.model == 'tsdf_plain_average_fusion': # simple average fusion
             for scene in val_database.filtered.keys():
                 for sensor_ in sensors: 
@@ -245,8 +233,8 @@ class Pipeline(torch.nn.Module):
             batch['routing_net'] = 'self._routing_network_' + sensor_
             batch['mask'] = batch[sensor_ + '_mask']
             batch['sensor'] = sensor_
-            batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-            batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+            batch['routingNet'] = sensor_ # used to be able to train routedfusion
+            batch['fusionNet'] = sensor_ # used to be able to train routedfusion
             output = self.fuse_pipeline.fuse(batch, database, device)
 
         # run filtering network on all voxels which have a non-zero weight
@@ -296,11 +284,7 @@ class Pipeline(torch.nn.Module):
     def test_speed(self, val_loader, val_dataset, val_database, sensors, device): # used to evaluate speed of algorithm
 
         for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
-            # print(k)
-            # if k == 466:
-            # validation step - fusion
-            # randomly integrate the selected sensors
-            # random.shuffle(sensors)
+ 
             if self.config.DATA.collaborative_reconstruction:
                 if math.ceil(int(batch['frame_id'][0].split('/')[-1])/ \
                     self.config.DATA.frames_per_chunk) % 2  == 0:
@@ -312,13 +296,13 @@ class Pipeline(torch.nn.Module):
                 # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
                 batch['routing_net'] = 'self._routing_network_' + sensor_
                 batch['mask'] = batch[sensor_ + '_mask']
-                if self.config.FILTERING_MODEL.model == 'routedfusion_middle':
-                    batch['sensor'] = 'sgm_stereo'
+                if self.config.FILTERING_MODEL.model == 'routedfusion':
+                    batch['sensor'] = self.config.DATA.input[0]
                 else:
                     batch['sensor'] = sensor_
 
-                batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-                batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+                batch['routingNet'] = sensor_ # used to be able to train routedfusion
+                batch['fusionNet'] = sensor_ # used to be able to train routedfusion
                 output = self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 # print(batch['frame_id'])
@@ -328,13 +312,13 @@ class Pipeline(torch.nn.Module):
                     # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_) 
                     batch['routing_net'] = 'self._routing_network_' + sensor_
                     batch['mask'] = batch[sensor_ + '_mask']
-                    if self.config.FILTERING_MODEL.model == 'routedfusion_middle':
-                        batch['sensor'] = 'sgm_stereo'
+                    if self.config.FILTERING_MODEL.model == 'routedfusion':
+                        batch['sensor'] = self.config.DATA.input[0]
                     else:
                         batch['sensor'] = sensor_
 
-                    batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-                    batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+                    batch['routingNet'] = sensor_ # used to be able to train routedfusion
+                    batch['fusionNet'] = sensor_ # used to be able to train routedfusion
                     output = self.fuse_pipeline.fuse(batch, val_database, device)
 
                     # return
@@ -401,8 +385,8 @@ class Pipeline(torch.nn.Module):
                 batch['routing_net'] = 'self._routing_network_' + sensor_
                 batch['mask'] = batch[sensor_ + '_mask']
                 batch['sensor'] = sensor_
-                batch['routingNet'] = sensor_ # used to be able to train routedfusion_middle
-                batch['fusionNet'] = sensor_ # used to be able to train routedfusion_middle
+                batch['routingNet'] = sensor_ # used to be able to train routedfusion
+                batch['fusionNet'] = sensor_ # used to be able to train routedfusion
                 output = self.fuse_pipeline.fuse(batch, database, device) 
 
             # run filtering network on all voxels which have a non-zero weight
@@ -415,8 +399,8 @@ class Pipeline(torch.nn.Module):
             batch['routing_net'] = 'self._routing_network_' + sensor
             batch['mask'] = batch[sensor + '_mask']
             batch['sensor'] = sensor
-            batch['routingNet'] = sensor # used to be able to train routedfusion_middle
-            batch['fusionNet'] = sensor # used to be able to train routedfusion_middle
+            batch['routingNet'] = sensor # used to be able to train routedfusion
+            batch['fusionNet'] = sensor # used to be able to train routedfusion
             output = self.fuse_pipeline.fuse(batch, database, device)
 
         

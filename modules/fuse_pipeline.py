@@ -572,7 +572,8 @@ class Fuse_Pipeline(torch.nn.Module):
             intrinsics = batch['intrinsics' + '_' + batch['sensor']]
         except:
             intrinsics = batch['intrinsics']
-        for sensor in self.config.DATA.input:
+        for sensor in self.config.DATA.input: # No need to extract from both sensors
+        # since I don't do the peeking
 
             extracted_values[sensor] = self._extractor[batch['sensor']].forward(frame,
                                          batch['extrinsics'],
