@@ -27,7 +27,7 @@ class Database(Dataset):
         self.sensors = config.input
         self.w_features = config.features_to_sdf_enc or config.features_to_weight_head
         self.test_mode = config.test_mode
-        self.outlier_filter = config.outlier_filter
+        self.refinement = config.refinement
         self.alpha_supervision = config.alpha_supervision
 
         self.scenes_gt = {}
@@ -35,7 +35,7 @@ class Database(Dataset):
         self.fusion_weights = {}
         self.features = {}
         self.feature_weights = {}
-        if self.outlier_filter and config.test_mode:
+        if self.refinement and config.test_mode:
             self.tsdf_refined = {}
 
         for sensor_ in config.input:
@@ -44,7 +44,7 @@ class Database(Dataset):
             # if config.w_features:# TODO: adapt to when not using features
             self.features[sensor_] = {}
             self.feature_weights[sensor_] = {}
-            if self.outlier_filter and config.test_mode:
+            if self.refinement and config.test_mode:
                 self.tsdf_refined[sensor_] = {}
     
         self.filtered = {} # grid to store the final sdf prediction
@@ -85,7 +85,7 @@ class Database(Dataset):
                 self.features[sensor][s] = np.zeros(fusion_feature_shape, dtype=np.float16)
                 self.feature_weights[sensor][s] = np.zeros(self.scenes_gt[s].volume.shape, dtype=np.float16)
 
-                # if self.outlier_filter and config.test_mode:
+                # if self.refinement and config.test_mode:
                 #     self.tsdf_refined[sensor][s] = Voxelgrid(self.scenes_gt[s].resolution)
                 #     self.tsdf_refined[sensor][s].from_array(init_volume, self.scenes_gt[s].bbox)
 
@@ -94,7 +94,7 @@ class Database(Dataset):
             self.tsdf['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
             self.tsdf['stereo'][s].from_array(init_volume2, self.scenes_gt[s].bbox)
 
-            if self.outlier_filter and config.test_mode:
+            if self.refinement and config.test_mode:
                 self.tsdf_refined['sgm_stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
                 self.tsdf_refined['sgm_stereo'][s].from_array(init_volume3, self.scenes_gt[s].bbox)
                 self.tsdf_refined['stereo'][s] = Voxelgrid(self.scenes_gt[s].resolution)
@@ -131,9 +131,6 @@ class Database(Dataset):
         sample['filtered'] = self.filtered[item].volume
         if len(self.sensors)  == 2 and self.test_mode:
             sample['sensor_weighting'] = self.sensor_weighting[item]
-        elif len(self.sensors) > 2 and self.test_mode:
-            for sensor_ in self.sensors:
-                sample['sensor_weighting_' + sensor_] = self.sensor_weighting[sensor_][item]
         for sensor_ in self.sensors:
             sample['tsdf_' + sensor_] = self.tsdf[sensor_][item].volume
             sample['weights_' + sensor_] = self.fusion_weights[sensor_][item]
@@ -141,7 +138,7 @@ class Database(Dataset):
             sample['features_' + sensor_] = self.features[sensor_][item]
             sample['feature_weights_' + sensor_] = self.feature_weights[sensor_][item]
 
-            if self.outlier_filter and self.test_mode:
+            if self.refinement and self.test_mode:
                 sample['tsdf_refined_' + sensor_] = self.tsdf_refined[sensor_][item].volume
 
         if self.transform is not None:
@@ -182,7 +179,7 @@ class Database(Dataset):
                                           compression='gzip',
                                           compression_opts=9)
 
-            if self.outlier_filter and self.test_mode:
+            if self.refinement and self.test_mode:
                 refinedname = scene_id + '_' + sensor + '.tsdf_refined.hf5'
                 with h5py.File(os.path.join(path, refinedname), 'w') as hf:
                     hf.create_dataset("TSDF",
