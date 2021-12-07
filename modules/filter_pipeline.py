@@ -158,7 +158,7 @@ class Filter_Pipeline(torch.nn.Module):
             if self.config.FILTERING_MODEL.outlier_channel:
                 sensor_weighting_local_grid = sensor_weighting_local_grid.unsqueeze(0)
                 sensor_weighting_local_grid = torch.cat((sensor_weighting_local_grid, sensor_weighting_local_grid), dim=0)
-        if self.config.FILTERING_MODEL.use_outlier_filter and self.config.SETTINGS.test_mode:
+        if self.config.FILTERING_MODEL.use_refinement and self.config.SETTINGS.test_mode:
             tsdf_refined_local_grid = dict()
             for sensor_ in self.config.DATA.input:
                 tsdf_refined_local_grid[sensor_] = torch.zeros_like(filtered_local_grid) 
@@ -213,7 +213,7 @@ class Filter_Pipeline(torch.nn.Module):
                                                                             int(chunk_size/4):-int(chunk_size/4),
                                                                             int(chunk_size/4):-int(chunk_size/4)]
 
-                    if self.config.FILTERING_MODEL.use_outlier_filter and self.config.SETTINGS.test_mode:
+                    if self.config.FILTERING_MODEL.use_refinement and self.config.SETTINGS.test_mode:
                         for sensor_ in self.config.DATA.input:
                             tsdf_refined = sub_filter_dict['tsdf_' + sensor_].cpu().detach()
                             tsdf_refined_local_grid[sensor_][moving_bbox[0, 0] + int(chunk_size/4):moving_bbox[0, 1] - int(chunk_size/4),
@@ -262,7 +262,7 @@ class Filter_Pipeline(torch.nn.Module):
                                                     uninit_indices[:, 2]] = -1
             del sensor_weighting_local_grid
 
-        if self.config.FILTERING_MODEL.use_outlier_filter and self.config.SETTINGS.test_mode:
+        if self.config.FILTERING_MODEL.use_refinement and self.config.SETTINGS.test_mode:
             for sensor_ in self.config.DATA.input:
                 refined_local_grid = tsdf_refined_local_grid[sensor_][int(chunk_size/4):-int(chunk_size/4)-pad_x, 
                 int(chunk_size/4):-int(chunk_size/4)-pad_y, int(chunk_size/4):-int(chunk_size/4)-pad_z]
