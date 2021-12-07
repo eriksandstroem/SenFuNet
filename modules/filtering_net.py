@@ -552,7 +552,7 @@ class FilteringNet(nn.Module):
         self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation) 
         self.n_features = config.FEATURE_MODEL.n_features
         self.residual_learning = config.FILTERING_MODEL.residual_learning
-        self.use_outlier_filter = config.FILTERING_MODEL.use_outlier_filter
+        self.use_refinement = config.FILTERING_MODEL.use_refinement
         self.alpha_force = config.FILTERING_MODEL.alpha_force
         self.alpha_supervision = config.LOSS.alpha_supervision
         self.alpha_single_sensor_supervision = config.LOSS.alpha_single_sensor_supervision
@@ -561,7 +561,7 @@ class FilteringNet(nn.Module):
         self.outlier_filter_model = config.FILTERING_MODEL.CONV3D_MODEL.outlier_filter_model
         self.add_outlier_channel = config.FILTERING_MODEL.outlier_channel
         
-        if self.use_outlier_filter:
+        if self.use_refinement:
             self.encoder = nn.ModuleDict()
             self.sdf_layer = nn.ModuleDict()
             for sensor_ in config.DATA.input:
@@ -648,7 +648,7 @@ class FilteringNet(nn.Module):
         output = dict()
 
         for sensor_ in self.sensors:
-            if self.use_outlier_filter:
+            if self.use_refinement:
                 if self.outlier_filter_model == 'simple':
                     sdf[sensor_] = self.output_scale*self.tanh(self.sdf_layer[sensor_](neighborhood[sensor_][:, 0, :, :, :].unsqueeze(1)))
                 else:  
