@@ -20,7 +20,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
 		self.alpha_2d_supervision = config.LOSS.alpha_2d_supervision
 		self.alpha_single_sensor_supervision = config.LOSS.alpha_single_sensor_supervision
 		self.fusion_weight = config.LOSS.fusion_weight
-		self.refinement_loss = config.FILTERING_MODEL.use_outlier_filter and len(config.DATA.input) > 1 and not (config.FILTERING_MODEL.setting == 'avg' and config.FILTERING_MODEL.model == 'mlp')
+		self.refinement_loss = config.FILTERING_MODEL.use_refinement and len(config.DATA.input) > 1 and not (config.FILTERING_MODEL.setting == 'avg' and config.FILTERING_MODEL.model == 'mlp')
 		self.occ_head = config.FILTERING_MODEL.model == 'mlp' and config.FILTERING_MODEL.setting == 'translate' \
 		 					and config.FILTERING_MODEL.MLP_MODEL.occ_head
 		self.occ_weight = config.LOSS.occ_weight

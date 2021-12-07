@@ -225,7 +225,7 @@ class TranslationNet(torch.nn.Module):
 
         self.config = config
 
-        if self.config.FILTERING_MODEL.use_outlier_filter:
+        if self.config.FILTERING_MODEL.use_refinement:
             self.encoder = nn.ModuleDict()
             self.decoder = nn.ModuleDict()
             for sensor_ in config.DATA.input:
@@ -255,7 +255,7 @@ class TranslationNet(torch.nn.Module):
         occ = dict()
         context_feature = dict()
         for sensor_ in self.config.DATA.input: 
-            if self.config.FILTERING_MODEL.use_outlier_filter:
+            if self.config.FILTERING_MODEL.use_refinement:
                 context_feature[sensor_] = self.encoder[sensor_](neighborhood[sensor_]) 
                 sdf[sensor_], occ[sensor_] = self.decoder[sensor_](neighborhood[sensor_], context_feature[sensor_])
                 if self.config.FILTERING_MODEL.residual_learning: # when doing residual learning, perhaps don't use occupancy loss
