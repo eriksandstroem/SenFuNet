@@ -242,14 +242,6 @@ class Filter_Pipeline_mlp(torch.nn.Module):
             # which include the online outlier filter since the bbox does not really change 
             indices = np.logical_or(indices, database.feature_weights[sensor_][scene] > 0).astype(np.int16) # - indices_and
 
-        if self.config.FILTERING_MODEL.erosion:
-            # if self.config.FILTERING_MODEL.neighborhood == 3:
-            #     # erode indices mask once
-            indices = ndimage.binary_erosion(indices, structure=np.ones((3,3,3)), iterations=1)
-            # else:
-                # erode indices mask twice
-                # indices = ndimage.binary_erosion(indices, structure=np.ones((3,3,3)), iterations=2)
-
         indices = np.transpose(indices.nonzero()).astype(np.int16)
 
         idxList = list()

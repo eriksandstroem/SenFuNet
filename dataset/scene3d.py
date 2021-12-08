@@ -9,7 +9,6 @@ import re
 from skimage import io, transform
 from skimage.color import rgb2gray
 from skimage import filters
-from skimage.morphology import binary_erosion
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
 from dataset.colmap import read_array

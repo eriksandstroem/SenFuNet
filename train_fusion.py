@@ -630,8 +630,7 @@ def train_fusion(args):
                 # val_database.save_to_workspace(workspace, is_best, is_best_tof, is_best_stereo, save_mode=config.SETTINGS.save_mode)
 
                 # save alpha histogram
-                if config.SETTINGS.test_mode:
-                    workspace.save_alpha_histogram(val_database, config.DATA.input, epoch)
+                workspace.save_alpha_histogram(val_database, config.DATA.input, epoch)
 
                 # save checkpoint
                 workspace.save_model_state({'pipeline_state_dict': pipeline.state_dict(),

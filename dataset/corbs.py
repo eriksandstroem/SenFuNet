@@ -8,7 +8,6 @@ import numpy as np
 from skimage import io, transform
 from skimage.color import rgb2gray
 from skimage import filters
-from skimage.morphology import binary_erosion
 from torch.utils.data import Dataset
 
 from graphics import Voxelgrid

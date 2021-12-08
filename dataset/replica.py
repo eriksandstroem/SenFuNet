@@ -8,7 +8,6 @@ import numpy as np
 from skimage import io, transform
 from skimage.color import rgb2gray
 from skimage import filters
-from skimage.morphology import binary_erosion
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
 
@@ -531,12 +530,6 @@ class Replica(Dataset):
         if self.fusion_strategy == 'routingNet':
             mask = np.logical_or((sample['sgm_stereo_depth'] > self.min_depth), (sample['stereo_depth'] > self.min_depth))
             mask = np.logical_and(mask, np.logical_or(sample['sgm_stereo_depth'] < self.max_depth, sample['stereo_depth'] < self.max_depth))
-            # remove strong artifacts coming from pixels close to missing pixels
-            # the routing network computes bad depths for these pixels that are
-            # not missing in the original image due to the convolutions over
-            # zero-valued pixels.
-            # for i in range(10):
-            #     mask = binary_erosion(mask)
 
             # do not integrate depth values close to the image boundary
             # this is relevant for the stereo modality. 
@@ -620,188 +613,6 @@ class Replica(Dataset):
 
         return sample
 
-    # def __getitem__(self, item):
-
-    #     sample = dict()
-    #     sample['item_id'] = item 
-
-    #     # load rgb image
-    #     file = self.color_images[item]
-
-    #     pathsplit = file.split('/')
-    #     scene = pathsplit[-4]
-    #     trajectory = pathsplit[-3]
-    #     frame = os.path.splitext(pathsplit[-1])[0]
-    #     frame_id = '{}/{}/{}'.format(scene, trajectory, frame)
-
-    #     image = io.imread(file)
-
-    #     step_x = image.shape[0] / self.resolution_stereo[0]
-    #     step_y = image.shape[1] / self.resolution_stereo[0]
-
-    #     index_y = [int(step_y * i) for i in
-    #                range(0, int(image.shape[1] / step_y))]
-    #     index_x = [int(step_x * i) for i in
-    #                range(0, int(image.shape[0] / step_x))]
-
-    #     image = image[:, index_y]
-    #     image = image[index_x, :]
-    #     sample['image'] = np.asarray(image).astype(np.float32)/255
-
-
-    #     # if self.intensity_gradient: 
-    #     intensity = rgb2gray(image) # seems to be in range 0 - 1 
-    #     sample['intensity'] = np.asarray(intensity).astype(np.float32)
-    #     grad_y = filters.sobel_h(intensity)
-    #     grad_x = filters.sobel_v(intensity)
-    #     grad = (grad_x**2 + grad_y**2)**(1/2)
-    #     sample['gradient'] = np.asarray(grad).astype(np.float32)
-
-    #     # load noisy depth maps
-    #     file_tof = self.depth_images_tof[item]
-    #     # file_mono = self.depth_images_mono[item]
-    #     file_stereo = self.depth_images_stereo[item]
-
-    #     depth_tof = io.imread(file_tof).astype(np.float32)
-    #     # depth_mono = io.imread(file_mono).astype(np.float32)
-    #     depth_stereo = io.imread(file_stereo).astype(np.float32)
-
-    #     step_x = depth_tof.shape[0] / self.resolution_tof[0]
-    #     step_y = depth_tof.shape[1] / self.resolution_tof[1]
-
-    #     index_y = [int(step_y * i) for i in
-    #                range(0, int(depth_tof.shape[1] / step_y))]
-    #     index_x = [int(step_x * i) for i in
-    #                range(0, int(depth_tof.shape[0] / step_x))]
-
-    #     depth_tof = depth_tof[:, index_y]
-    #     depth_tof = depth_tof[index_x, :]
-
-    #     step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
-    #     step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
-
-    #     index_y = [int(step_y * i) for i in
-    #                range(0, int(depth_stereo.shape[1] / step_y))]
-    #     index_x = [int(step_x * i) for i in
-    #                range(0, int(depth_stereo.shape[0] / step_x))]
-
-    #     depth_stereo = depth_stereo[:, index_y]
-    #     depth_stereo = depth_stereo[index_x, :]
-
-    #     depth_tof /= 1000.
-    #     # depth_mono /= 1000
-    #     depth_stereo /= 1000.
-
-    #     # define mask
-    #     if self.fusion_strategy == 'routingNet':
-    #         raise NotImplementedError
-    #         mask = np.logical_or((depth_tof > self.min_depth), (depth_stereo > self.min_depth))
-    #         mask = np.logical_and(mask, np.logical_or(depth_tof < self.max_depth, depth_stereo < self.max_depth))
-    #         # remove strong artifacts coming from pixels close to missing pixels
-    #         # the routing network computes bad depths for these pixels that are
-    #         # not missing in the original image due to the convolutions over
-    #         # zero-valued pixels.
-    #         # for i in range(10):
-    #         #     mask = binary_erosion(mask)
-
-    #         # do not integrate depth values close to the image boundary
-    #         # this is relevant for the stereo modality. 
-    #         mask[0:10, :] = 0
-    #         mask[-10:-1, :] = 0
-    #         mask[:, 0:10] = 0
-    #         mask[:, -10:-1] = 0
-
-    #         sample['mask'] = mask
-
-    #     else:
-    #         mask = (depth_stereo > self.min_depth_stereo)
-    #         mask = np.logical_and(mask, depth_stereo < self.max_depth_stereo)
-
-    #         # do not integrate depth values close to the image boundary
-    #         # this is relevant for the stereo modality. 
-    #         mask[0:self.mask_stereo_height, :] = 0
-    #         mask[-self.mask_stereo_height:-1, :] = 0
-    #         mask[:, 0:self.mask_stereo_width] = 0
-    #         mask[:, -self.mask_stereo_width:-1] = 0
-    #         sample['stereo_mask'] = mask
-    #         mask = (depth_tof > self.min_depth_tof)
-    #         mask = np.logical_and(mask, depth_tof < self.max_depth_tof)
-
-    #         # do not integrate depth values close to the image boundary
-    #         # this is relevant for the stereo modality. 
-    #         mask[0:self.mask_tof_height, :] = 0
-    #         mask[-self.mask_tof_height:-1, :] = 0
-    #         mask[:, 0:self.mask_tof_width] = 0
-    #         mask[:, -self.mask_tof_width:-1] = 0
-    #         sample['tof_mask'] = mask
-
-    #         sample['tof_depth'] = np.asarray(depth_tof)
-    #         # sample['mono_depth'] = np.asarray(depth_mono)
-    #         sample['stereo_depth'] = np.asarray(depth_stereo)
-
-
-    #     # load ground truth depth map
-    #     file = self.depth_images_gt[item]
-    #     # print(file)
-    #     depth = io.imread(file).astype(np.float32)
-
-    #     step_x = depth.shape[0] / self.resolution_stereo[0]
-    #     step_y = depth.shape[1] / self.resolution_stereo[0]
-
-    #     index_y = [int(step_y * i) for i in
-    #                range(0, int(depth.shape[1] / step_y))]
-    #     index_x = [int(step_x * i) for i in
-    #                range(0, int(depth.shape[0] / step_x))]
-
-    #     depth = depth[:, index_y]
-    #     depth = depth[index_x, :]
-
-    #     depth /= 1000.
-
-    #     sample[self.target] = np.asarray(depth)
-
-    #     # load extrinsics
-    #     file = self.cameras[item]
-    #     # print(file)
-    #     extrinsics = np.loadtxt(file)
-    #     extrinsics = np.linalg.inv(extrinsics).astype(np.float32)
-    #     # the fusion code expects that the camera coordinate system is such that z is in the
-    #     # camera viewing direction, y is down and x is to the right. This is achieved by a serie of rotations
-    #     rot_180_around_y = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]]).astype(np.float32)
-    #     rot_180_around_z = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]).astype(np.float32)
-    #     rot_90_around_x = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]).astype(np.float32)
-    #     rotation = np.matmul(rot_180_around_z, rot_180_around_y)
-    #     extrinsics =  np.matmul(rotation, extrinsics[0:3, 0:4])
-    #     extrinsics = np.linalg.inv(np.concatenate((extrinsics, np.array([[0, 0, 0, 1]])), axis=0))
-    #     sample['extrinsics'] = np.matmul(rot_90_around_x, extrinsics[0:3, 0:4])
-
-    #     hfov = 90.
-    #     f = self.resolution_tof[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
-    #     shift = self.resolution_tof[0]/2
-
-    #     # load intrinsics
-    #     intrinsics = np.asarray([[f, 0., shift],
-    #                              [0., f, shift],
-    #                              [0., 0., 1.]])
-
-    #     sample['intrinsics_tof'] = intrinsics
-
-    #     f = self.resolution_stereo[0]/2.*(1./np.tan(np.deg2rad(hfov)/2)) # I always assume square input images
-    #     shift = self.resolution_stereo[0]/2
-
-    #     # load intrinsics
-    #     intrinsics = np.asarray([[f, 0., shift],
-    #                              [0., f, shift],
-    #                              [0., 0., 1.]])
-
-    #     sample['intrinsics_stereo'] = intrinsics
-
-    #     sample['frame_id'] = frame_id
-
-    #     if self.transform:
-    #         sample = self.transform(sample)
-
-    #     return sample
 
     def get_warped_image(self, right_rgb, left_depth):
         
