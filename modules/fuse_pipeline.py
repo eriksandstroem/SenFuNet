@@ -434,7 +434,6 @@ class Fuse_Pipeline(torch.nn.Module):
     def fuse(self, batch, database, device):  # TODO: adapt to when not using features
 
         self.device = device
-
         # routing
         if self.config.ROUTING.do:
             if self.config.DATA.fusion_strategy == "routingNet":
@@ -552,7 +551,9 @@ class Fuse_Pipeline(torch.nn.Module):
         database.fusion_weights[batch["sensor"]][scene_id] = (
             weights.cpu().detach().numpy()
         )
-        database.features[batch["sensor"]][scene_id] = features.cpu().detach().numpy()
+        database.features[batch["sensor"]][scene_id].volume = (
+            features.cpu().detach().numpy()
+        )
         database.feature_weights[batch["sensor"]][scene_id] = (
             feature_weights.cpu().detach().numpy()
         )
@@ -739,7 +740,9 @@ class Fuse_Pipeline(torch.nn.Module):
         database.fusion_weights[batch["sensor"]][scene_id] = (
             weights.cpu().detach().numpy()
         )
-        database.features[batch["sensor"]][scene_id] = features.cpu().detach().numpy()
+        database.features[batch["sensor"]][scene_id].volume = (
+            features.cpu().detach().numpy()
+        )
         database.feature_weights[batch["sensor"]][scene_id] = (
             feature_weights.cpu().detach().numpy()
         )

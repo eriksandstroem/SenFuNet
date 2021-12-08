@@ -7,7 +7,6 @@ import math
 
 from modules.fuse_pipeline import Fuse_Pipeline
 from modules.filter_pipeline import Filter_Pipeline
-from modules.filter_pipeline_mlp import Filter_Pipeline_mlp
 
 import math
 import numpy as np
@@ -23,9 +22,7 @@ class Pipeline(torch.nn.Module):
 
         # setup pipeline
         self.fuse_pipeline = Fuse_Pipeline(config)
-        if config.FILTERING_MODEL.model == "mlp":
-            self.filter_pipeline = Filter_Pipeline_mlp(config)
-        elif config.FILTERING_MODEL.model == "3dconv":
+        if config.FILTERING_MODEL.model == "3dconv":
             self.filter_pipeline = Filter_Pipeline(config)
         else:
             self.filter_pipeline = (
@@ -64,9 +61,9 @@ class Pipeline(torch.nn.Module):
 
         return fused_output
 
-    def test(self, val_loader, val_dataset, val_database, sensors, device):
+    def test(self, loader, dataset, database, sensors, device):
 
-        for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
+        for k, batch in tqdm(enumerate(loader), total=len(dataset)):
             if self.config.DATA.collaborative_reconstruction:
                 if (
                     math.ceil(
@@ -91,7 +88,7 @@ class Pipeline(torch.nn.Module):
 
                 batch["routingNet"] = sensor_  # used to be able to train routedfusion
                 batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-                output = self.fuse_pipeline.fuse(batch, val_database, device)
+                output = self.fuse_pipeline.fuse(batch, database, device)
             else:
                 # print(batch['frame_id'])
                 for sensor_ in sensors:
@@ -111,7 +108,7 @@ class Pipeline(torch.nn.Module):
                     batch[
                         "fusionNet"
                     ] = sensor_  # used to be able to train routedfusion
-                    output = self.fuse_pipeline.fuse(batch, val_database, device)
+                    output = self.fuse_pipeline.fuse(batch, database, device)
 
                     # return
 
@@ -120,19 +117,20 @@ class Pipeline(torch.nn.Module):
 
         if self.filter_pipeline is not None:
             # run filtering network on all voxels which have a non-zero weight
-            for scene in val_database.filtered.keys():
-                self.filter_pipeline.filter(scene, val_database, device)
+            for scene in database.filtered.keys():
+                self.filter_pipeline.filter(scene, database, device)
 
             # apply outlier filter i.e. make the weights of the outlier voxels zero so
             # that they are not used in the evaluation of the IoU
-            for scene in val_database.filtered.keys():
-                mask = np.zeros_like(val_database[scene]["gt"])
-                and_mask = np.ones_like(val_database[scene]["gt"])
+            # This step might not be needed anymore - check!
+            for scene in database.filtered.keys():
+                mask = np.zeros_like(database[scene]["gt"])
+                and_mask = np.ones_like(database[scene]["gt"])
                 sensor_mask = dict()
 
                 for sensor_ in self.config.DATA.input:
                     # print(sensor_)
-                    weights = val_database.fusion_weights[sensor_][scene]
+                    weights = database.fusion_weights[sensor_][scene]
                     mask = np.logical_or(mask, weights > 0)
                     and_mask = np.logical_and(and_mask, weights > 0)
                     sensor_mask[sensor_] = weights > 0
@@ -140,11 +138,9 @@ class Pipeline(torch.nn.Module):
 
                 # load weighting sensor grid
                 if self.config.FILTERING_MODEL.outlier_channel:
-                    sensor_weighting = val_database[scene]["sensor_weighting"][
-                        1, :, :, :
-                    ]
+                    sensor_weighting = database[scene]["sensor_weighting"][1, :, :, :]
                 else:
-                    sensor_weighting = val_database[scene]["sensor_weighting"]
+                    sensor_weighting = database[scene]["sensor_weighting"]
 
                 only_one_sensor_mask = np.logical_xor(mask, and_mask)
                 for sensor_ in self.config.DATA.input:
@@ -168,7 +164,7 @@ class Pipeline(torch.nn.Module):
                         )
 
                     # rem_indices = rem_indices.astype(dtype=bool)
-                    val_database[scene]["weights_" + sensor_][rem_indices] = 0
+                    database[scene]["weights_" + sensor_][rem_indices] = 0
 
     def test_tsdf(self, val_loader, val_dataset, val_database, sensors, device):
 

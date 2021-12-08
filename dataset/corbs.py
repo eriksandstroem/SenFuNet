@@ -10,7 +10,6 @@ from skimage.color import rgb2gray
 from skimage import filters
 from torch.utils.data import Dataset
 
-from graphics import Voxelgrid
 import h5py
 import matplotlib.pyplot as plt
 # uncomment to run python dataset/corbs.py main
@@ -298,10 +297,7 @@ class CoRBS(Dataset):
         bbox[:, 0] = f.attrs['bbox'][:, 0] - self.pad*f.attrs['voxel_size']*np.ones((1,1,1))
         bbox[:, 1] = bbox[:, 0] + f.attrs['voxel_size'] * np.array(voxels.shape)
 
-        voxelgrid = Voxelgrid(f.attrs['voxel_size'])
-        voxelgrid.from_array(voxels, bbox)
-
-        return voxelgrid
+        return voxels, bbox, f.attrs['voxel_size']
 
 
 
