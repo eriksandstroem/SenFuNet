@@ -114,57 +114,54 @@ class Pipeline(torch.nn.Module):
 
             # if k == 5:
             #     break # debug
-
+        # only apply the outlier filter during validation. For testing, we need the original grids to evaluate the single sensor reconstructions
         if self.filter_pipeline is not None:
             # run filtering network on all voxels which have a non-zero weight
             for scene in database.filtered.keys():
                 self.filter_pipeline.filter(scene, database, device)
 
-            # apply outlier filter i.e. make the weights of the outlier voxels zero so
-            # that they are not used in the evaluation of the IoU
-            # This step might not be needed anymore - check!
-            for scene in database.filtered.keys():
-                mask = np.zeros_like(database[scene]["gt"])
-                and_mask = np.ones_like(database[scene]["gt"])
-                sensor_mask = dict()
+        # for scene in database.filtered.keys():
+        #     mask = np.zeros_like(database[scene]["gt"])
+        #     and_mask = np.ones_like(database[scene]["gt"])
+        #     sensor_mask = dict()
 
-                for sensor_ in self.config.DATA.input:
-                    # print(sensor_)
-                    weights = database.fusion_weights[sensor_][scene]
-                    mask = np.logical_or(mask, weights > 0)
-                    and_mask = np.logical_and(and_mask, weights > 0)
-                    sensor_mask[sensor_] = weights > 0
-                    # break
+        #     for sensor_ in self.config.DATA.input:
+        #         # print(sensor_)
+        #         weights = database.fusion_weights[sensor_][scene]
+        #         mask = np.logical_or(mask, weights > 0)
+        #         and_mask = np.logical_and(and_mask, weights > 0)
+        #         sensor_mask[sensor_] = weights > 0
+        #         # break
 
-                # load weighting sensor grid
-                if self.config.FILTERING_MODEL.outlier_channel:
-                    sensor_weighting = database[scene]["sensor_weighting"][1, :, :, :]
-                else:
-                    sensor_weighting = database[scene]["sensor_weighting"]
+        #     # load weighting sensor grid
+        #     if self.config.FILTERING_MODEL.outlier_channel:
+        #         sensor_weighting = database[scene]["sensor_weighting"][1, :, :, :]
+        #     else:
+        #         sensor_weighting = database[scene]["sensor_weighting"]
 
-                only_one_sensor_mask = np.logical_xor(mask, and_mask)
-                for sensor_ in self.config.DATA.input:
-                    only_sensor_mask = np.logical_and(
-                        only_one_sensor_mask, sensor_mask[sensor_]
-                    )
-                    if sensor_ == self.config.DATA.input[0]:
-                        rem_indices = np.logical_and(
-                            only_sensor_mask, sensor_weighting < 0.5
-                        )
-                    else:
-                        # before I fixed the bug always ended up here when I had tof and stereo as sensors
-                        # but this would mean that for the tof sensor I removed those indices
-                        # if alpha was larger than 0.5 which it almost always is. This means that
-                        # essentially all (cannot be 100 % sure) voxels where we only integrated
-                        # tof, was removed. Since the histogram is essentially does not have
-                        # any voxels with trust less than 0.5, we also removed all alone stereo voxels
-                        # so at the end we end up with a mask very similar to the and_mask
-                        rem_indices = np.logical_and(
-                            only_sensor_mask, sensor_weighting > 0.5
-                        )
+        #     only_one_sensor_mask = np.logical_xor(mask, and_mask)
+        #     for sensor_ in self.config.DATA.input:
+        #         only_sensor_mask = np.logical_and(
+        #             only_one_sensor_mask, sensor_mask[sensor_]
+        #         )
+        #         if sensor_ == self.config.DATA.input[0]:
+        #             rem_indices = np.logical_and(
+        #                 only_sensor_mask, sensor_weighting < 0.5
+        #             )
+        #         else:
+        #             # before I fixed the bug always ended up here when I had tof and stereo as sensors
+        #             # but this would mean that for the tof sensor I removed those indices
+        #             # if alpha was larger than 0.5 which it almost always is. This means that
+        #             # essentially all (cannot be 100 % sure) voxels where we only integrated
+        #             # tof, was removed. Since the histogram is essentially does not have
+        #             # any voxels with trust less than 0.5, we also removed all alone stereo voxels
+        #             # so at the end we end up with a mask very similar to the and_mask
+        #             rem_indices = np.logical_and(
+        #                 only_sensor_mask, sensor_weighting > 0.5
+        #             )
 
-                    # rem_indices = rem_indices.astype(dtype=bool)
-                    database[scene]["weights_" + sensor_][rem_indices] = 0
+        #         # rem_indices = rem_indices.astype(dtype=bool)
+        #         database[scene]["weights_" + sensor_][rem_indices] = 0
 
     def test_tsdf(self, val_loader, val_dataset, val_database, sensors, device):
 

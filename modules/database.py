@@ -27,6 +27,7 @@ class Database(Dataset):
         self.test_mode = config.test_mode
         self.refinement = config.refinement
         self.alpha_supervision = config.alpha_supervision
+        self.outlier_channel = config.outlier_channel
 
         self.scenes_gt = {}
         self.tsdf = {}
@@ -64,15 +65,15 @@ class Database(Dataset):
                 )
 
                 # if config.w_features:# TODO: adapt to when not using features
-                fusion_feature_shape = (
-                    self.scenes_gt[s].volume.shape[0],
-                    self.scenes_gt[s].volume.shape[1],
-                    self.scenes_gt[s].volume.shape[2],
-                    self.n_features,
-                )
-                self.features[sensor][s] = np.zeros(
-                    fusion_feature_shape, dtype=np.float16
-                )
+                # fusion_feature_shape = (
+                #     self.scenes_gt[s].volume.shape[0],
+                #     self.scenes_gt[s].volume.shape[1],
+                #     self.scenes_gt[s].volume.shape[2],
+                #     self.n_features,
+                # )
+                # self.features[sensor][s] = np.zeros(
+                #     fusion_feature_shape, dtype=np.float16
+                # )
                 self.features[sensor][s] = FeatureGrid(
                     voxel_size, self.n_features, bbox
                 )
@@ -171,13 +172,8 @@ class Database(Dataset):
             with h5py.File(os.path.join(path, weightname), "w") as hf:
                 hf.create_dataset(
                     "weights",
-                    shape=self.feature_weights[sensor][
-                        scene_id
-                    ].shape,  # NOTE MAYBE CHANGE LATER TO FUSION WEIGHTS? Maybe not, because I use the
-                    # feature weights here because at test time I remove the indices of the fusion weights since I want that during
-                    # validation during training, but here I use the non-altered feature weights. I should remove the
-                    # feature weights though and only have one set of weights, but that requires some coding.
-                    data=self.feature_weights[sensor][scene_id],
+                    shape=self.fusion_weights[sensor][scene_id].shape,
+                    data=self.fusion_weights[sensor][scene_id],
                     compression="gzip",
                     compression_opts=9,
                 )
@@ -245,26 +241,31 @@ class Database(Dataset):
             else:
                 workspace.log("Evaluating {} ...".format(scene_id), mode)
             est = {}
-            mask = {}
+            mask, mask_filt = self.get_evaluation_masks(scene_id)
+            # print(mask_filt.sum())
+            # mask = {}
             for sensor in self.sensors:
                 est[sensor] = self.tsdf[sensor][scene_id].volume
-                mask[sensor] = (
-                    self.feature_weights[sensor][scene_id] > 0
-                )  # do not use fusion weights here
-                # because the fusion weights are filtered with the learned outlier filter so only the fused
-                # grid is allowed to use that for masking
+                # mask[sensor] = (
+                #     self.feature_weights[sensor][scene_id] > 0
+                # )  # do not use fusion weights here
+            # because the fusion weights are filtered with the learned outlier filter so only the fused
+            # grid is allowed to use that for masking
+            # mask_filt = np.zeros_like(self.scenes_gt[scene_id].volume)
+            # for sensor_ in self.sensors:
+            #     mask_filt = np.logical_or(
+            #         mask_filt, self.fusion_weights[sensor_][scene_id] > 0
+            #     )
+            print(mask_filt.sum())
 
             est_filt = self.filtered[scene_id].volume
             gt = self.scenes_gt[scene_id].volume
-            mask_filt = np.zeros_like(gt)
-            for sensor in self.sensors:
-                mask_filt = np.logical_or(
-                    mask_filt, self.fusion_weights[sensor][scene_id] > 0
-                )
 
             eval_results_scene = dict()
-            for sensor in self.sensors:
-                eval_results_scene[sensor] = evaluation(est[sensor], gt, mask[sensor])
+            for sensor_ in self.sensors:
+                eval_results_scene[sensor_] = evaluation(
+                    est[sensor_], gt, mask[sensor_]
+                )
 
             eval_results_scene_filt = evaluation(est_filt, gt, mask_filt)
 
@@ -345,3 +346,44 @@ class Database(Dataset):
                     self.feature_weights[sensor][scene_id] = np.zeros(
                         self.scenes_gt[scene_id].shape, dtype=np.float16
                     )
+
+    def get_evaluation_masks(self, scene):
+        sensor_mask = {}
+        mask = np.zeros_like(self[scene]["gt"])
+        and_mask = np.ones_like(self[scene]["gt"])
+        filter_mask = np.zeros_like(self[scene]["gt"])
+        sensor_mask_filtering = {}
+
+        for sensor_ in self.sensors:
+            # print(sensor_)
+            weights = self.fusion_weights[sensor_][scene]
+            mask = np.logical_or(mask, weights > 0)
+            and_mask = np.logical_and(and_mask, weights > 0)
+            sensor_mask[sensor_] = weights > 0
+            # break
+
+        # load weighting sensor grid
+        if self.outlier_channel:
+            sensor_weighting = self.sensor_weighting[scene][1, :, :, :]
+        else:
+            sensor_weighting = self.sensor_weighting[scene]
+
+        only_one_sensor_mask = np.logical_xor(mask, and_mask)
+        for sensor_ in self.sensors:
+
+            only_sensor_mask = np.logical_and(
+                only_one_sensor_mask, sensor_mask[sensor_]
+            )
+            if sensor_ == self.sensors[0]:
+                rem_indices = np.logical_and(only_sensor_mask, sensor_weighting < 0.5)
+            else:
+                rem_indices = np.logical_and(only_sensor_mask, sensor_weighting > 0.5)
+
+            # rem_indices = rem_indices.astype(dtype=bool)
+            sensor_mask_filtering[sensor_] = sensor_mask[sensor_].copy()
+            sensor_mask_filtering[sensor_][rem_indices] = 0
+
+        for sensor_ in self.sensors:
+            filter_mask = np.logical_or(filter_mask, sensor_mask_filtering[sensor_] > 0)
+
+        return sensor_mask, filter_mask
