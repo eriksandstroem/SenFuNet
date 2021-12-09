@@ -33,7 +33,6 @@ class Database(Dataset):
         self.tsdf = {}
         self.fusion_weights = {}
         self.features = {}
-        self.feature_weights = {}
         if self.refinement and config.test_mode:
             self.tsdf_refined = {}
 
@@ -42,7 +41,6 @@ class Database(Dataset):
             self.fusion_weights[sensor_] = {}
             # if config.w_features:# TODO: adapt to when not using features
             self.features[sensor_] = {}
-            self.feature_weights[sensor_] = {}
             if self.refinement and config.test_mode:
                 self.tsdf_refined[sensor_] = {}
 
@@ -76,10 +74,6 @@ class Database(Dataset):
                 # )
                 self.features[sensor][s] = FeatureGrid(
                     voxel_size, self.n_features, bbox
-                )
-
-                self.feature_weights[sensor][s] = np.zeros(
-                    self.scenes_gt[s].shape, dtype=np.float16
                 )
 
                 self.tsdf[sensor][s] = VoxelGrid(
@@ -139,7 +133,6 @@ class Database(Dataset):
             sample["weights_" + sensor_] = self.fusion_weights[sensor_][item]
             # if self.w_features:# TODO: adapt to when not using features
             sample["features_" + sensor_] = self.features[sensor_][item].volume
-            sample["feature_weights_" + sensor_] = self.feature_weights[sensor_][item]
 
             if self.refinement and self.test_mode:
                 sample["tsdf_refined_" + sensor_] = self.tsdf_refined[sensor_][
@@ -315,9 +308,6 @@ class Database(Dataset):
                 self.features[sensor][scene_id].volume = np.zeros(
                     self.features[sensor][scene_id].shape, dtype=np.float16
                 )
-                self.feature_weights[sensor][scene_id] = np.zeros(
-                    self.scenes_gt[scene_id].shape, dtype=np.float16
-                )
         else:
             for scene_id in self.scenes_gt.keys():
                 for sensor in self.sensors:
@@ -330,9 +320,6 @@ class Database(Dataset):
                     # if self.w_features: # TODO: adapt to when not using features
                     self.features[sensor][scene_id].volume = np.zeros(
                         self.features[sensor][scene_id].shape, dtype=np.float16
-                    )
-                    self.feature_weights[sensor][scene_id] = np.zeros(
-                        self.scenes_gt[scene_id].shape, dtype=np.float16
                     )
 
     def get_evaluation_masks(self, scene):

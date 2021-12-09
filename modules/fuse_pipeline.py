@@ -409,11 +409,6 @@ class Fuse_Pipeline(torch.nn.Module):
         # we do not need to compute an update_feature_weights variable for the features since they are all one at the indices in question.
         # we need to compute an update_feature_indices however
         update_features = features[:, valid, :tail_points, :]
-        update_feature_indices = values["feature_indices"][:, valid, :tail_points, :, :]
-        # the option of not training on border voxels is irrelevant for the 3dconv architecture
-        filter_indices = values["feature_indices"][
-            :, valid_filter, :tail_points, :, :
-        ]  # quite randomly chosen number 2 here. I might not need it even.
 
         del valid
 
@@ -423,8 +418,6 @@ class Fuse_Pipeline(torch.nn.Module):
             update_features=update_features,
             update_weights=update_weights,
             update_indices=update_indices,
-            update_feature_indices=update_feature_indices,
-            filter_indices=filter_indices,
             update_indices_empty=update_indices_empty,
             update_weights_empty=update_weights_empty,
         )
@@ -498,7 +491,6 @@ class Fuse_Pipeline(torch.nn.Module):
             database[scene_id]["resolution"],
             self.config.SETTINGS.gpu,
             database[scene_id]["weights" + "_" + batch["sensor"]],
-            database[scene_id]["feature_weights" + "_" + batch["sensor"]],
         )
 
         try:
@@ -537,18 +529,12 @@ class Fuse_Pipeline(torch.nn.Module):
             batch["sensor"],
         )
 
-        tsdf, features, weights, feature_weights, indices = self._integrator.forward(
+        tsdf, features, weights, indices = self._integrator.forward(
             integrator_input,
             database[scene_id]["tsdf_" + batch["sensor"]].to(device),
             database[scene_id]["features_" + batch["sensor"]].to(device),
             database[scene_id]["weights_" + batch["sensor"]].to(device),
-            database[scene_id]["feature_weights_" + batch["sensor"]].to(device),
         )
-
-        # print("weights: ", weights.float().sum())
-        # if weights.float().sum() != feature_weights.float().sum():
-        #     print("weights: ", weights.float().sum())
-        #     print("feature_weights: ", feature_weights.float().sum())
 
         del indices, integrator_input
 
@@ -559,11 +545,8 @@ class Fuse_Pipeline(torch.nn.Module):
         database.features[batch["sensor"]][scene_id].volume = (
             features.cpu().detach().numpy()
         )
-        # database.feature_weights[batch["sensor"]][scene_id] = (
-        #     feature_weights.cpu().detach().numpy()
-        # )
 
-        del tsdf, weights, features, feature_weights
+        del tsdf, weights, features
 
         return
 
@@ -653,7 +636,6 @@ class Fuse_Pipeline(torch.nn.Module):
             database[scene_id]["resolution"],
             self.config.SETTINGS.gpu,
             database[scene_id]["weights" + "_" + batch["sensor"]],
-            database[scene_id]["feature_weights" + "_" + batch["sensor"]],
         )
 
         # TODO: make function that extracts only the gt values for speed up during training
@@ -667,7 +649,6 @@ class Fuse_Pipeline(torch.nn.Module):
             database[scene_id]["resolution"],
             self.config.SETTINGS.gpu,
             database[scene_id]["weights_" + batch["sensor"]],
-            database[scene_id]["feature_weights_" + batch["sensor"]],
         )
 
         tsdf_target = extracted_values_gt["fusion_values"]
@@ -731,12 +712,11 @@ class Fuse_Pipeline(torch.nn.Module):
 
         del extracted_values, tsdf_est, feature_est, filtered_frame
 
-        tsdf, features, weights, feature_weights, indices = self._integrator.forward(
+        tsdf, features, weights, indices = self._integrator.forward(
             integrator_input,
             database[scene_id]["tsdf_" + batch["sensor"]].to(device),
             database[scene_id]["features_" + batch["sensor"]].to(device),
             database[scene_id]["weights_" + batch["sensor"]].to(device),
-            database[scene_id]["feature_weights_" + batch["sensor"]].to(device),
         )
 
         del integrator_input
@@ -747,9 +727,6 @@ class Fuse_Pipeline(torch.nn.Module):
         )
         database.features[batch["sensor"]][scene_id].volume = (
             features.cpu().detach().numpy()
-        )
-        database.feature_weights[batch["sensor"]][scene_id] = (
-            feature_weights.cpu().detach().numpy()
         )
 
         output["tsdf"] = tsdf

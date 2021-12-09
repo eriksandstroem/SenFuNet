@@ -6,11 +6,11 @@ import time
 
 
 class Extractor(nn.Module):
-    '''
+    """
     This module extracts voxel rays or blocks around voxels that are given by the
     reconstructed 2D depth map as well as the given groundtruth volume and the
     current state of the reconstruction volume
-    '''
+    """
 
     def __init__(self, config, sensor):
 
@@ -18,16 +18,27 @@ class Extractor(nn.Module):
 
         self.config = config
         try:
-            self.n_points = eval('self.config.n_points_' + sensor) 
+            self.n_points = eval("self.config.n_points_" + sensor)
         except:
             self.n_points = self.config.n_points
-        self.mode = 'ray'
+        self.mode = "ray"
         self.n_empty_space_voting = config.n_empty_space_voting
         self.init_val = config.init_value
         self.extraction_strategy = config.extraction_strategy
 
-    def forward(self, depth, extrinsics, intrinsics, tsdf_volume, feature_volume, origin, resolution, gpu, weights_volume, feature_weights_volume):
-        '''
+    def forward(
+        self,
+        depth,
+        extrinsics,
+        intrinsics,
+        tsdf_volume,
+        feature_volume,
+        origin,
+        resolution,
+        gpu,
+        weights_volume,
+    ):
+        """
         Computes the forward pass of extracting the rays/blocks and the corresponding coordinates
 
         :param depth: depth map with the values that define the center voxel of the ray/block
@@ -38,35 +49,50 @@ class Extractor(nn.Module):
         :param origin: origin of groundtruth volume in world coordinates
         :param resolution: resolution of voxel volume
         :return: values/voxels of groundtruth and current as well as at its coordinates and indices
-        '''
+        """
 
         intrinsics = intrinsics.float()
         extrinsics = extrinsics.float()
 
-        if torch.cuda.is_available() and gpu:  # putting extractor on gpu. This makes computations much faster
+        if (
+            torch.cuda.is_available() and gpu
+        ):  # putting extractor on gpu. This makes computations much faster
             intrinsics = intrinsics.cuda()
             extrinsics = extrinsics.cuda()
 
             tsdf_volume = tsdf_volume.cuda()
             weights_volume = weights_volume.cuda()
-            # feature_volume = feature_volume.cuda()
-            # feature_weights_volume = feature_weights_volume.cuda()
             origin = origin.cuda()
 
         b, h, w = depth.shape
 
-        self.depth = depth.contiguous().view(b, h*w)
-
-        coords = self.compute_coordinates(depth, extrinsics, intrinsics, origin, resolution, gpu)
+        coords = self.compute_coordinates(
+            depth, extrinsics, intrinsics, origin, resolution, gpu
+        )
 
         # compute rays
         eye_w = extrinsics[:, :3, 3]
 
-        ray_pts, empty_points = self.extract_values(coords, eye_w, origin, resolution, n_points=int((self.n_points - 1)/2), n_empty_space_voting=self.n_empty_space_voting) # ray_pts are the extracted points in floating point voxel space
+        ray_pts, empty_points = self.extract_values(
+            coords,
+            eye_w,
+            origin,
+            resolution,
+            n_points=int((self.n_points - 1) / 2),
+            n_empty_space_voting=self.n_empty_space_voting,
+        )  # ray_pts are the extracted points in floating point voxel space
 
-        if self.extraction_strategy == 'trilinear_interpolation':
-            fusion_values, indices, weights, indices_empty, weights_empty, \
-            fusion_weights = self.trilinear_interpolation(ray_pts, empty_points, tsdf_volume, weights_volume)
+        if self.extraction_strategy == "trilinear_interpolation":
+            (
+                fusion_values,
+                indices,
+                weights,
+                indices_empty,
+                weights_empty,
+                fusion_weights,
+            ) = self.trilinear_interpolation(
+                ray_pts, empty_points, tsdf_volume, weights_volume
+            )
 
             n1, n2, n3 = fusion_values.shape
 
@@ -75,9 +101,17 @@ class Extractor(nn.Module):
 
             indices_empty = indices_empty.view(n1, n2, self.n_empty_space_voting, 8, 3)
             weights_empty = weights_empty.view(n1, n2, self.n_empty_space_voting, 8)
-        elif self.extraction_strategy == 'nearest_neighbor':
-            fusion_values, indices, weights, indices_empty, weights_empty, \
-            fusion_weights = self.nearest_neighbor_extraction_tsdf(ray_pts, empty_points, tsdf_volume, weights_volume)
+        elif self.extraction_strategy == "nearest_neighbor":
+            (
+                fusion_values,
+                indices,
+                weights,
+                indices_empty,
+                weights_empty,
+                fusion_weights,
+            ) = self.nearest_neighbor_extraction_tsdf(
+                ray_pts, empty_points, tsdf_volume, weights_volume
+            )
 
             n1, n2, n3 = fusion_values.shape
 
@@ -87,50 +121,40 @@ class Extractor(nn.Module):
             indices_empty = indices_empty.view(n1, n2, self.n_empty_space_voting, 1, 3)
             weights_empty = weights_empty.view(n1, n2, self.n_empty_space_voting, 1)
 
-        # we want to extract the features using nearest neighbor extraction rather than trilinear interpolation
-        # contrary to the trilinear case, the feature_weights fill the purpose as both the "weights" and "fusion_weights" variable as
-        # we only have integer counts for the weights when working with the features
-        # feature_values, feature_indices, feature_weights = self.nearest_neighbor_extraction(ray_pts, feature_volume, feature_weights_volume)
-
-        # feature_indices = feature_indices.view(n1, n2, n3, 1, 3)
-        # feature_weights = feature_weights.view(n1, n2, n3, 1)
-
-        # feature_indices and indices are identical! One can be removed!
-
         # packing
-        values = dict(fusion_values=fusion_values,
-                      # feature_values=feature_values,
-                      fusion_weights=fusion_weights,
-                      depth=depth.view(b, h*w),
-                      indices=indices,
-                      weights=weights,
-                      feature_indices=indices,
-                      feature_weights=fusion_weights,
-                      indices_empty=indices_empty,
-                      weights_empty=weights_empty)
+        values = dict(
+            fusion_values=fusion_values,
+            fusion_weights=fusion_weights,
+            indices=indices,
+            weights=weights,
+            indices_empty=indices_empty,
+            weights_empty=weights_empty,
+        )
 
         del extrinsics, intrinsics, origin, weights_volume, tsdf_volume
 
         return values
 
-
-    def compute_coordinates(self, depth, extrinsics, intrinsics, origin, resolution, gpu):
+    def compute_coordinates(
+        self, depth, extrinsics, intrinsics, origin, resolution, gpu
+    ):
 
         b, h, w = depth.shape
-        n_points = h*w
+        n_points = h * w
 
         # generate frame meshgrid
-        xx, yy = torch.meshgrid([torch.arange(h, dtype=torch.float),
-                                 torch.arange(w, dtype=torch.float)])
+        xx, yy = torch.meshgrid(
+            [torch.arange(h, dtype=torch.float), torch.arange(w, dtype=torch.float)]
+        )
 
-        if torch.cuda.is_available() and gpu: # putting extractor on gpu
+        if torch.cuda.is_available() and gpu:  # putting extractor on gpu
             xx = xx.cuda()
             yy = yy.cuda()
 
         # flatten grid coordinates and bring them to batch size
-        xx = xx.contiguous().view(1, h*w, 1).repeat((b, 1, 1))
-        yy = yy.contiguous().view(1, h*w, 1).repeat((b, 1, 1))
-        zz = depth.contiguous().view(b, h*w, 1)
+        xx = xx.contiguous().view(1, h * w, 1).repeat((b, 1, 1))
+        yy = yy.contiguous().view(1, h * w, 1).repeat((b, 1, 1))
+        zz = depth.contiguous().view(b, h * w, 1)
 
         # generate points in pixel space
         points_p = torch.cat((yy, xx, zz), dim=2).clone()
@@ -146,7 +170,9 @@ class Extractor(nn.Module):
         # transform points from pixel space to camera space to world space (p->c->w)
         points_p[:, :, 0] *= zz[:, :, 0]
         points_p[:, :, 1] *= zz[:, :, 0]
-        points_c = torch.matmul(intrinsics_inv, torch.transpose(points_p, dim0=1, dim1=2))
+        points_c = torch.matmul(
+            intrinsics_inv, torch.transpose(points_p, dim0=1, dim1=2)
+        )
         points_c = torch.cat((points_c, homogenuous), dim=1)
         points_w = torch.matmul(extrinsics[:3], points_c)
         points_w = torch.transpose(points_w, dim0=1, dim1=2)[:, :, :3]
@@ -154,14 +180,22 @@ class Extractor(nn.Module):
         del xx, yy, homogenuous, points_p, points_c, intrinsics_inv
         return points_w
 
-
-    def extract_values(self, coords, eye, origin, resolution,
-                       bin_size=1.0, n_points=4, n_empty_space_voting=0,
-                       ellipsoid=False):
-
+    def extract_values(
+        self,
+        coords,
+        eye,
+        origin,
+        resolution,
+        bin_size=1.0,
+        n_points=4,
+        n_empty_space_voting=0,
+        ellipsoid=False,
+    ):
 
         center_v = (coords - origin) / resolution
-        eye_v = (eye - origin)/resolution # camera center in the voxel coordinate space
+        eye_v = (
+            eye - origin
+        ) / resolution  # camera center in the voxel coordinate space
 
         direction = center_v - eye_v
         direction = normalize(direction, p=2, dim=2)
@@ -174,16 +208,15 @@ class Extractor(nn.Module):
         # dist = torch.zeros_like(center_v)[:, :, 0]
         # dists = [dist]
 
-        for i in range(1, n_points+1):
-            point = center_v + i*bin_size*direction
-            pointN = center_v - i*bin_size*direction
+        for i in range(1, n_points + 1):
+            point = center_v + i * bin_size * direction
+            pointN = center_v - i * bin_size * direction
             points.append(point.clone())
             points.insert(0, pointN.clone())
 
-        for i in range(1, n_empty_space_voting+1):
-            point = center_v - (8*i + n_points)*bin_size*direction
+        for i in range(1, n_empty_space_voting + 1):
+            point = center_v - (8 * i + n_points) * bin_size * direction
             empty_points.insert(0, point.clone())
-
 
             # dist = i*bin_size*torch.ones_like(point)[:, :, 0]
             # distN = -1.*dist
@@ -197,17 +230,26 @@ class Extractor(nn.Module):
         # dists = torch.stack(dists, dim=2)
         points = torch.stack(points, dim=2)
 
-        empty_points = torch.stack(empty_points, dim=2) # (1, 65536, n_empty_pints, 3)
+        empty_points = torch.stack(empty_points, dim=2)  # (1, 65536, n_empty_pints, 3)
 
         return points, empty_points
 
-    def nearest_neighbor_extraction_tsdf(self, points, empty_points, tsdf_volume, weights_volume):
+    def nearest_neighbor_extraction_tsdf(
+        self, points, empty_points, tsdf_volume, weights_volume
+    ):
         x, y, z = tsdf_volume.shape
         b, h, n, dim = points.shape
 
         # get indices from the points which are already in the voxel grid but floating point coordinates
-        points = points.contiguous().view(b*h*n, dim)
-        indices = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
+        points = points.contiguous().view(b * h * n, dim)
+        indices = torch.cat(
+            (
+                torch.round(points[:, 0].unsqueeze_(-1)),
+                torch.round(points[:, 1].unsqueeze_(-1)),
+                torch.round(points[:, 2].unsqueeze_(-1)),
+            ),
+            dim=-1,
+        ).long()
 
         # get valid indices
         valid = get_index_mask(indices, (x, y, z))
@@ -217,17 +259,14 @@ class Extractor(nn.Module):
         tsdf = extract_values(indices, tsdf_volume, valid)
         weights = extract_values(indices, weights_volume, valid)
 
-
-        tsdf_container = self.init_val * torch.ones_like(valid).float() 
+        tsdf_container = self.init_val * torch.ones_like(valid).float()
         weight_container = torch.zeros_like(valid).float()
-        
 
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float()
         tsdf_container[valid_idx] = tsdf.float()
-        weight_container[valid_idx] =  weights.float()
+        weight_container[valid_idx] = weights.float()
 
         weights = torch.ones_like(valid).float()
-
 
         fusion_values = tsdf_container.view(b, h, n)
         fusion_weights = weight_container.view(b, h, n)
@@ -238,29 +277,45 @@ class Extractor(nn.Module):
         b, h, n, dim = empty_points.shape
 
         # get indices from the points which are already in the voxel grid but floating point coordinates
-        points = empty_points.contiguous().view(b*h*n, dim)
-        indices_empty = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
+        points = empty_points.contiguous().view(b * h * n, dim)
+        indices_empty = torch.cat(
+            (
+                torch.round(points[:, 0].unsqueeze_(-1)),
+                torch.round(points[:, 1].unsqueeze_(-1)),
+                torch.round(points[:, 2].unsqueeze_(-1)),
+            ),
+            dim=-1,
+        ).long()
         weights_empty = torch.ones(points.shape[0], device=self.config.device).float()
 
+        return (
+            fusion_values,
+            indices,
+            weights,
+            indices_empty,
+            weights_empty,
+            fusion_weights,
+        )
 
-        return fusion_values, indices, weights, indices_empty, weights_empty, fusion_weights
-
-    def trilinear_interpolation(self, points, empty_points, tsdf_volume, weights_volume):
+    def trilinear_interpolation(
+        self, points, empty_points, tsdf_volume, weights_volume
+    ):
 
         b, h, n, dim = points.shape
 
-        #get interpolation weights
+        # get interpolation weights
         weights, indices = interpolation_weights(points)
 
-        weights_empty, indices_empty = interpolation_weights(empty_points) # check speed of this - perhaps assign weight 1 to each.
+        weights_empty, indices_empty = interpolation_weights(
+            empty_points
+        )  # check speed of this - perhaps assign weight 1 to each.
 
         n1, n2, n3 = indices.shape
         # nbr_features = feature_volume.shape[-1]
-        indices = indices.contiguous().view(n1*n2, n3).long()
+        indices = indices.contiguous().view(n1 * n2, n3).long()
 
-
-        #TODO: change to replication padding instead of zero padding
-        #TODO: double check indices
+        # TODO: change to replication padding instead of zero padding
+        # TODO: double check indices
 
         # get valid indices
         valid = get_index_mask(indices, tsdf_volume.shape)
@@ -270,10 +325,10 @@ class Extractor(nn.Module):
         tsdf_weights = extract_values(indices, weights_volume, valid)
         # features = extract_values(indices, feature_volume, valid)
 
-        value_container = self.init_val*torch.ones_like(valid).float() 
+        value_container = self.init_val * torch.ones_like(valid).float()
         weight_container = torch.zeros_like(valid).float()
         # feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device='cuda:0').float() # here we should extract the initial value of the confidence grid
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float()
 
         value_container[valid_idx] = tsdf_values.float()
         weight_container[valid_idx] = tsdf_weights.float()
@@ -298,16 +353,31 @@ class Extractor(nn.Module):
         indices = indices.view(n1, n2, n3)
 
         # return fusion_values.float(), fusion_features.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
-        return fusion_values.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
+        return (
+            fusion_values.float(),
+            indices,
+            weights,
+            indices_empty,
+            weights_empty,
+            fusion_weights.float(),
+        )
 
-
-    def nearest_neighbor_extraction(self, points, feature_volume, feature_weights_volume):
+    def nearest_neighbor_extraction(
+        self, points, feature_volume, feature_weights_volume
+    ):
         b, h, n, dim = points.shape
         x, y, z, nbr_features = feature_volume.shape
 
         # get indices from the points which are already in the voxel grid but floating point coordinates
-        points = points.contiguous().view(b*h*n, dim)
-        indices = torch.cat((torch.round(points[:, 0].unsqueeze_(-1)), torch.round(points[:, 1].unsqueeze_(-1)), torch.round(points[:, 2].unsqueeze_(-1))), dim=-1).long()
+        points = points.contiguous().view(b * h * n, dim)
+        indices = torch.cat(
+            (
+                torch.round(points[:, 0].unsqueeze_(-1)),
+                torch.round(points[:, 1].unsqueeze_(-1)),
+                torch.round(points[:, 2].unsqueeze_(-1)),
+            ),
+            dim=-1,
+        ).long()
 
         # get valid indices
         valid = get_index_mask(indices, (x, y, z))
@@ -317,13 +387,17 @@ class Extractor(nn.Module):
         features = extract_values(indices, feature_volume, valid)
         weights = extract_values(indices, feature_weights_volume, valid)
 
-
-        feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device=self.config.device).float() 
+        feature_container = (
+            0
+            * torch.ones(
+                (valid.shape[0], nbr_features), device=self.config.device
+            ).float()
+        )
         weight_container = torch.zeros_like(valid).float()
 
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float() 
+        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float()
         feature_container[valid_idx, :] = features.float()
-        weight_container[valid_idx] =  weights.float()
+        weight_container[valid_idx] = weights.float()
 
         del features, weights
 
@@ -332,10 +406,11 @@ class Extractor(nn.Module):
 
         return feature_container, indices, weight_container
 
+
 def interpolation_weights(points):
 
     floored = torch.floor(points)
-    neighbor = torch.sign(points - floored) # always one
+    neighbor = torch.sign(points - floored)  # always one
 
     # index of center voxel
     idx = torch.floor(points)
@@ -377,10 +452,11 @@ def interpolation_weights(points):
                     iz = idx[:, 2] + neighbor[:, 2]
 
                 weights.append((w1 * w2 * w3).unsqueeze_(1))
-                indices.append(torch.cat((ix.unsqueeze_(1),
-                                          iy.unsqueeze_(1),
-                                          iz.unsqueeze_(1)),
-                                         dim=1).unsqueeze_(1))
+                indices.append(
+                    torch.cat(
+                        (ix.unsqueeze_(1), iy.unsqueeze_(1), iz.unsqueeze_(1)), dim=1
+                    ).unsqueeze_(1)
+                )
 
     weights = torch.cat(weights, dim=1)
     indices = torch.cat(indices, dim=1)
@@ -389,79 +465,19 @@ def interpolation_weights(points):
 
     return weights, indices
 
-def interpolation_weights_old(points, mode='center'):
-
-    if mode == 'center':
-        # compute step direction
-        center = torch.floor(points) + 0.5 * torch.ones_like(points)
-        neighbor = torch.sign(center - points)
-    else:
-        center = torch.floor(points)
-        neighbor = torch.sign(center - points)
-
-    # index of center voxel
-    idx = torch.floor(points)
-
-    # reshape for pytorch compatibility
-    b, h, n, dim = idx.shape
-    points = points.contiguous().view(b * h * n, dim)
-    center = center.contiguous().view(b * h * n, dim)
-    idx = idx.contiguous().view(b * h * n, dim)
-    neighbor = neighbor.contiguous().view(b * h * n, dim)
-
-    # center x.0
-    alpha = torch.abs(points - center)  # always positive
-    alpha_inv = 1 - alpha
-
-    weights = []
-    indices = []
-
-    for i in range(0, 2):
-        for j in range(0, 2):
-            for k in range(0, 2):
-                if i == 0:
-                    w1 = alpha_inv[:, 0]
-                    ix = idx[:, 0]
-                else:
-                    w1 = alpha[:, 0]
-                    ix = idx[:, 0] + neighbor[:, 0]
-                if j == 0:
-                    w2 = alpha_inv[:, 1]
-                    iy = idx[:, 1]
-                else:
-                    w2 = alpha[:, 1]
-                    iy = idx[:, 1] + neighbor[:, 1]
-                if k == 0:
-                    w3 = alpha_inv[:, 2]
-                    iz = idx[:, 2]
-                else:
-                    w3 = alpha[:, 2]
-                    iz = idx[:, 2] + neighbor[:, 2]
-
-                weights.append((w1 * w2 * w3).unsqueeze_(1))
-                indices.append(torch.cat((ix.unsqueeze_(1),
-                                          iy.unsqueeze_(1),
-                                          iz.unsqueeze_(1)),
-                                         dim=1).unsqueeze_(1))
-
-    weights = torch.cat(weights, dim=1)
-    indices = torch.cat(indices, dim=1)
-
-    del points, center, idx, neighbor, alpha, alpha_inv, ix, iy, iz, w1, w2, w3
-
-    return weights, indices
-
 
 def get_index_mask(indices, shape):
 
     xs, ys, zs = shape
 
-    valid = ((indices[:, 0] >= 0) &
-             (indices[:, 0] < xs) &
-             (indices[:, 1] >= 0) &
-             (indices[:, 1] < ys) &
-             (indices[:, 2] >= 0) &
-             (indices[:, 2] < zs))
+    valid = (
+        (indices[:, 0] >= 0)
+        & (indices[:, 0] < xs)
+        & (indices[:, 1] >= 0)
+        & (indices[:, 1] < ys)
+        & (indices[:, 2] >= 0)
+        & (indices[:, 2] < zs)
+    )
 
     return valid
 
@@ -469,7 +485,9 @@ def get_index_mask(indices, shape):
 def extract_values(indices, volume, mask=None):
     if volume.dim() == 3:
         if mask is not None:
-            x = torch.masked_select(indices[:, 0], mask) # filters away the indices that are flagged as outside the grid
+            x = torch.masked_select(
+                indices[:, 0], mask
+            )  # filters away the indices that are flagged as outside the grid
             y = torch.masked_select(indices[:, 1], mask)
             z = torch.masked_select(indices[:, 2], mask)
         else:
@@ -478,9 +496,11 @@ def extract_values(indices, volume, mask=None):
             z = indices[:, 2]
 
         return volume[x, y, z]
-    else: # feature volume processing
+    else:  # feature volume processing
         if mask is not None:
-            x = torch.masked_select(indices[:, 0], mask) # filters away the indices that are flagged as outside the grid
+            x = torch.masked_select(
+                indices[:, 0], mask
+            )  # filters away the indices that are flagged as outside the grid
             y = torch.masked_select(indices[:, 1], mask)
             z = torch.masked_select(indices[:, 2], mask)
         else:
@@ -489,11 +509,3 @@ def extract_values(indices, volume, mask=None):
             z = indices[:, 2]
 
         return volume[x, y, z, :]
-
-
-
-
-
-
-
-

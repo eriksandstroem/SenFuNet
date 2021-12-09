@@ -18,7 +18,6 @@ class Integrator(torch.nn.Module):
         values_volume,
         features_volume,
         weights_volume,
-        feature_weights_volume,  # not needed
     ):
         xs, ys, zs = values_volume.shape
 
@@ -26,10 +25,6 @@ class Integrator(torch.nn.Module):
         values = integrator_input["update_values"].to(self.device)
         features = integrator_input["update_features"].to(self.device)
         indices = integrator_input["update_indices"].to(self.device)
-        feature_indices = integrator_input["update_feature_indices"].to(
-            self.device
-        )  # not needed
-        filter_indices = integrator_input["filter_indices"]  # not needed
         weights = integrator_input["update_weights"].to(
             self.device
         )  # update weights. When using nearest neighbor interpolation these are all ones.
@@ -52,43 +47,36 @@ class Integrator(torch.nn.Module):
         if self.extraction_strategy == "trilinear_interpolation":
             features = features.repeat(8, 1)
             values = values.repeat(1, 8)
-            indices_no_border = filter_indices.contiguous().view(-1, 8, 3).long()
             indices = indices.contiguous().view(-1, 8, 3).long()
             weights = weights.contiguous().view(-1, 8)
             indices_empty = indices_empty.contiguous().view(-1, 8, 3).long()
             weights_empty = weights_empty.contiguous().view(-1, 8)
         elif self.extraction_strategy == "nearest_neighbor":
             values = values.repeat(1, 1)
-            indices_no_border = filter_indices.contiguous().view(-1, 1, 3).long()
             indices = indices.contiguous().view(-1, 1, 3).long()
             weights = weights.contiguous().view(-1, 1)
             indices_empty = indices_empty.contiguous().view(-1, 1, 3).long()
             weights_empty = weights_empty.contiguous().view(-1, 1)
 
         values = values.contiguous().view(-1, 1).float()
-        indices_no_border = filter_indices.contiguous().view(-1, 3)
         indices = indices.contiguous().view(-1, 3).long()
-        feature_indices = feature_indices.contiguous().view(-1, 3).long()
+
         indices_empty = indices_empty.contiguous().view(-1, 3).long()  # (65536*7*8, 3)
 
         weights = weights.contiguous().view(-1, 1).float()
         weights_empty = weights_empty.contiguous().view(-1, 1).float()
 
         # get valid indices
-        valid_no_border = get_index_mask(indices_no_border, values_volume.shape)
-        indices_no_border = extract_indices(indices_no_border, mask=valid_no_border)
-
         valid = get_index_mask(indices, values_volume.shape)
         indices = extract_indices(indices, mask=valid)
 
         valid_empty = get_index_mask(indices_empty, values_volume.shape)
         indices_empty = extract_indices(indices_empty, mask=valid_empty)
 
-        valid_features = get_index_mask(feature_indices, values_volume.shape)
-        feature_indices = extract_indices(feature_indices, mask=valid_features)
+        feature_indices = indices.clone()
 
         # remove the invalid entries from the values, features and weights
-        valid_features = valid_features.clone().unsqueeze_(-1)
+        valid_features = valid.clone().unsqueeze_(-1)
         features = torch.masked_select(
             features, valid_features.repeat(1, f4)
         )  # (65536*7*8*6) if all indices are valid, otherwise less
@@ -124,9 +112,6 @@ class Integrator(torch.nn.Module):
 
         # if using the same extraction procedure for fusion and feature updates
         update_feat_weights = weights
-        # if you want to use nearest neighbor extraction for the feature net
-        # but trilinear for the fusion step, uncomment this line
-        # update_feat_weights = torch.ones_like(weights)
 
         # weights for tsdf
         wcache = torch.sparse.FloatTensor(
@@ -152,16 +137,6 @@ class Integrator(torch.nn.Module):
         indices_empty = wcache_empty.indices().squeeze()
         weights_empty = wcache_empty.values()
         del wcache_empty
-
-        # remove duplicate indices that will be passed to the filtering and translation during training
-        index_no_border = (
-            ys * zs * indices_no_border[:, 0]
-            + zs * indices_no_border[:, 1]
-            + indices_no_border[:, 2]
-        )
-        indices_no_border_insert = torch.unique_consecutive(
-            indices_no_border[index_no_border.sort()[1]], dim=0
-        )  # since the coalesce() operation on the sparse tensors sorts the
 
         # features
         feature_index = (
@@ -232,7 +207,6 @@ class Integrator(torch.nn.Module):
             values_volume,
             features_volume,
             weights_volume,
-            feature_weights_volume,
             indices_insert,
         )
 
@@ -459,7 +433,6 @@ class Integrator(torch.nn.Module):
         insert_values(value_update, indices_insert, values_volume)
         insert_values(weight_update, indices_insert, weights_volume)
 
-        # print(feature_volume.sum(dim))
         # insert features and feature weights
         insert_values(feature_update, feature_indices_insert, features_volume)
         insert_values(

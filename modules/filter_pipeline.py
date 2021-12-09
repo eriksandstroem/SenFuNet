@@ -100,7 +100,6 @@ class Filter_Pipeline(torch.nn.Module):
         extra_pad = torch.nn.ReplicationPad3d(extra_pad)
 
         for sensor_ in self.config.DATA.input:
-            print(sensor_)
             # extract bbox from global grid
             tsdf = database[scene]["tsdf_" + sensor_][
                 bbox[0, 0] : bbox[0, 1],
@@ -120,7 +119,6 @@ class Filter_Pipeline(torch.nn.Module):
                 bbox[2, 0] : bbox[2, 1],
                 :,
             ]
-            print("feat: ", feat.float().sum())
 
             feat = feat.permute(
                 3, 0, 1, 2
