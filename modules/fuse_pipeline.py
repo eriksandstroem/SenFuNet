@@ -545,6 +545,11 @@ class Fuse_Pipeline(torch.nn.Module):
             database[scene_id]["feature_weights_" + batch["sensor"]].to(device),
         )
 
+        # print("weights: ", weights.float().sum())
+        # if weights.float().sum() != feature_weights.float().sum():
+        #     print("weights: ", weights.float().sum())
+        #     print("feature_weights: ", feature_weights.float().sum())
+
         del indices, integrator_input
 
         database.tsdf[batch["sensor"]][scene_id].volume = tsdf.cpu().detach().numpy()
@@ -554,9 +559,9 @@ class Fuse_Pipeline(torch.nn.Module):
         database.features[batch["sensor"]][scene_id].volume = (
             features.cpu().detach().numpy()
         )
-        database.feature_weights[batch["sensor"]][scene_id] = (
-            feature_weights.cpu().detach().numpy()
-        )
+        # database.feature_weights[batch["sensor"]][scene_id] = (
+        #     feature_weights.cpu().detach().numpy()
+        # )
 
         del tsdf, weights, features, feature_weights
 

@@ -170,7 +170,7 @@ class Workspace(object):
             mask = np.zeros_like(database.sensor_weighting[scene], dtype=bool)
             for sensor_ in sensors:
                 mask = np.logical_or(
-                    mask, (database.feature_weights[sensor_][scene] > 0)
+                    mask, (database.fusion_weights[sensor_][scene] > 0)
                 )
 
             hist = database.sensor_weighting[scene][mask].flatten().astype(np.float32)

@@ -100,6 +100,7 @@ class Filter_Pipeline(torch.nn.Module):
         extra_pad = torch.nn.ReplicationPad3d(extra_pad)
 
         for sensor_ in self.config.DATA.input:
+            print(sensor_)
             # extract bbox from global grid
             tsdf = database[scene]["tsdf_" + sensor_][
                 bbox[0, 0] : bbox[0, 1],
@@ -119,6 +120,7 @@ class Filter_Pipeline(torch.nn.Module):
                 bbox[2, 0] : bbox[2, 1],
                 :,
             ]
+            print("feat: ", feat.float().sum())
 
             feat = feat.permute(
                 3, 0, 1, 2
@@ -147,7 +149,7 @@ class Filter_Pipeline(torch.nn.Module):
             # there should not really be a difference if we use the feature weights here or the weights
             # which include the online outlier filter since the bbox does not really change
             indices = np.logical_or(
-                indices, database.feature_weights[sensor_][scene] > 0
+                indices, database.fusion_weights[sensor_][scene] > 0
             )  # - indices_and
             # break
         uninit_indices = np.invert(indices)

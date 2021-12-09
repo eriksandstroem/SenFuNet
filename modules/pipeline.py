@@ -120,49 +120,6 @@ class Pipeline(torch.nn.Module):
             for scene in database.filtered.keys():
                 self.filter_pipeline.filter(scene, database, device)
 
-        # for scene in database.filtered.keys():
-        #     mask = np.zeros_like(database[scene]["gt"])
-        #     and_mask = np.ones_like(database[scene]["gt"])
-        #     sensor_mask = dict()
-
-        #     for sensor_ in self.config.DATA.input:
-        #         # print(sensor_)
-        #         weights = database.fusion_weights[sensor_][scene]
-        #         mask = np.logical_or(mask, weights > 0)
-        #         and_mask = np.logical_and(and_mask, weights > 0)
-        #         sensor_mask[sensor_] = weights > 0
-        #         # break
-
-        #     # load weighting sensor grid
-        #     if self.config.FILTERING_MODEL.outlier_channel:
-        #         sensor_weighting = database[scene]["sensor_weighting"][1, :, :, :]
-        #     else:
-        #         sensor_weighting = database[scene]["sensor_weighting"]
-
-        #     only_one_sensor_mask = np.logical_xor(mask, and_mask)
-        #     for sensor_ in self.config.DATA.input:
-        #         only_sensor_mask = np.logical_and(
-        #             only_one_sensor_mask, sensor_mask[sensor_]
-        #         )
-        #         if sensor_ == self.config.DATA.input[0]:
-        #             rem_indices = np.logical_and(
-        #                 only_sensor_mask, sensor_weighting < 0.5
-        #             )
-        #         else:
-        #             # before I fixed the bug always ended up here when I had tof and stereo as sensors
-        #             # but this would mean that for the tof sensor I removed those indices
-        #             # if alpha was larger than 0.5 which it almost always is. This means that
-        #             # essentially all (cannot be 100 % sure) voxels where we only integrated
-        #             # tof, was removed. Since the histogram is essentially does not have
-        #             # any voxels with trust less than 0.5, we also removed all alone stereo voxels
-        #             # so at the end we end up with a mask very similar to the and_mask
-        #             rem_indices = np.logical_and(
-        #                 only_sensor_mask, sensor_weighting > 0.5
-        #             )
-
-        #         # rem_indices = rem_indices.astype(dtype=bool)
-        #         database[scene]["weights_" + sensor_][rem_indices] = 0
-
     def test_tsdf(self, val_loader, val_dataset, val_database, sensors, device):
 
         for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
@@ -283,7 +240,7 @@ class Pipeline(torch.nn.Module):
                 # even if only one sensor integrates compared to the middle fusion case where we don't consider
                 # uninitialized voxels in the average. But we cannot get rid of the outliers though....
                 for sensor_ in sensors:
-                    val_database.feature_weights[sensor_][scene] = and_mask.astype(
+                    val_database.fusion_weights[sensor_][scene] = and_mask.astype(
                         np.float32
                     )
                 val_database.sensor_weighting[scene][:, :, :] = 0.5

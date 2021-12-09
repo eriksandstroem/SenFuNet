@@ -242,21 +242,9 @@ class Database(Dataset):
                 workspace.log("Evaluating {} ...".format(scene_id), mode)
             est = {}
             mask, mask_filt = self.get_evaluation_masks(scene_id)
-            # print(mask_filt.sum())
-            # mask = {}
+
             for sensor in self.sensors:
                 est[sensor] = self.tsdf[sensor][scene_id].volume
-                # mask[sensor] = (
-                #     self.feature_weights[sensor][scene_id] > 0
-                # )  # do not use fusion weights here
-            # because the fusion weights are filtered with the learned outlier filter so only the fused
-            # grid is allowed to use that for masking
-            # mask_filt = np.zeros_like(self.scenes_gt[scene_id].volume)
-            # for sensor_ in self.sensors:
-            #     mask_filt = np.logical_or(
-            #         mask_filt, self.fusion_weights[sensor_][scene_id] > 0
-            #     )
-            print(mask_filt.sum())
 
             est_filt = self.filtered[scene_id].volume
             gt = self.scenes_gt[scene_id].volume
