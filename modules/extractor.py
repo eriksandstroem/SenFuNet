@@ -73,7 +73,7 @@ class Extractor(nn.Module):
         # compute rays
         eye_w = extrinsics[:, :3, 3]
 
-        ray_pts, empty_points = self.extract_values(
+        points_dict = self.extract_values(
             coords,
             eye_w,
             origin,
@@ -83,57 +83,18 @@ class Extractor(nn.Module):
         )  # ray_pts are the extracted points in floating point voxel space
 
         if self.extraction_strategy == "trilinear_interpolation":
-            (
-                fusion_values,
-                indices,
-                weights,
-                indices_empty,
-                weights_empty,
-                fusion_weights,
-            ) = self.trilinear_interpolation(
-                ray_pts, empty_points, tsdf_volume, weights_volume
+            output = self.trilinear_interpolation(
+                points_dict, tsdf_volume, weights_volume
             )
 
-            n1, n2, n3 = fusion_values.shape
-
-            indices = indices.view(n1, n2, n3, 8, 3)
-            weights = weights.view(n1, n2, n3, 8)
-
-            indices_empty = indices_empty.view(n1, n2, self.n_empty_space_voting, 8, 3)
-            weights_empty = weights_empty.view(n1, n2, self.n_empty_space_voting, 8)
         elif self.extraction_strategy == "nearest_neighbor":
-            (
-                fusion_values,
-                indices,
-                weights,
-                indices_empty,
-                weights_empty,
-                fusion_weights,
-            ) = self.nearest_neighbor_extraction_tsdf(
-                ray_pts, empty_points, tsdf_volume, weights_volume
+            output = self.nearest_neighbor_extraction(
+                points_dict, tsdf_volume, weights_volume
             )
-
-            n1, n2, n3 = fusion_values.shape
-
-            indices = indices.view(n1, n2, n3, 1, 3)
-            weights = weights.view(n1, n2, n3, 1)
-
-            indices_empty = indices_empty.view(n1, n2, self.n_empty_space_voting, 1, 3)
-            weights_empty = weights_empty.view(n1, n2, self.n_empty_space_voting, 1)
-
-        # packing
-        values = dict(
-            fusion_values=fusion_values,
-            fusion_weights=fusion_weights,
-            indices=indices,
-            weights=weights,
-            indices_empty=indices_empty,
-            weights_empty=weights_empty,
-        )
 
         del extrinsics, intrinsics, origin, weights_volume, tsdf_volume
 
-        return values
+        return output
 
     def compute_coordinates(
         self, depth, extrinsics, intrinsics, origin, resolution, gpu
@@ -192,6 +153,8 @@ class Extractor(nn.Module):
         ellipsoid=False,
     ):
 
+        output = dict()
+
         center_v = (coords - origin) / resolution
         eye_v = (
             eye - origin
@@ -202,46 +165,38 @@ class Extractor(nn.Module):
 
         points = [center_v]
 
-        # ellip = []
-
-        empty_points = []
-        # dist = torch.zeros_like(center_v)[:, :, 0]
-        # dists = [dist]
-
         for i in range(1, n_points + 1):
             point = center_v + i * bin_size * direction
             pointN = center_v - i * bin_size * direction
             points.append(point.clone())
             points.insert(0, pointN.clone())
 
-        for i in range(1, n_empty_space_voting + 1):
-            point = center_v - (8 * i + n_points) * bin_size * direction
-            empty_points.insert(0, point.clone())
-
-            # dist = i*bin_size*torch.ones_like(point)[:, :, 0]
-            # distN = -1.*dist
-
-            # dists.append(dist)
-            # dists.insert(0, distN)
-
-        # if ellipsoid:
-        #     points = points + ellip
-
-        # dists = torch.stack(dists, dim=2)
         points = torch.stack(points, dim=2)
 
-        empty_points = torch.stack(empty_points, dim=2)  # (1, 65536, n_empty_pints, 3)
+        output["points"] = points
 
-        return points, empty_points
+        if self.n_empty_space_voting > 0:
+            empty_points = []
+            for i in range(1, n_empty_space_voting + 1):
+                point = center_v - (8 * i + n_points) * bin_size * direction
+                empty_points.insert(0, point.clone())
 
-    def nearest_neighbor_extraction_tsdf(
-        self, points, empty_points, tsdf_volume, weights_volume
-    ):
+            empty_points = torch.stack(
+                empty_points, dim=2
+            )  # (1, 65536, n_empty_pints, 3)
+            output["empty_points"] = empty_points
+
+        return output
+
+    def nearest_neighbor_extraction(self, points_dict, tsdf_volume, weights_volume):
+
+        output = dict()
+
         x, y, z = tsdf_volume.shape
-        b, h, n, dim = points.shape
+        b, h, n, dim = points_dict["points"].shape
 
-        # get indices from the points which are already in the voxel grid but floating point coordinates
-        points = points.contiguous().view(b * h * n, dim)
+        # convert from floating point coordinate points to discrete indices
+        points = points_dict["points"].contiguous().view(b * h * n, dim)
         indices = torch.cat(
             (
                 torch.round(points[:, 0].unsqueeze_(-1)),
@@ -256,59 +211,82 @@ class Extractor(nn.Module):
 
         valid_idx = torch.nonzero(valid)[:, 0]
 
+        # extract valid indices
         tsdf = extract_values(indices, tsdf_volume, valid)
         weights = extract_values(indices, weights_volume, valid)
 
+        # create temporary containers in which we will place the valid values at the valid indices
         tsdf_container = self.init_val * torch.ones_like(valid).float()
         weight_container = torch.zeros_like(valid).float()
 
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float()
         tsdf_container[valid_idx] = tsdf.float()
         weight_container[valid_idx] = weights.float()
 
+        # the update weights are always one with nn extraction
         weights = torch.ones_like(valid).float()
 
         fusion_values = tsdf_container.view(b, h, n)
         fusion_weights = weight_container.view(b, h, n)
 
+        indices = indices.view(b, h, n, 1, 3)
+        weights = weights.view(b, h, n, 1)
+
         del tsdf
 
-        # handle the empty points
-        b, h, n, dim = empty_points.shape
+        if self.n_empty_space_voting > 0:
+            # handle the empty points
+            b, h, n, dim = points_dict["empty_points"].shape
 
-        # get indices from the points which are already in the voxel grid but floating point coordinates
-        points = empty_points.contiguous().view(b * h * n, dim)
-        indices_empty = torch.cat(
-            (
-                torch.round(points[:, 0].unsqueeze_(-1)),
-                torch.round(points[:, 1].unsqueeze_(-1)),
-                torch.round(points[:, 2].unsqueeze_(-1)),
-            ),
-            dim=-1,
-        ).long()
-        weights_empty = torch.ones(points.shape[0], device=self.config.device).float()
+            # convert empty points in floating point coordinate space to discrete index space
+            points = points_dict["empty_points"].contiguous().view(b * h * n, dim)
+            indices_empty = torch.cat(
+                (
+                    torch.round(points[:, 0].unsqueeze_(-1)),
+                    torch.round(points[:, 1].unsqueeze_(-1)),
+                    torch.round(points[:, 2].unsqueeze_(-1)),
+                ),
+                dim=-1,
+            ).long()
 
-        return (
-            fusion_values,
-            indices,
-            weights,
-            indices_empty,
-            weights_empty,
-            fusion_weights,
-        )
+            # the empty update weights are always one for nn extraction
+            weights_empty = torch.ones(
+                points.shape[0], device=self.config.device
+            ).float()
 
-    def trilinear_interpolation(
-        self, points, empty_points, tsdf_volume, weights_volume
-    ):
+            n1, n2, n3 = fusion_values.shape
 
-        b, h, n, dim = points.shape
+            indices_empty = indices_empty.view(n1, n2, self.n_empty_space_voting, 1, 3)
+            weights_empty = weights_empty.view(n1, n2, self.n_empty_space_voting, 1)
+
+            output["indices_empty"] = indices_empty
+            output["weights_empty"] = weights_empty
+
+        # packing
+        output["fusion_values"] = fusion_values
+        output["indices"] = indices
+        output["weights"] = weights
+        output["fusion_weights"] = fusion_weights
+
+        return output
+
+    def trilinear_interpolation(self, points_dict, tsdf_volume, weights_volume):
+
+        output = dict()
+
+        b, h, n, dim = points_dict["points"].shape
 
         # get interpolation weights
-        weights, indices = interpolation_weights(points)
+        weights, indices = interpolation_weights(points_dict["points"])
 
-        weights_empty, indices_empty = interpolation_weights(
-            empty_points
-        )  # check speed of this - perhaps assign weight 1 to each.
+        if self.n_empty_space_voting > 0:
+            weights_empty, indices_empty = interpolation_weights(
+                points_dict["empty_points"]
+            )
+
+            indices_empty = indices_empty.view(b, h, self.n_empty_space_voting, 8, 3)
+            weights_empty = weights_empty.view(b, h, self.n_empty_space_voting, 8)
+            output["weights_empty"] = weights_empty
+            output["indices_empty"] = indices_empty
 
         n1, n2, n3 = indices.shape
         # nbr_features = feature_volume.shape[-1]
@@ -352,17 +330,18 @@ class Extractor(nn.Module):
 
         indices = indices.view(n1, n2, n3)
 
-        # return fusion_values.float(), fusion_features.float(), indices, weights, indices_empty, weights_empty, fusion_weights.float()
-        return (
-            fusion_values.float(),
-            indices,
-            weights,
-            indices_empty,
-            weights_empty,
-            fusion_weights.float(),
-        )
+        indices = indices.view(b, h, n, 8, 3)
+        weights = weights.view(b, h, n, 8)
 
-    def nearest_neighbor_extraction(
+        # packing
+        output["fusion_values"] = fusion_values.float()
+        output["indices"] = indices
+        output["weights"] = weights
+        output["fusion_weights"] = fusion_weights.float()
+
+        return output
+
+    def nearest_neighbor_extraction_features(
         self, points, feature_volume, feature_weights_volume
     ):
         b, h, n, dim = points.shape

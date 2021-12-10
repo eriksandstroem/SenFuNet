@@ -11,6 +11,8 @@ class Integrator(torch.nn.Module):
         self.max_weight = config.max_weight
         self.train_on_border_voxels = config.train_on_border_voxels
         self.extraction_strategy = config.extraction_strategy
+        self.n_empty_space_voting = config.n_empty_space_voting
+        self.trunc_value = config.trunc_value
 
     def forward(
         self,
@@ -28,8 +30,10 @@ class Integrator(torch.nn.Module):
         weights = integrator_input["update_weights"].to(
             self.device
         )  # update weights. When using nearest neighbor interpolation these are all ones.
-        indices_empty = integrator_input["update_indices_empty"].to(self.device)
-        weights_empty = integrator_input["update_weights_empty"].to(self.device)
+
+        if self.n_empty_space_voting > 0:
+            indices_empty = integrator_input["update_indices_empty"].to(self.device)
+            weights_empty = integrator_input["update_weights_empty"].to(self.device)
 
         (
             n1,
@@ -49,29 +53,34 @@ class Integrator(torch.nn.Module):
             values = values.repeat(1, 8)
             indices = indices.contiguous().view(-1, 8, 3).long()
             weights = weights.contiguous().view(-1, 8)
-            indices_empty = indices_empty.contiguous().view(-1, 8, 3).long()
-            weights_empty = weights_empty.contiguous().view(-1, 8)
+            if self.n_empty_space_voting > 0:
+                indices_empty = indices_empty.contiguous().view(-1, 8, 3).long()
+                weights_empty = weights_empty.contiguous().view(-1, 8)
         elif self.extraction_strategy == "nearest_neighbor":
             values = values.repeat(1, 1)
             indices = indices.contiguous().view(-1, 1, 3).long()
             weights = weights.contiguous().view(-1, 1)
-            indices_empty = indices_empty.contiguous().view(-1, 1, 3).long()
-            weights_empty = weights_empty.contiguous().view(-1, 1)
+            if self.n_empty_space_voting > 0:
+                indices_empty = indices_empty.contiguous().view(-1, 1, 3).long()
+                weights_empty = weights_empty.contiguous().view(-1, 1)
 
         values = values.contiguous().view(-1, 1).float()
         indices = indices.contiguous().view(-1, 3).long()
 
-        indices_empty = indices_empty.contiguous().view(-1, 3).long()  # (65536*7*8, 3)
+        if self.n_empty_space_voting > 0:
+            indices_empty = (
+                indices_empty.contiguous().view(-1, 3).long()
+            )  # (65536*7*8, 3)
+            weights_empty = weights_empty.contiguous().view(-1, 1).float()
 
         weights = weights.contiguous().view(-1, 1).float()
-        weights_empty = weights_empty.contiguous().view(-1, 1).float()
 
         # get valid indices
         valid = get_index_mask(indices, values_volume.shape)
         indices = extract_indices(indices, mask=valid)
-
-        valid_empty = get_index_mask(indices_empty, values_volume.shape)
-        indices_empty = extract_indices(indices_empty, mask=valid_empty)
+        if self.n_empty_space_voting > 0:
+            valid_empty = get_index_mask(indices_empty, values_volume.shape)
+            indices_empty = extract_indices(indices_empty, mask=valid_empty)
 
         feature_indices = indices.clone()
 
@@ -86,7 +95,8 @@ class Integrator(torch.nn.Module):
 
         values = torch.masked_select(values[:, 0], valid)
         weights = torch.masked_select(weights[:, 0], valid)
-        weights_empty = torch.masked_select(weights_empty[:, 0], valid_empty)
+        if self.n_empty_space_voting > 0:
+            weights_empty = torch.masked_select(weights_empty[:, 0], valid_empty)
 
         update_feat = weights.repeat(f4, 1).permute(1, 0) * features
         del features
@@ -122,21 +132,22 @@ class Integrator(torch.nn.Module):
 
         del wcache
 
-        # weights for empty indices
-        index_empty = (
-            ys * zs * indices_empty[:, 0]
-            + zs * indices_empty[:, 1]
-            + indices_empty[:, 2]
-        )
-        indices_empty_insert = torch.unique_consecutive(
-            indices_empty[index_empty.sort()[1]], dim=0
-        )  # since the coalesce() operation on the sparse tensors sorts the
-        wcache_empty = torch.sparse.FloatTensor(
-            index_empty.unsqueeze_(0), weights_empty, torch.Size([xs * ys * zs])
-        ).coalesce()  # this line adds the values at the same index together
-        indices_empty = wcache_empty.indices().squeeze()
-        weights_empty = wcache_empty.values()
-        del wcache_empty
+        if self.n_empty_space_voting > 0:
+            # weights for empty indices
+            index_empty = (
+                ys * zs * indices_empty[:, 0]
+                + zs * indices_empty[:, 1]
+                + indices_empty[:, 2]
+            )
+            indices_empty_insert = torch.unique_consecutive(
+                indices_empty[index_empty.sort()[1]], dim=0
+            )  # since the coalesce() operation on the sparse tensors sorts the
+            wcache_empty = torch.sparse.FloatTensor(
+                index_empty.unsqueeze_(0), weights_empty, torch.Size([xs * ys * zs])
+            ).coalesce()  # this line adds the values at the same index together
+            indices_empty = wcache_empty.indices().squeeze()
+            weights_empty = wcache_empty.values()
+            del wcache_empty
 
         # features
         feature_index = (
@@ -171,14 +182,15 @@ class Integrator(torch.nn.Module):
         weight_update = weights_old + weights
         weight_update = torch.clamp(weight_update, 0, self.max_weight)
 
-        # empty space update
-        values_old_empty = values_volume.view(xs * ys * zs)[indices_empty]
-        weights_old_empty = weights_volume.view(xs * ys * zs)[indices_empty]
-        value_update_empty = torch.add(
-            weights_old_empty * values_old_empty, 0.1 * weights_empty
-        ) / (weights_old_empty + weights_empty)
-        weight_update_empty = weights_old_empty + weights_empty
-        weight_update_empty = torch.clamp(weight_update_empty, 0, self.max_weight)
+        if self.n_empty_space_voting > 0:
+            # empty space update
+            values_old_empty = values_volume.view(xs * ys * zs)[indices_empty]
+            weights_old_empty = weights_volume.view(xs * ys * zs)[indices_empty]
+            value_update_empty = torch.add(
+                weights_old_empty * values_old_empty, self.trunc_value * weights_empty
+            ) / (weights_old_empty + weights_empty)
+            weight_update_empty = weights_old_empty + weights_empty
+            weight_update_empty = torch.clamp(weight_update_empty, 0, self.max_weight)
 
         # feature update
         feature_weights_old = (
@@ -202,6 +214,11 @@ class Integrator(torch.nn.Module):
 
         # insert features
         insert_values(feature_update, feature_indices_insert, features_volume)
+
+        if self.n_empty_space_voting > 0:
+            # insert empty tsdf and weights
+            insert_values(value_update_empty, indices_empty_insert, values_volume)
+            insert_values(weight_update_empty, indices_empty_insert, weights_volume)
 
         return (
             values_volume,

@@ -53,6 +53,7 @@ class Fuse_Pipeline(torch.nn.Module):
             self._routing_network = None
 
         config.FUSION_MODEL.fusion_strategy = config.DATA.fusion_strategy
+        config.FUSION_MODEL.trunc_value = config.DATA.trunc_value
         if config.DATA.truncation_strategy == "standard":
             config.FUSION_MODEL.init_value = -config.DATA.init_value
         elif config.DATA.truncation_strategy == "artificial":
@@ -355,20 +356,19 @@ class Fuse_Pipeline(torch.nn.Module):
     def _prepare_volume_update(
         self, values, est, features, inputs, sensor
     ) -> dict:  # TODO: adapt to when not using features
+
+        output = dict()
+
         try:
             tail_points = eval("self.config.FUSION_MODEL.n_tail_points_" + sensor)
         except:
             tail_points = self.config.FUSION_MODEL.n_tail_points
 
         b, h, w = inputs.shape
-        # print(b, h, w)
         depth = inputs.view(b, h * w, 1)
 
         valid = depth != 0.0
         valid = valid.nonzero()[:, 1]
-
-        # remove border voxels belonging to rays that are at the edge of the image in order to
-        # better train the filtering network on the real outliers. This step assumes that we do
 
         valid_filter = inputs[0, :, :].cpu().detach().numpy()
         valid_filter = valid_filter != 0.0
@@ -378,27 +378,16 @@ class Fuse_Pipeline(torch.nn.Module):
         valid_filter = valid_filter.view(b, h * w, 1)
 
         valid_filter = valid_filter.nonzero()[:, 1]
-        # print(valid_filter.shape)
-        # print(valid_filter.shape)
-        # it appears that idx is always 0, it should not be. It appears that the 8 weights do not sum to one! This is wrong!
-        # print(values['indices'].shape)
-        # max_w, idxs = torch.max(values['weights'], dim=-1)
-        # print(idxs.shape)
-        # print('idx', idxs[0, 0, 0])
-        # print('sum idx', idxs.sum())
-        # print('weigt', values['weights'][0, 0, 0, :])
-        # print('ind', values['indices'][0, 0, 0, idxs[0, 0, 0], :])
-        # print('featind', values['feature_indices'][0, 0, 0, 0, :])
+
         update_indices = values["indices"][:, valid, :tail_points, :, :]
-        # filter_weights = values['weights'][:, valid_filter, :(tail_points - math.floor(self.config.FILTERING_MODEL.neighborhood/2)), :] # this is only to do what?
+
         update_weights = values["weights"][:, valid, :tail_points, :]
-        update_indices_empty = values["indices_empty"][
-            :, valid, :, :, :
-        ]  # indices of the voxel vertices we want to update
-        update_weights_empty = values["weights_empty"][:, valid, :, :]  # wei
-        # update_indices_empty_behind = values['indices_empty_behind'][:, valid, :, :, :] # indices of the voxel vertices we want to update
-        # update_weights_empty_behind = values['weights_empty_behind'][:, valid, :, :] # wei
-        # print(update_weights_empty.shape)
+
+        if self.config.FUSION_MODEL.n_empty_space_voting > 0:
+            update_indices_empty = values["indices_empty"][:, valid, :, :, :]
+            update_weights_empty = values["weights_empty"][:, valid, :, :]
+            output["update_indices_empty"] = update_indices_empty
+            output["update_weights_empty"] = update_weights_empty
 
         update_values = est[:, valid, :tail_points]
 
@@ -406,21 +395,15 @@ class Fuse_Pipeline(torch.nn.Module):
             update_values, -self.config.DATA.trunc_value, self.config.DATA.trunc_value
         )
 
-        # we do not need to compute an update_feature_weights variable for the features since they are all one at the indices in question.
-        # we need to compute an update_feature_indices however
         update_features = features[:, valid, :tail_points, :]
 
         del valid
 
         # packing
-        output = dict(
-            update_values=update_values,
-            update_features=update_features,
-            update_weights=update_weights,
-            update_indices=update_indices,
-            update_indices_empty=update_indices_empty,
-            update_weights_empty=update_weights_empty,
-        )
+        output["update_values"] = update_values
+        output["update_features"] = update_features
+        output["update_weights"] = update_weights
+        output["update_indices"] = update_indices
 
         return output
 
