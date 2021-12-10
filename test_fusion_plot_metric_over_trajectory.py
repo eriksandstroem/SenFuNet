@@ -60,10 +60,10 @@ def test_fusion(config):
                                             num_workers=16)
 
     # specify number of features
-    if config.FEATURE_MODEL.learned_features:
+    if config.FEATURE_MODEL.use_feature_net:
         config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.n_features + config.FEATURE_MODEL.append_depth
     else:
-        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_pixel_conf + config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
+        config.FEATURE_MODEL.n_features = config.FEATURE_MODEL.append_depth # 1 for label encoding of noise in gaussian threshold data
 
 
     # get test database

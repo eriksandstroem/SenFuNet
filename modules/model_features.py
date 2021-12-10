@@ -6,24 +6,28 @@ from torch.nn.functional import normalize
 
 
 class EncoderBlock(nn.Module):
-    '''Encoder block for the fusion network in NeuralFusion'''
+    """Encoder block for the fusion network in NeuralFusion"""
 
     def __init__(self, c_in, c_out, activation, resolution, layernorm):
 
         super(EncoderBlock, self).__init__()
 
         if layernorm:
-            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
-                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                       activation,
-                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
-                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                       activation)
+            self.block = nn.Sequential(
+                nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                activation,
+                nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                activation,
+            )
         else:
-            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
-                                       activation,
-                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
-                                       activation)
+            self.block = nn.Sequential(
+                nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                activation,
+                nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                activation,
+            )
 
     def forward(self, x):
         # print('input enc: ', x.isnan().sum())
@@ -33,54 +37,58 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    '''Decoder block for the fusion network in NeuralFusion'''
+    """Decoder block for the fusion network in NeuralFusion"""
 
     def __init__(self, c_in, c_out, activation, resolution, layernorm):
 
         super(DecoderBlock, self).__init__()
 
         if layernorm:
-            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
-                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                       activation,
-                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
-                                       nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
-                                       activation)
+            self.block = nn.Sequential(
+                nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                activation,
+                nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                nn.LayerNorm([resolution[0], resolution[1]], elementwise_affine=True),
+                activation,
+            )
         else:
-            self.block = nn.Sequential(nn.Conv2d(c_in, c_out, (3, 3), padding=1),
-                                       activation,
-                                       nn.Conv2d(c_out, c_out, (3, 3), padding=1),
-                                       activation)
+            self.block = nn.Sequential(
+                nn.Conv2d(c_in, c_out, (3, 3), padding=1),
+                activation,
+                nn.Conv2d(c_out, c_out, (3, 3), padding=1),
+                activation,
+            )
 
     def forward(self, x):
         return self.block(x)
 
 
 class FeatureNet(nn.Module):
-    """Fusion Network used in NeuralFusion"""
+    """Network used in NeuralFusion"""
 
     def __init__(self, config, sensor):
 
         super(FeatureNet, self).__init__()
 
         try:
-            self.n_points = eval('config.n_points_' + sensor)
+            self.n_points = eval("config.n_points_" + sensor)
         except:
             self.n_points = config.n_points
 
-
         self.n_features = config.n_features - config.append_depth
-        if self.n_features == 0: # then we don't use the feature net at all, but to stop error we set it to one
+        if (
+            self.n_features == 0
+        ):  # then we don't use the feature net at all, but to stop error we set it to one
             self.n_features = 1
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
-        self.w_stereo_warp_right = config.stereo_warp_right 
+        self.w_stereo_warp_right = config.stereo_warp_right
         self.w_intensity_gradient = config.w_intensity_gradient
-        self.w_routing_conf = config.w_routing_conf
-
+        self.confidence = config.confidence
 
         # layer settings
-        n_channels_input = self.n_features 
+        n_channels_input = self.n_feawtures
         n_channels_output = self.n_features
         self.n_layers = config.n_layers
         self.height = config.resy
@@ -92,65 +100,115 @@ class FeatureNet(nn.Module):
         layernorm = config.layernorm
         self.append_depth = config.append_depth
         self.supervision = config.supervision
-        self.append_conf = config.append_pixel_conf
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
         self.decoder = nn.ModuleList()
 
-        if sensor == 'tof':
-            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
-        elif sensor == 'stereo':
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right) + int(self.w_routing_conf)
+        if sensor == "tof":
+            n_channels_first = (
+                config.depth
+                + 3 * int(self.w_rgb) * config.w_rgb_tof
+                + 2 * int(self.w_intensity_gradient)
+                + int(self.confidence)
+            )
+        elif sensor == "stereo":
+            n_channels_first = (
+                config.depth
+                + 3 * int(self.w_rgb)
+                + 2 * int(self.w_intensity_gradient)
+                + 3 * int(self.w_stereo_warp_right)
+                + int(self.confidence)
+            )
         else:
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
+            n_channels_first = (
+                config.depth
+                + 3 * int(self.w_rgb)
+                + 2 * int(self.w_intensity_gradient)
+                + int(self.confidence)
+            )
 
         # add first encoder block
-        self.encoder.append(EncoderBlock(n_channels_first,
-                                         n_channels_input,
-                                         enc_activation,
-                                         resolution,
-                                         layernorm))
+        self.encoder.append(
+            EncoderBlock(
+                n_channels_first,
+                n_channels_input,
+                enc_activation,
+                resolution,
+                layernorm,
+            )
+        )
         # add first decoder block
-        if sensor == 'stereo':
-            self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + \
-                                             2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right) + int(self.w_routing_conf),
-                                             self.n_layers * n_channels_output,
-                                             dec_activation,
-                                             resolution,
-                                             layernorm))
-        elif sensor == 'tof':
-            self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + \
-                                             2*int(self.w_intensity_gradient) + int(self.w_routing_conf),
-                                             self.n_layers * n_channels_output,
-                                             dec_activation,
-                                             resolution,
-                                             layernorm))    
+        if sensor == "stereo":
+            self.decoder.append(
+                DecoderBlock(
+                    (self.n_layers) * n_channels_input
+                    + config.depth
+                    + 3 * int(self.w_rgb)
+                    + 2 * int(self.w_intensity_gradient)
+                    + 3 * int(self.w_stereo_warp_right)
+                    + int(self.confidence),
+                    self.n_layers * n_channels_output,
+                    dec_activation,
+                    resolution,
+                    layernorm,
+                )
+            )
+        elif sensor == "tof":
+            self.decoder.append(
+                DecoderBlock(
+                    (self.n_layers) * n_channels_input
+                    + config.depth
+                    + 3 * int(self.w_rgb) * config.w_rgb_tof
+                    + 2 * int(self.w_intensity_gradient)
+                    + int(self.confidence),
+                    self.n_layers * n_channels_output,
+                    dec_activation,
+                    resolution,
+                    layernorm,
+                )
+            )
         else:
-            self.decoder.append(DecoderBlock((self.n_layers) * n_channels_input + config.depth + 3*int(self.w_rgb) + \
-                                             2*int(self.w_intensity_gradient) + int(self.w_routing_conf),
-                                             self.n_layers * n_channels_output,
-                                             dec_activation,
-                                             resolution,
-                                             layernorm))
+            self.decoder.append(
+                DecoderBlock(
+                    (self.n_layers) * n_channels_input
+                    + config.depth
+                    + 3 * int(self.w_rgb)
+                    + 2 * int(self.w_intensity_gradient)
+                    + int(self.confidence),
+                    self.n_layers * n_channels_output,
+                    dec_activation,
+                    resolution,
+                    layernorm,
+                )
+            )
 
         # adding model layers
         for l in range(1, self.n_layers):
-            self.encoder.append(EncoderBlock(n_channels_first + l * n_channels_input,
-                                             n_channels_input,
-                                             enc_activation,
-                                             resolution,
-                                             layernorm))
+            self.encoder.append(
+                EncoderBlock(
+                    n_channels_first + l * n_channels_input,
+                    n_channels_input,
+                    enc_activation,
+                    resolution,
+                    layernorm,
+                )
+            )
 
-            self.decoder.append(DecoderBlock(((self.n_layers + 1) - l) * n_channels_output,
-                                             ((self.n_layers + 1) - (l + 1)) * n_channels_output,
-                                             dec_activation,
-                                             resolution,
-                                             layernorm))
+            self.decoder.append(
+                DecoderBlock(
+                    ((self.n_layers + 1) - l) * n_channels_output,
+                    ((self.n_layers + 1) - (l + 1)) * n_channels_output,
+                    dec_activation,
+                    resolution,
+                    layernorm,
+                )
+            )
 
         if self.supervision:
-            self.confidence_head = nn.Sequential(nn.Conv2d(self.n_features, 1, (1, 1), padding=0),
-                                       nn.Sigmoid())
+            self.confidence_head = nn.Sequential(
+                nn.Conv2d(self.n_features, 1, (1, 1), padding=0), nn.Sigmoid()
+            )
 
         self.tanh = nn.Tanh()
 
@@ -167,8 +225,8 @@ class FeatureNet(nn.Module):
             xmid = enc(x)
             # print(xmid)
             if xmid.isnan().sum() > 0 or xmid.isinf().sum() > 0:
-                print('xmid nan: ', xmid.isnan().sum())
-                print('xmid inf: ', xmid.isinf().sum())
+                print("xmid nan: ", xmid.isnan().sum())
+                print("xmid inf: ", xmid.isinf().sum())
             # print('enc: ', xmid.isnan().sum())
             x = torch.cat([x, xmid], dim=1)
 
@@ -185,44 +243,44 @@ class FeatureNet(nn.Module):
         if self.append_depth:
             x = torch.cat([x, d], dim=1)
 
-
         output = dict()
 
         if self.supervision:
             conf = self.confidence_head(x)
-            output['confidence'] = conf
+            output["confidence"] = conf
             if self.append_conf:
                 x = torch.cat((x, conf), dim=1)
-    
-        output['feature'] = x
-    
+
+        output["feature"] = x
+
         return output
 
 
 class FeatureResNet(nn.Module):
-    """Fusion Network used in NeuralFusion"""
+    """Residual Network"""
 
     def __init__(self, config, sensor):
 
         super(FeatureResNet, self).__init__()
 
         try:
-            self.n_points = eval('config.n_points_' + sensor)
+            self.n_points = eval("config.n_points_" + sensor)
         except:
             self.n_points = config.n_points
 
-
         self.n_features = config.n_features - config.append_depth
-        if self.n_features == 0: # then we don't use the feature net at all, but to stop error we set it to one
+        if (
+            self.n_features == 0
+        ):  # then we don't use the feature net at all, but to stop error we set it to one
             self.n_features = 1
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
-        self.w_stereo_warp_right = config.stereo_warp_right 
+        self.w_stereo_warp_right = config.stereo_warp_right
         self.w_intensity_gradient = config.w_intensity_gradient
-        self.w_routing_conf = config.w_routing_conf
+        self.confidence = config.confidence
 
         # layer settings
-        n_channels_input = self.n_features 
+        n_channels_input = self.n_features
         n_channels_output = self.n_features
         self.n_layers = config.n_layers
         self.height = config.resy
@@ -234,38 +292,61 @@ class FeatureResNet(nn.Module):
         layernorm = config.layernorm
         self.append_depth = config.append_depth
         self.supervision = config.supervision
-        self.append_conf = config.append_pixel_conf
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
 
-        if sensor == 'tof':
-            n_channels_first = config.depth + 3*int(self.w_rgb)*config.w_rgb_tof + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
-        elif sensor == 'stereo':
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + 3*int(self.w_stereo_warp_right) + int(self.w_routing_conf)
+        if sensor == "tof":
+            n_channels_first = (
+                config.depth
+                + 3 * int(self.w_rgb) * config.w_rgb_tof
+                + 2 * int(self.w_intensity_gradient)
+                + int(self.confidence)
+            )
+        elif sensor == "stereo":
+            n_channels_first = (
+                config.depth
+                + 3 * int(self.w_rgb)
+                + 2 * int(self.w_intensity_gradient)
+                + 3 * int(self.w_stereo_warp_right)
+                + int(self.confidence)
+            )
         else:
-            n_channels_first = config.depth + 3*int(self.w_rgb) + 2*int(self.w_intensity_gradient) + int(self.w_routing_conf)
+            n_channels_first = (
+                config.depth
+                + 3 * int(self.w_rgb)
+                + 2 * int(self.w_intensity_gradient)
+                + int(self.confidence)
+            )
 
         # add first encoder block
-        self.encoder.append(EncoderBlock(n_channels_first,
-                                         n_channels_input,
-                                         enc_activation,
-                                         resolution,
-                                         layernorm))
-
+        self.encoder.append(
+            EncoderBlock(
+                n_channels_first,
+                n_channels_input,
+                enc_activation,
+                resolution,
+                layernorm,
+            )
+        )
 
         # adding model layers
         for l in range(1, self.n_layers):
-            self.encoder.append(EncoderBlock(n_channels_input,
-                                             n_channels_input,
-                                             enc_activation,
-                                             resolution,
-                                             layernorm))
+            self.encoder.append(
+                EncoderBlock(
+                    n_channels_input,
+                    n_channels_input,
+                    enc_activation,
+                    resolution,
+                    layernorm,
+                )
+            )
 
         if self.supervision:
-            self.confidence_head = nn.Sequential(nn.Conv2d(self.n_features, 1, (1, 1), padding=0),
-                                       nn.Sigmoid())
-                                       # nn.ReLU())
+            self.confidence_head = nn.Sequential(
+                nn.Conv2d(self.n_features, 1, (1, 1), padding=0), nn.Sigmoid()
+            )
+            # nn.ReLU())
 
         self.tanh = nn.Tanh()
 
@@ -281,31 +362,28 @@ class FeatureResNet(nn.Module):
         for k, enc in enumerate(self.encoder):
             xmid = enc(x)
             if xmid.isnan().sum() > 0 or xmid.isinf().sum() > 0:
-                print('xmid nan: ', xmid.isnan().sum())
-                print('xmid inf: ', xmid.isinf().sum())
+                print("xmid nan: ", xmid.isnan().sum())
+                print("xmid inf: ", xmid.isinf().sum())
             # print('enc: ', xmid.isnan().sum())
             if k > 0:
                 x = x + xmid
             else:
                 x = xmid
 
-
         if self.normalize:
             x = normalize(x, p=2, dim=1)
 
-
         if self.append_depth:
             x = torch.cat([x, d], dim=1)
-  
+
         output = dict()
 
         if self.supervision:
             conf = self.confidence_head(x)
-            output['confidence'] = conf
+            output["confidence"] = conf
             if self.append_conf:
                 x = torch.cat((x, conf), dim=1)
-    
-        output['feature'] = x
-    
-        return output
 
+        output["feature"] = x
+
+        return output

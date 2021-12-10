@@ -1,45 +1,39 @@
 SETTINGS:
-  gpu: True
+  gpu: True # run on cpu or gpu
   experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion # path where the logging is done and the models are saved.
-  test_mode: True # To be removed. Does not serve any purpose right now really. Need to code so that the train database does not use the alpha channel but the validation and test database does. make sure this is set to "test" when using test_fusion.py. This makes sure that we visualize the alpha weighting between the sensors if we use more than one sensor
   eval_freq: 442 # how many global steps before evaluation and saving the model
   log_freq: 442 #957 383 # how many global steps before logging the training loss
-  seed: 52
+  seed: 52 # seed for shuffling operations
 FUSION_MODEL:
-  use_fusion_net: False
-  fixed: True
-  output_scale: 1.0
-  n_points: 11 # when using the toy noise we use this defauly value
-  n_tail_points: 9 # when using the toy noise we use this defauly value
-  n_points_tof: 11
+  use_fusion_net: False # use learned fusion net as done by RoutedFusion
+  fixed: True # use fixed or finetune weights when use_fusion_net is true
+  output_scale: 1.0 # output scale from fusion net (same as RoutedFusion)
+  n_points: 11 # extraction band samples
+  n_tail_points: 9 # samples along the ray which update the grid
+  n_points_tof: 11 # tof specific extraction band samples
   n_tail_points_tof: 9
-  n_points_stereo: 11
+  n_points_stereo: 11 # stereo specific extraction band samples
   n_tail_points_stereo: 9
-  confidence: False
-  n_empty_space_voting: 10
-  with_peek: False # to be removed
-  max_weight: 500
+  confidence: False # feed 2D confidence map to learned fusion net (only when using routing)
+  n_empty_space_voting: 0 # samples with free space update
+  max_weight: 500 # max weight
   extraction_strategy: 'nearest_neighbor' # nearest_neighbor or trilinear_interpolation
 FEATURE_MODEL:
-  w_routing_conf: False
-  stereo_warp_right: False
-  network: resnet
-  learned_features: True
-  append_depth: True # this increases the number of features by one
-  append_pixel_conf: False
-  w_rgb: True
-  w_rgb_tof: False
-  w_intensity_gradient: False
-  normalize: True
-  relative_normalization: False
-  fixed: False
-  n_features: 4
-  n_layers: 6
+  confidence: False # feed 2D confidence map to learned fusion net (only when using routing)
+  stereo_warp_right: False # concatenate the right stereo view warped to the left view using the left stereo view depth as input to the feature net
+  network: resnet # anything else but "resnet" will give a standard network
+  use_feature_net: True # use learned feature net. When false, yields the depth as feature
+  append_depth: True # append depth to feature vector
+  w_rgb: True # concatenate rgb to stereo or mvs depth sensors as input to feature net
+  w_rgb_tof: False # concatenate rgb to tof sensor as input to the feature net
+  w_intensity_gradient: False # concatenate rgb intensity and gradient as input to the feature net 
+  normalize: True # normalize the feature vector
+  fixed: False # fix weights of feature net - when true does not declare an optimzer
+  n_features: 4 # output dimension from feature net
+  n_layers: 6 # layers 
   enc_activation: torch.nn.Tanh()
   dec_activation: torch.nn.Tanh()
-  depth: True
-  resx: 256
-  resy: 256
+  depth: True # concatenate depth as input to feature net
   layernorm: False
 ROUTING_MODEL:
   contraction: 64
@@ -48,7 +42,7 @@ ROUTING_MODEL:
   normalization: False
 FILTERING_MODEL:
   outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. Only works with 5layer model
-  use_outlier_filter: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
+  use_refinement: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
   residual_learning: False
   alpha_force: False # I can remove this now!
   model: '3dconv' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
@@ -60,7 +54,6 @@ FILTERING_MODEL:
   weights_to_weight_head: True # wheather or not to feed the tsdf weights to the sensor weighting head- only works for 5layer model now!
   output_scale: 0.12
   fixed: False
-  erosion: False 
   tanh_weight: True
   inverted_weight: False # when tanh_weight is true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head is true
   MLP_MODEL:
@@ -79,7 +72,7 @@ FILTERING_MODEL:
     nbr_groups: 2
     grouping_strategy: 'absolute'
     network_depth: 2
-    weighting_complexity: '2layer' # number of 3d convolutions with kernel size 3
+    weighting_complexity: '3layer' # number of 3d convolutions
     network_depth_sensor_weighting: 2 # only used when weighting complexity is encode features first
 LOSS:
   alpha_single_sensor_supervision: True
@@ -127,6 +120,12 @@ TRAINING:
   n_epochs: 1000
   gradient_clipping: True
 TESTING:
+  visualize_features_and_proxy: False
+  routedfusion_nn: True
+  routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the weight grids
+  use_outlier_filter: True
+  eval_single_sensors: False # not applicable when evaluating routedfusion
+  visualize_sensor_weighting: False
   test_batch_size: 1
   test_shuffle: False
   pretrain_filtering_net: False
@@ -195,4 +194,4 @@ DATA:
   transform: ToTensor()
   init_value: 0.0 # init value of tsdf grids
   trunc_value: 0.05 # truncation distance
-  truncation_strategy: standard # standard, artificial or none
+  truncation_strategy: standard # standard, artificial or none REMOVE I SUPPOSE

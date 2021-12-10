@@ -67,6 +67,8 @@ class Fuse_Pipeline(torch.nn.Module):
             config.FUSION_MODEL.n_tail_points_stereo
         )
         config.FEATURE_MODEL.supervision = config.LOSS.alpha_2d_supervision
+        config.FEATURE_MODEL.resx = config.DATA.resx
+        config.FEATURE_MODEL.resy = config.DATA.resy
 
         self.n_features = self.config.FEATURE_MODEL.n_features
 
@@ -172,46 +174,11 @@ class Fuse_Pipeline(torch.nn.Module):
             tsdf_pred[:, :, :, :] = temp.expand(-1, -1, 256, 256)
             # print(tsdf_pred[0, :, 200, 200])
 
-        if self.config.FEATURE_MODEL.learned_features:
-            # if self.config.FEATURE_MODEL.relative_normalization:
-            #     norm = dict()
-            #     feat_pred = dict()
-            #     for sensor_ in self.config.DATA.input:
-            #         feat_pred[sensor_] = self._feature_network[sensor_].forward(input_features[sensor_])
-            #         if self.config.FEATURE_MODEL.append_depth:
-            #             # print(feat_pred[sensor_][:, -1, :, :])
-            #             norm[sensor_] = torch.linalg.norm(feat_pred[sensor_][:, :-1, :, :], dim=1)
-            #         else:
-            #             norm[sensor_] = torch.linalg.norm(feat_pred[sensor_], dim=1)
-
-            #     # normalize
-            #     normalization_factor = None
-            #     for k, sensor_ in enumerate(self.config.DATA.input):
-            #         if k == 0:
-            #             normalization_factor = norm[sensor_]
-            #         else:
-            #             torch.min(normalization_factor, norm[sensor_])
-
-            #     feat_pred = feat_pred[sensor] / normalization_factor
-
-            # else:
+        if self.config.FEATURE_MODEL.use_feature_net:
             feat_pred = self._feature_network[sensor].forward(input_features[sensor])
         else:
             feat_pred = dict()
             feat_pred["feature"] = input_features[sensor]
-
-            if self.config.FEATURE_MODEL.append_pixel_conf:
-                if sensor == "gauss_close_cont":
-                    gt = torch.unsqueeze(gt_depth, -1)
-                    gt = gt.permute(0, -1, 1, 2)
-                    feat_pred = gt > 1.75
-                    # feat_pred = input_features[sensor] > 1.75 # one where we have no noise
-                elif sensor == "gauss_far_cont":
-                    gt = torch.unsqueeze(gt_depth, -1)
-                    gt = gt.permute(0, -1, 1, 2)
-                    feat_pred = gt < 1.75
-                    # feat_pred = input_features[sensor] < 1.75
-                feat_pred = torch.cat((feat_pred, input_features[sensor]), dim=1)
 
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
 
@@ -315,7 +282,7 @@ class Fuse_Pipeline(torch.nn.Module):
             elif sensor != "tof":
                 feature_input[sensor] = torch.cat((feature_input[sensor], rgb), dim=3)
 
-        if confidence is not None and self.config.FEATURE_MODEL.w_routing_conf:
+        if confidence is not None and self.config.FEATURE_MODEL.confidence:
             confidence = torch.unsqueeze(confidence, -1)
             # confidence = confidence.permute(0, 3, 1, 2) # never use view here - that fucked up the order!
             # print(confidence.shape)
