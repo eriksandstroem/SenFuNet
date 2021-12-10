@@ -135,3 +135,4 @@ videos
 deps/graphics_new
 utils/invert_colormap.py
 compute_attention_similarity.py
+scripts/log
