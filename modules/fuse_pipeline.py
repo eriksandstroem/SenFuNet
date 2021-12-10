@@ -33,8 +33,6 @@ class Fuse_Pipeline(torch.nn.Module):
                 self._routing_network = ConfidenceRouting(
                     Cin=Cin,
                     F=config.ROUTING_MODEL.contraction,
-                    Cout=config.ROUTING_MODEL.n_output_channels,
-                    depth=config.ROUTING_MODEL.depth,
                     batchnorms=config.ROUTING_MODEL.normalization,
                 )
             elif config.DATA.fusion_strategy == "fusionNet":
@@ -44,8 +42,6 @@ class Fuse_Pipeline(torch.nn.Module):
                     self._routing_network[sensor_] = ConfidenceRouting(
                         Cin=Cin,
                         F=config.ROUTING_MODEL.contraction,
-                        Cout=config.ROUTING_MODEL.n_output_channels,
-                        depth=config.ROUTING_MODEL.depth,
                         batchnorms=config.ROUTING_MODEL.normalization,
                     )
 

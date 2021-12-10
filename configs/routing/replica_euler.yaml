@@ -3,8 +3,6 @@ SETTINGS:
   experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing # path where the logging is done and the models are saved.
 MODEL:
   contraction: 64
-  depth: 1
-  n_output_channels: 2
   normalization: False
 LOSS:
   name: gradweighted + uncertainty # gradweighteduncertainty or gradweighted + uncertainty or uncertainty or VNL + gradweighted + uncertainty or VNL + gradweighteduncertainty
@@ -57,7 +55,7 @@ DATA:
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
   root_dir: TMPDIR # /cluster/work/cvl/esandstroem/data/replica/manual #
   dataset: Replica
-  input: [sgm_stereo, stereo] # mono_depth, stereo_depth, tof_depth, multidepth
+  input: [stereo] # 
   target: depth_gt
   resx: 512
   resy: 512
@@ -70,5 +68,5 @@ DATA:
   train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/train.txt
   val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/val.txt
   test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt
-  init_value: 0.1 # truncation distance
+  init_value: 0.05 # truncation distance
   truncation_strategy: standard # standard, artificial or none

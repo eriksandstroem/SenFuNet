@@ -36,10 +36,8 @@ FEATURE_MODEL:
   depth: True # concatenate depth as input to feature net
   layernorm: False
 ROUTING_MODEL:
-  contraction: 64
-  depth: 1
-  n_output_channels: 2
-  normalization: False
+  contraction: 64 # hidden dimension of routing network
+  normalization: False # apply batch normalization
 FILTERING_MODEL:
   outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. Only works with 5layer model
   use_refinement: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
