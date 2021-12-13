@@ -12,6 +12,7 @@ class ConfidenceRouting(torch.nn.Module):
         self.F = F
 
         # for backwards compatibility to the old routing nets, set Cout = 2
+        # I redid all old routing nets so now they are made to work with Cout = 1
         Cout = 1
 
         if batchnorms:

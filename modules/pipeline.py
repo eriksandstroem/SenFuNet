@@ -131,6 +131,9 @@ class Pipeline(torch.nn.Module):
                 # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                 batch["routing_net"] = "self._routing_network"
                 batch["sensor"] = self.config.DATA.input[0]
+                batch[
+                    "fusionNet"
+                ] = None  # We don't use a fusion net during early fusion
                 output = self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 for sensor_ in sensors:

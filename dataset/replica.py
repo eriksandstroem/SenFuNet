@@ -534,7 +534,9 @@ class Replica(Dataset):
 
             sample[sensor_ + "_depth"] = np.asarray(depth)
 
-            if sensor_ == "stereo":
+            if (
+                sensor_ == "stereo"
+            ):  # perhaps remove this since this is only for the psmnet stereo sensor and not for sgm stereo
                 # load right rgb image
                 file = self.color_images[item]
                 file = (
@@ -592,17 +594,17 @@ class Replica(Dataset):
                     sample[sensor_ + "_mask"] = mask
 
         if self.fusion_strategy == "routingNet":
-            mask = np.logical_or(
-                (sample["sgm_stereo_depth"] > self.min_depth),
-                (sample["stereo_depth"] > self.min_depth),
-            )
-            mask = np.logical_and(
-                mask,
-                np.logical_or(
-                    sample["sgm_stereo_depth"] < self.max_depth,
-                    sample["stereo_depth"] < self.max_depth,
-                ),
-            )
+            mask_min = np.zeros_like(sample[self.input[0] + "_depth"])
+            mask_max = np.zeros_like(sample[self.input[0] + "_depth"])
+            for sensor_ in self.input:
+                mask_min = np.logical_or(
+                    mask_min, sample[sensor_ + "_depth"] > self.min_depth
+                )
+                mask_max = np.logical_or(
+                    mask_max, sample[sensor_ + "_depth"] < self.max_depth
+                )
+
+            mask = np.logical_and(mask_min, mask_max)
 
             # do not integrate depth values close to the image boundary
             # this is relevant for the stereo modality.

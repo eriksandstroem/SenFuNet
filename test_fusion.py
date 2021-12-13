@@ -1,6 +1,7 @@
 import torch
 import argparse
 import os
+import datetime
 
 import numpy as np
 
@@ -39,12 +40,17 @@ def count_parameters(model):
 def test_fusion(config):
     # define output dir
     test_path = "/test_no_carving_debug"
-    test_dir = (
-        config.SETTINGS.experiment_path
-        + "/"
-        + config.TESTING.fusion_model_path.split("/")[-3]
-        + test_path
-    )
+    if config.FILTERING_MODEL.model != "3dconv":
+        time = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+        print(time)
+        test_dir = config.SETTINGS.experiment_path + "/" + time + test_path
+    else:
+        test_dir = (
+            config.SETTINGS.experiment_path
+            + "/"
+            + config.TESTING.fusion_model_path.split("/")[-3]
+            + test_path
+        )
 
     if not os.path.exists(test_dir):
         os.makedirs(test_dir)
@@ -73,8 +79,7 @@ def test_fusion(config):
         )
     else:
         config.FEATURE_MODEL.n_features = (
-            config.FEATURE_MODEL.append_depth
-            + 3 * config.FEATURE_MODEL.w_rgb
+            config.FEATURE_MODEL.append_depth + 3 * config.FEATURE_MODEL.w_rgb
         )  # 1 for label encoding of noise in gaussian threshold data
 
     # get test database
@@ -107,7 +112,19 @@ def test_fusion(config):
         )
 
     # load network parameters from trained model
-    if config.FILTERING_MODEL.model != "tsdf_middle_fusion":
+    if config.FILTERING_MODEL.model == "tsdf_early_fusion":
+        # load trained routing model into parameters
+        assert config.ROUTING.do == True
+        routing_checkpoint = torch.load(config.TESTING.routing_model_path)
+        # print(routing_checkpoint)
+
+        # load_model(config.TESTING.routing_model_path, pipeline._routing_network)
+        # Keep line below until I see that the new loading function works.
+        pipeline.fuse_pipeline._routing_network.load_state_dict(
+            routing_checkpoint["pipeline_state_dict"]
+        )
+        print("Successfully loaded routing network")
+    elif config.FILTERING_MODEL.model != "tsdf_middle_fusion":
         load_pipeline(config.TESTING.fusion_model_path, pipeline)
 
     # put pipelien in evaluation mode
@@ -116,7 +133,7 @@ def test_fusion(config):
     sensors = config.DATA.input
 
     # test model
-    if config.FILTERING_MODEL.model != "tsdf_middle_fusion":
+    if config.FILTERING_MODEL.model == "3dconv":
         pipeline.test(loader, dataset, database, sensors, device)
     else:
         pipeline.test_tsdf(loader, dataset, database, sensors, device)
@@ -127,12 +144,12 @@ def test_fusion(config):
 
     # compute f-scores and voxelgrid scores for the test scenes and render visualizations
     if config.FILTERING_MODEL.model == "routedfusion":
-        evaluate_routedfusion(database, config, test_path)
+        evaluate_routedfusion(database, config, test_dir)
     else:
-        evaluate(database, config, test_path)
+        evaluate(database, config, test_dir)
 
 
-def evaluate(database, config, test_path):
+def evaluate(database, config, test_dir):
 
     # when testing on data located at local scratch of gpu node
     sdf_gt_path = os.getenv(config.DATA.root_dir)
@@ -141,8 +158,6 @@ def evaluate(database, config, test_path):
 
     if not sdf_gt_path:
         sdf_gt_path = config.DATA.root_dir
-    test_dir = config.TESTING.fusion_model_path.split("/")[:-2]
-    test_dir = "/".join(test_dir) + test_path
 
     # define weight counter thresholds on which we evaluate
     weight_thresholds = config.TESTING.weight_thresholds
@@ -701,7 +716,7 @@ def evaluate(database, config, test_path):
                     )
 
 
-def evaluate_routedfusion(database, config, test_path):
+def evaluate_routedfusion(database, config, test_dir):
 
     # when testing on data located at local scratch of gpu node
     sdf_gt_path = os.getenv(config.DATA.root_dir)
@@ -710,8 +725,6 @@ def evaluate_routedfusion(database, config, test_path):
 
     if not sdf_gt_path:
         sdf_gt_path = config.DATA.root_dir
-    test_dir = config.TESTING.fusion_model_path.split("/")[:-2]
-    test_dir = "/".join(test_dir) + test_path
 
     # define weight counter thresholds on which we evaluate
     weight_thresholds = config.TESTING.weight_thresholds

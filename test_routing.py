@@ -25,32 +25,19 @@ def arg_parser():
 
 
 def prepare_input_data(batch, config, device):
-    if config.DATA.input == "multidepth":
-        if config.DATA.intensity_grad:
-            depth_tof = batch["tof_depth"].unsqueeze_(1)
-            # depth_mono = batch['mono_depth'].unsqueeze_(1)
-            depth_stereo = batch["stereo_depth"].unsqueeze_(1)
-            intensity = batch["intensity"].unsqueeze_(1)
-            grad = batch["gradient"].unsqueeze_(1)
-            inputs = torch.cat((intensity, grad, depth_tof, depth_stereo), 1)
-            inputs = inputs.to(device)
+
+    for k, sensor_ in enumerate(config.DATA.input):
+        if k == 0:
+            inputs = batch[sensor_ + "_depth"].unsqueeze_(1)
         else:
-            depth_tof = batch["tof_depth"].unsqueeze_(1)
-            # depth_mono = batch['mono_depth'].unsqueeze_(1)
-            depth_stereo = batch["stereo_depth"].unsqueeze_(1)
-            inputs = torch.cat((depth_tof, depth_stereo), 1)
-            inputs = inputs.to(device)
-    else:
-        if config.DATA.intensity_grad:
-            depth = batch[config.DATA.input].unsqueeze_(1)
-            intensity = batch["intensity"].unsqueeze_(1)
-            grad = batch["gradient"].unsqueeze_(1)
-            inputs = torch.cat((intensity, grad, depth), 1)
-            inputs = inputs.to(device)
-        else:
-            inputs = batch[config.DATA.input]
-            inputs = inputs.unsqueeze_(1)
-            inputs = inputs.to(device)
+            inputs = torch.cat((batch[sensor_ + "_depth"].unsqueeze_(1), inputs), 1)
+    inputs = inputs.to(device)
+
+    if config.DATA.intensity_grad:
+        intensity = batch["intensity"].unsqueeze_(1)
+        grad = batch["gradient"].unsqueeze_(1)
+        inputs = torch.cat((intensity, grad, inputs), 1)
+    inputs = inputs.to(device)
 
     target = batch[config.DATA.target]  # 2, 512, 512 (batch size, height, width)
     target = target.to(device)
@@ -75,11 +62,8 @@ def test(config):
     )
 
     # define model
-    Cin = 0
-    if config.DATA.input == "multidepth":
-        Cin += 2
-    else:
-        Cin += 1
+    Cin = len(config.DATA.input)
+
     if config.DATA.intensity_grad:
         Cin += 2
 
@@ -88,7 +72,8 @@ def test(config):
     )
     # load model
     checkpoint = torch.load(config.TESTING.model_path)
-    model.load_state_dict(checkpoint["state_dict"])
+
+    model.load_state_dict(checkpoint["pipeline_state_dict"])
 
     model = model.to(device)
 

@@ -1,6 +1,7 @@
 import torch
 import argparse
 import datetime
+import random
 
 import numpy as np
 
@@ -48,6 +49,14 @@ def prepare_input_data(batch, config, device):
 
 
 def train(args, config):
+
+    # set seed for reproducibility
+    if config.SETTINGS.seed:
+        random.seed(config.SETTINGS.seed)
+        np.random.seed(config.SETTINGS.seed)
+        torch.manual_seed(config.SETTINGS.seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
     if config.SETTINGS.gpu:
         device = torch.device("cuda:0")

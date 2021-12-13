@@ -26,7 +26,7 @@ def load_config_from_json(path):
     :param path: path to json file
     :return: easydict containing config
     """
-    with open(path, 'r') as file:
+    with open(path, "r") as file:
         data = json.load(file)
     config = EasyDict(data)
     return config
@@ -38,7 +38,7 @@ def load_experiment(path):
     :param path: path to experiment folder
     :return: easydict containing config
     """
-    path = os.path.join(path, 'config.json')
+    path = os.path.join(path, "config.json")
     config = load_config_from_json(path)
     return config
 
@@ -49,12 +49,12 @@ def load_config(path):
     loading config file based on file ending.
     """
 
-    if path[-4:] == 'yaml':
+    if path[-4:] == "yaml":
         return load_config_from_yaml(path)
-    elif path[-4:] == 'json':
+    elif path[-4:] == "json":
         return load_config_from_json(path)
     else:
-        raise ValueError('Unsupported file format for config')
+        raise ValueError("Unsupported file format for config")
 
 
 def load_model(file, model):
@@ -67,13 +67,16 @@ def load_model(file, model):
         if torch.cuda.is_available():
             checkpoint = torch.load(checkpoint)
         else:
-            checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
-        model.load_state_dict(checkpoint['state_dict'])
+            checkpoint = torch.load(checkpoint, map_location=torch.device("cpu"))
+        model.load_state_dict(checkpoint["state_dict"])
     except:
-        print('loading model partly')
-        pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model.state_dict()}
+        print("loading model partly")
+        pretrained_dict = {
+            k: v for k, v in checkpoint["state_dict"].items() if k in model.state_dict()
+        }
         model.state_dict().update(pretrained_dict)
         model.load_state_dict(model.state_dict())
+
 
 # def load_pipeline(file, model):
 
@@ -93,7 +96,10 @@ def load_model(file, model):
 #         model.state_dict().update(pretrained_dict)
 #         model.load_state_dict(model.state_dict())
 
-def load_pipeline(file, model): # loads all paramters that can be loaded in the checkpoint!
+
+def load_pipeline(
+    file, model
+):  # loads all paramters that can be loaded in the checkpoint!
 
     checkpoint = file
 
@@ -103,40 +109,47 @@ def load_pipeline(file, model): # loads all paramters that can be loaded in the 
         if torch.cuda.is_available():
             checkpoint = torch.load(checkpoint)
         else:
-            checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
-        
-        model.load_state_dict(checkpoint['pipeline_state_dict'])
-        print('loading full model')
+            checkpoint = torch.load(checkpoint, map_location=torch.device("cpu"))
+
+        model.load_state_dict(checkpoint["pipeline_state_dict"])
+        print("loading full model")
     except:
-        print('loading model partly')
+        print("loading model partly")
         # print(model.state_dict().keys())
-        print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
-        pretrained_dict = {k: v for k, v in checkpoint['pipeline_state_dict'].items() if k in model.state_dict()}
-        print('nbr of entries found in created model: ', len(model.state_dict().keys()))
-        print('nbr of entries found in created model and checkpoint model: ', len(pretrained_dict.keys()))
-        print('Keys in created model but not in checkpoint:')
+        print(
+            "nbr of entries in checkpoint model: ",
+            len(checkpoint["pipeline_state_dict"].keys()),
+        )
+        pretrained_dict = {
+            k: v
+            for k, v in checkpoint["pipeline_state_dict"].items()
+            if k in model.state_dict()
+        }
+        print("nbr of entries found in created model: ", len(model.state_dict().keys()))
+        print(
+            "nbr of entries found in created model and checkpoint model: ",
+            len(pretrained_dict.keys()),
+        )
+        print("Keys in created model but not in checkpoint:")
         for key in model.state_dict().keys():
-            if key not in checkpoint['pipeline_state_dict'].keys():
+            if key not in checkpoint["pipeline_state_dict"].keys():
                 print(key)
-        print('...')
-        print('Keys in checkpoint but not in created model')
-        for key in checkpoint['pipeline_state_dict'].keys():
+        print("...")
+        print("Keys in checkpoint but not in created model")
+        for key in checkpoint["pipeline_state_dict"].keys():
             if key not in model.state_dict().keys():
                 print(key)
 
+        # USE THESE TWO LINES
+        # model.state_dict().update(pretrained_dict)
+        # model.load_state_dict(model.state_dict())
+        # OR THESE TWO LINES TO LOAD (UNCLEAR WHICH IS BEST, sometimes one works, but the other does not)
+        model.load_state_dict(pretrained_dict, False)
 
-        # print(pretrained_dict.keys())
-        # print(model.state_dict().keys())
-        model.state_dict().update(pretrained_dict)
-        model.load_state_dict(model.state_dict())
-        # for key in model.state_dict().keys():
-        #     print(key)
-        #     print('pretrained: ', pretrained_dict[key])
-        #     print('model: ', model.state_dict()[key])
-                # print(key)
 
-         # model.load_state_dict(pretrained_dict, False)
-def load_net_old(file, model, sensor): # to load fusion net weights from model that was trained with the old setup i.e. pipeline._fusion_net_tof.etc...
+def load_net_old(
+    file, model, sensor
+):  # to load fusion net weights from model that was trained with the old setup i.e. pipeline._fusion_net_tof.etc...
 
     checkpoint = file
 
@@ -146,29 +159,45 @@ def load_net_old(file, model, sensor): # to load fusion net weights from model t
     if torch.cuda.is_available():
         checkpoint = torch.load(checkpoint)
     else:
-        checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
+        checkpoint = torch.load(checkpoint, map_location=torch.device("cpu"))
 
-    print('loading model partly')
+    print("loading model partly")
     # print(model.state_dict().keys())
     # print(checkpoint['pipeline_state_dict'].keys())
-    print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
+    print(
+        "nbr of entries in checkpoint model: ",
+        len(checkpoint["pipeline_state_dict"].keys()),
+    )
     # only load the model parameters in checkpoint related to the sensor
-    sensor_specific_checkpoint = {'.'.join(k.split('.')[1:]): v for k, v in checkpoint['pipeline_state_dict'].items() if k.split('.')[0].endswith(sensor)} # and k.split('.')[0].startswith('_fusion')}
-    print('nbr of entries in sensor specific checkpoint model: ', len(sensor_specific_checkpoint .keys()))
+    sensor_specific_checkpoint = {
+        ".".join(k.split(".")[1:]): v
+        for k, v in checkpoint["pipeline_state_dict"].items()
+        if k.split(".")[0].endswith(sensor)
+    }  # and k.split('.')[0].startswith('_fusion')}
+    print(
+        "nbr of entries in sensor specific checkpoint model: ",
+        len(sensor_specific_checkpoint.keys()),
+    )
     # check so that the sensor specific checkpoint weight names are in the model
-    pretrained_dict = {k: v for k, v in sensor_specific_checkpoint.items() if k in model.state_dict()}
-    print('nbr of entries found in created model: ', len(model.state_dict().keys()))
-    print('nbr of entries found in created model and sensor specific checkpoint model: ', len(pretrained_dict.keys()))
-        # for key in model.state_dict().keys():
-        #     if key not in pretrained_dict.keys():
-        #         print(key)
+    pretrained_dict = {
+        k: v for k, v in sensor_specific_checkpoint.items() if k in model.state_dict()
+    }
+    print("nbr of entries found in created model: ", len(model.state_dict().keys()))
+    print(
+        "nbr of entries found in created model and sensor specific checkpoint model: ",
+        len(pretrained_dict.keys()),
+    )
+    # for key in model.state_dict().keys():
+    #     if key not in pretrained_dict.keys():
+    #         print(key)
 
-        # print(pretrained_dict.keys())
-        # print(checkpoint['pipeline_state_dict'].keys())
-        # print(model.state_dict().keys())
-        # model.state_dict().update(pretrained_dict)
-        # model.load_state_dict(model.state_dict())
+    # print(pretrained_dict.keys())
+    # print(checkpoint['pipeline_state_dict'].keys())
+    # print(model.state_dict().keys())
+    # model.state_dict().update(pretrained_dict)
+    # model.load_state_dict(model.state_dict())
     model.load_state_dict(pretrained_dict, False)
+
 
 def load_net(file, model, sensor):
 
@@ -180,43 +209,58 @@ def load_net(file, model, sensor):
     if torch.cuda.is_available():
         checkpoint = torch.load(checkpoint)
     else:
-        checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
+        checkpoint = torch.load(checkpoint, map_location=torch.device("cpu"))
 
-    print('loading model partly')
+    print("loading model partly")
     # print(checkpoint['pipeline_state_dict'].keys())
     # print(model.state_dict().keys())
-    print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
+    print(
+        "nbr of entries in checkpoint model: ",
+        len(checkpoint["pipeline_state_dict"].keys()),
+    )
     # only load the model parameters in checkpoint related to the sensor
-    sensor_specific_checkpoint = {'.'.join(k.split('.')[3:]): v for k, v in checkpoint['pipeline_state_dict'].items() if k.split('.')[2].endswith(sensor)} # and k.split('.')[0].startswith('_fusion')}
+    sensor_specific_checkpoint = {
+        ".".join(k.split(".")[3:]): v
+        for k, v in checkpoint["pipeline_state_dict"].items()
+        if k.split(".")[2].endswith(sensor)
+    }  # and k.split('.')[0].startswith('_fusion')}
     # print(sensor_specific_checkpoint.keys())
-    print('nbr of entries in sensor specific checkpoint model: ', len(sensor_specific_checkpoint .keys()))
+    print(
+        "nbr of entries in sensor specific checkpoint model: ",
+        len(sensor_specific_checkpoint.keys()),
+    )
     # check so that the sensor specific checkpoint weight names are in the model
-    pretrained_dict = {k: v for k, v in sensor_specific_checkpoint.items() if k in model.state_dict()}
-    print('nbr of entries found in created model: ', len(model.state_dict().keys()))
-    print('nbr of entries found in created model and sensor specific checkpoint model: ', len(pretrained_dict.keys()))
-        # for key in model.state_dict().keys():
-        #     if key not in pretrained_dict.keys():
-        #         print(key)
-        # print(pretrained_dict.keys())
-        # print(checkpoint['pipeline_state_dict'].keys())
-        # print(model.state_dict().keys())
-        # model.state_dict().update(pretrained_dict)
-        # model.load_state_dict(model.state_dict())
+    pretrained_dict = {
+        k: v for k, v in sensor_specific_checkpoint.items() if k in model.state_dict()
+    }
+    print("nbr of entries found in created model: ", len(model.state_dict().keys()))
+    print(
+        "nbr of entries found in created model and sensor specific checkpoint model: ",
+        len(pretrained_dict.keys()),
+    )
+    # for key in model.state_dict().keys():
+    #     if key not in pretrained_dict.keys():
+    #         print(key)
+    # print(pretrained_dict.keys())
+    # print(checkpoint['pipeline_state_dict'].keys())
+    # print(model.state_dict().keys())
+    # model.state_dict().update(pretrained_dict)
+    # model.load_state_dict(model.state_dict())
     model.load_state_dict(pretrained_dict, False)
 
-def load_pipeline_stereo(file, model, sensor):
 
+def load_pipeline_stereo(file, model, sensor):
     def insert(k, sensor):
-        if sensor == 'tof':
-            if k.startswith('_r'):
-                k = k[:16] + '_tof' + k[16:]
+        if sensor == "tof":
+            if k.startswith("_r"):
+                k = k[:16] + "_tof" + k[16:]
             else:
-                k = k[:15] + '_tof' + k[15:]
-        elif sensor == 'stereo':
-            if k.startswith('_r'):
-                k = k[:16] + '_stereo' + k[16:]
+                k = k[:15] + "_tof" + k[15:]
+        elif sensor == "stereo":
+            if k.startswith("_r"):
+                k = k[:16] + "_stereo" + k[16:]
             else:
-                k = k[:15] + '_stereo' + k[15:]
+                k = k[:15] + "_stereo" + k[15:]
         return k
 
     checkpoint = file
@@ -227,18 +271,28 @@ def load_pipeline_stereo(file, model, sensor):
         if torch.cuda.is_available():
             checkpoint = torch.load(checkpoint)
         else:
-            checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
+            checkpoint = torch.load(checkpoint, map_location=torch.device("cpu"))
         # print(checkpoint['pipeline_state_dict'].keys())
-        model.load_state_dict(checkpoint['pipeline_state_dict'])
-        print('loading full')
+        model.load_state_dict(checkpoint["pipeline_state_dict"])
+        print("loading full")
     except:
-        print('loading model partly')
+        print("loading model partly")
         # print(checkpoint['pipeline_state_dict'].keys())
-        print('nbr of entries in checkpoint model: ', len(checkpoint['pipeline_state_dict'].keys()))
+        print(
+            "nbr of entries in checkpoint model: ",
+            len(checkpoint["pipeline_state_dict"].keys()),
+        )
         # print()
-        pretrained_dict = {insert(k, sensor): v for k, v in checkpoint['pipeline_state_dict'].items() if insert(k, sensor) in model.state_dict()}
-        print('nbr of entries found in created model: ', len(model.state_dict().keys()))
-        print('nbr of entries found in created model and checkpoint model: ', len(pretrained_dict.keys()))
+        pretrained_dict = {
+            insert(k, sensor): v
+            for k, v in checkpoint["pipeline_state_dict"].items()
+            if insert(k, sensor) in model.state_dict()
+        }
+        print("nbr of entries found in created model: ", len(model.state_dict().keys()))
+        print(
+            "nbr of entries found in created model and checkpoint model: ",
+            len(pretrained_dict.keys()),
+        )
         # for key in model.state_dict().keys():
         #     if key not in pretrained_dict.keys():
         #         print(key)
@@ -265,15 +319,17 @@ def load_checkpoint(checkpoint, model, optimizer=None):
         if torch.cuda.is_available():
             checkpoint = torch.load(checkpoint)
         else:
-            checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
-        model.load_state_dict(checkpoint['state_dict'])
+            checkpoint = torch.load(checkpoint, map_location=torch.device("cpu"))
+        model.load_state_dict(checkpoint["state_dict"])
     except:
-        print('loading model partly')
-        pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model.state_dict()}
+        print("loading model partly")
+        pretrained_dict = {
+            k: v for k, v in checkpoint["state_dict"].items() if k in model.state_dict()
+        }
         model.state_dict().update(pretrained_dict)
         model.load_state_dict(model.state_dict())
 
     if optimizer:
-        optimizer.load_state_dict(checkpoint['optim_dict'])
+        optimizer.load_state_dict(checkpoint["optim_dict"])
 
     return checkpoint
