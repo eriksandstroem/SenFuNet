@@ -21,7 +21,7 @@ TRAINING:
 TESTING:
   test_batch_size: 1
   test_shuffle: False
-  model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/201230-204843/model/best.pth.tar
+  model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210930-120658/model/best.pth.tar
   output_path:
 OPTIMIZATION:
   lr: 1.e-05
@@ -53,9 +53,9 @@ DATA:
   fusion_strategy: fusionNet # not used but needed because of replica.py
   data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid - not used, but needed here because of replica.py
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
-  root_dir: TMPDIR # /cluster/work/cvl/esandstroem/data/replica/manual #
+  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual #TMPDIR # 
   dataset: Replica
-  input: [stereo] # 
+  input: [sgm_stereo, stereo] # 
   target: depth_gt
   resx: 512
   resy: 512
