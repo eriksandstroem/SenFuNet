@@ -9,7 +9,6 @@ class Integrator(torch.nn.Module):
 
         self.device = config.device
         self.max_weight = config.max_weight
-        self.train_on_border_voxels = config.train_on_border_voxels
         self.extraction_strategy = config.extraction_strategy
         self.n_empty_space_voting = config.n_empty_space_voting
         self.trunc_value = config.trunc_value

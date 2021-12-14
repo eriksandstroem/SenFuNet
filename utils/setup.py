@@ -64,14 +64,16 @@ def get_database(dataset, config, mode="train"):
     database_config = copy(config.DATA)
     database_config.transform = transform.ToTensor()
     database_config.n_features = config.FEATURE_MODEL.n_features
-    database_config.features_to_sdf_enc = config.FILTERING_MODEL.features_to_sdf_enc
-    database_config.features_to_weight_head = (
-        config.FILTERING_MODEL.features_to_weight_head
-    )
-    database_config.refinement = config.FILTERING_MODEL.use_refinement
+
+    database_config.refinement = config.FILTERING_MODEL.CONV3D_MODEL.use_refinement
     database_config.test_mode = mode == "val" or mode == "test"
     database_config.alpha_supervision = config.LOSS.alpha_supervision
-    database_config.outlier_channel = config.FILTERING_MODEL.outlier_channel
+    database_config.visualize_features_and_proxy = (
+        config.TESTING.visualize_features_and_proxy
+    )
+    database_config.outlier_channel = (
+        config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel
+    )
     database_config.scene_list = eval("config.DATA.{}_scene_list".format(mode))
 
     return Database(dataset, database_config)

@@ -226,7 +226,7 @@ def evaluate(database, config, test_dir):
                 f = h5py.File(sensor_weighting, "r")
                 sensor_weighting = np.array(f["sensor_weighting"]).astype(np.float16)
 
-                if config.FILTERING_MODEL.outlier_channel:
+                if config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
                     sensor_weighting = sensor_weighting[1, :, :, :]
 
                 only_one_sensor_mask = np.logical_xor(mask, and_mask)
@@ -416,7 +416,7 @@ def evaluate(database, config, test_dir):
                     max_resolution,
                     resolution,
                     voxel_size,
-                    config.FILTERING_MODEL.outlier_channel,
+                    config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel,
                 )
 
                 os.system(
@@ -550,7 +550,7 @@ def evaluate(database, config, test_dir):
                     )
 
                     # evalute the refined tsdf grid if available
-                    if config.FILTERING_MODEL.use_refinement:
+                    if config.FILTERING_MODEL.CONV3D_MODEL.use_refinement:
                         model_test = (
                             scene + "_weight_threshold_" + str(weight_threshold)
                         )
@@ -698,7 +698,7 @@ def evaluate(database, config, test_dir):
                         np.float16
                     )
 
-                    if config.FILTERING_MODEL.outlier_channel:
+                    if config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
                         sensor_weighting = sensor_weighting[0, :, :, :]
 
                     visualize_features(

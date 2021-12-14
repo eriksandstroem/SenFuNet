@@ -184,21 +184,14 @@ def train_fusion(args):
             # load_net('/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210507-093251/model/best.pth.tar', pipeline.fuse_pipeline._fusion_network[sensor], 'left_depth_gt_2')
 
     if (
-        config.FILTERING_MODEL.features_to_sdf_enc
-        or config.FILTERING_MODEL.features_to_weight_head
+        config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
+        or config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
     ):
         feature_params = []
         for sensor in config.DATA.input:
             feature_params += list(
                 pipeline.fuse_pipeline._feature_network[sensor].parameters()
             )
-
-        # optimizer_feature = torch.optim.RMSprop(feature_params,
-        #                                         config.OPTIMIZATION.lr_fusion,
-        #                                         config.OPTIMIZATION.rho,
-        #                                         config.OPTIMIZATION.eps,
-        #                                         momentum=config.OPTIMIZATION.momentum,
-        #                                         weight_decay=config.OPTIMIZATION.weight_decay)
 
         optimizer_feature = torch.optim.Adam(
             feature_params,
@@ -214,13 +207,10 @@ def train_fusion(args):
             gamma=config.OPTIMIZATION.scheduler.gamma_fusion,
         )
 
-    if not config.FILTERING_MODEL.fixed and pipeline.filter_pipeline is not None:
-        # optimizer_filt = torch.optim.RMSprop(pipeline.filter_pipeline._filtering_network.parameters(),
-        #                                     config.OPTIMIZATION.lr_filtering,
-        #                                     config.OPTIMIZATION.rho,
-        #                                     config.OPTIMIZATION.eps,
-        #                                     momentum=config.OPTIMIZATION.momentum,
-        #                                     weight_decay=config.OPTIMIZATION.weight_decay)
+    if (
+        not config.FILTERING_MODEL.CONV3D_MODEL.fixed
+        and pipeline.filter_pipeline is not None
+    ):
 
         optimizer_filt = torch.optim.Adam(
             pipeline.filter_pipeline._filtering_network.parameters(),
@@ -287,7 +277,10 @@ def train_fusion(args):
             pipeline.fuse_pipeline._routing_network.eval()
         if config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
             pipeline.fuse_pipeline._fusion_network.eval()
-        if config.FILTERING_MODEL.fixed and pipeline.filter_pipeline is not None:
+        if (
+            config.FILTERING_MODEL.CONV3D_MODEL.fixed
+            and pipeline.filter_pipeline is not None
+        ):
             pipeline.filter_pipeline._filtering_network.eval()
 
         # resetting databases before each epoch starts
@@ -409,22 +402,11 @@ def train_fusion(args):
                 if output["l1_gt_grid"] is not None:
                     l1_gt_grid += output["l1_gt_grid"].item()
 
-                if len(config.DATA.input) > 1:
-                    for sensor_ in config.DATA.input:
-                        if output["l1_grid_" + sensor_] is not None:
-                            l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
-                    if output["l_alpha_2d"] is not None:
-                        l_alpha_2d[batch["sensor"]] += output["l_alpha_2d"]
-                if (
-                    config.FILTERING_MODEL.model == "mlp"
-                    and config.FILTERING_MODEL.setting == "translate"
-                    and config.FILTERING_MODEL.MLP_MODEL.occ_head
-                ):
-                    for sensor_ in config.DATA.input:
-                        if output["l_occ_" + sensor_] is not None:
-                            l_occ_dict[sensor_] += output["l_occ_" + sensor_].item()
-                    if output["l_occ"] is not None:
-                        l_occ += output["l_occ"].item()
+                for sensor_ in config.DATA.input:
+                    if output["l1_grid_" + sensor_] is not None:
+                        l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
+                if output["l_alpha_2d"] is not None:
+                    l_alpha_2d[batch["sensor"]] += output["l_alpha_2d"]
 
                 if output["loss"] is not None:
                     # print('4m: ', torch.cuda.max_memory_allocated(device=device))
@@ -493,24 +475,11 @@ def train_fusion(args):
                     if output["l1_gt_grid"] is not None:
                         l1_gt_grid += output["l1_gt_grid"].item()
 
-                    if len(config.DATA.input) > 1:
-                        for sensor_ in config.DATA.input:
-                            if output["l1_grid_" + sensor_] is not None:
-                                l1_grid_dict[sensor_] += output[
-                                    "l1_grid_" + sensor_
-                                ].item()
-                        if output["l_alpha_2d"] is not None:
-                            l_alpha_2d[batch["sensor"]] += output["l_alpha_2d"]
-                    if (
-                        config.FILTERING_MODEL.model == "mlp"
-                        and config.FILTERING_MODEL.setting == "translate"
-                        and config.FILTERING_MODEL.MLP_MODEL.occ_head
-                    ):
-                        for sensor_ in config.DATA.input:
-                            if output["l_occ_" + sensor_] is not None:
-                                l_occ_dict[sensor_] += output["l_occ_" + sensor_].item()
-                        if output["l_occ"] is not None:
-                            l_occ += output["l_occ"].item()
+                    for sensor_ in config.DATA.input:
+                        if output["l1_grid_" + sensor_] is not None:
+                            l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
+                    if output["l_alpha_2d"] is not None:
+                        l_alpha_2d[batch["sensor"]] += output["l_alpha_2d"]
 
                     if output["loss"] is not None:
                         # print('4m: ', torch.cuda.max_memory_allocated(device=device))
@@ -698,14 +667,14 @@ def train_fusion(args):
                 i + 1
             ) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
                 if (
-                    config.FILTERING_MODEL.features_to_sdf_enc
-                    or config.FILTERING_MODEL.features_to_weight_head
+                    config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
+                    or config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
                 ):
                     optimizer_feature.step()
                     scheduler_feature.step()
                     optimizer_feature.zero_grad(set_to_none=True)
 
-                if not config.FILTERING_MODEL.fixed:
+                if not config.FILTERING_MODEL.CONV3D_MODEL.fixed:
                     # make the gradients belonging to layers with zero-norm gradient none instead of zero to avoid update
                     # of weights - this is a debugging test to see if the system responds appropriately
                     for name, param in pipeline.named_parameters():
@@ -738,11 +707,11 @@ def train_fusion(args):
                 val_database.reset()
                 # zero out all grads
                 if (
-                    config.FILTERING_MODEL.features_to_sdf_enc
-                    or config.FILTERING_MODEL.features_to_weight_head
+                    config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
+                    or config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
                 ):
                     optimizer_feature.zero_grad(set_to_none=True)
-                if not config.FILTERING_MODEL.fixed:
+                if not config.FILTERING_MODEL.CONV3D_MODEL.fixed:
                     optimizer_filt.zero_grad(set_to_none=True)
                 if not config.FUSION_MODEL.fixed:
                     optimizer_fusion.zero_grad(set_to_none=True)
@@ -855,7 +824,7 @@ def train_fusion(args):
                 if config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
                     pipeline.fuse_pipeline._fusion_network.eval()
                 if (
-                    config.FILTERING_MODEL.fixed
+                    config.FILTERING_MODEL.CONV3D_MODEL.fixed
                     and pipeline.filter_pipeline is not None
                 ):
                     pipeline.filter_pipeline._filtering_network.eval()

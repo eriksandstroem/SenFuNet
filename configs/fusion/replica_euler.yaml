@@ -39,39 +39,29 @@ ROUTING_MODEL:
   contraction: 64 # hidden dimension of routing network
   normalization: False # apply batch normalization
 FILTERING_MODEL:
-  outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. Only works with 5layer model
-  use_refinement: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
-  residual_learning: False
-  alpha_force: False # I can remove this now!
-  model: 'tsdf_early_fusion' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
-  setting: translate # or avg (relevant only for the mlp model)
-  features_to_sdf_enc: False # feed 2D features to sdf encoding head
-  features_to_weight_head: True # feed 2D features directly to sensor weighting head
-  sdf_enc_to_weight_head: False # feed sdf encoding to sensor weighting head - this feeds the sdf enc directly to the alpha head
-  sdf_to_weight_head: False
-  weights_to_weight_head: True # wheather or not to feed the tsdf weights to the sensor weighting head- only works for 5layer model now!
-  output_scale: 0.12
-  fixed: False
-  tanh_weight: True
-  inverted_weight: False # when tanh_weight is true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head is true
-  MLP_MODEL:
-    occ_head: False # only used when setting: translate
-    activation: torch.nn.Tanh() # only used when setting: translate
-    neighborhood: 3
-    train_on_border_voxels: True
-    neighborhood_out: 3 # only relevant for setting: avg
-    attend_to_uninit: False
+  model: '3dconv' # 3dconv, tsdf_early_fusion, tsdf_middle_fusion, routedfusion
   CONV3D_MODEL:
-    outlier_filter_model: 'std'
-    bias: True # bias in sdf encoder
-    bias_weight_net: True
-    chunk_size: 64 # this size determines the size of the window used during training and testing that is fed to the 3D convnet
+    fixed: False # fix network weights
+    outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. 
+    features_to_weight_head: True # feed 2D features directly to alpha head
+    sdf_to_weight_head: False # feed sdf values directly wo encoding to alpha head (not implemented when weighting_complexity: unet_style)
+    weights_to_weight_head: True # feed the tsdf weights to the alpha head (not implemented when weighting_complexity: unet_style)
+    tanh_weight: True # apply tanh-transform to weight counter
+    inverted_weight: False # when tanh_weight: true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head: true
+    bias: True # bias in alpha head
+    chunk_size: 64 # determines the size of the window used during training and testing that is fed to the 3D convnet
     activation: torch.nn.ReLU()
-    nbr_groups: 2
-    grouping_strategy: 'absolute'
-    network_depth: 2
-    weighting_complexity: '3layer' # number of 3d convolutions
-    network_depth_sensor_weighting: 2 # only used when weighting complexity is encode features first
+    weighting_complexity: '3layer' # Xlayer or unet_style
+    network_depth: 2 # only used when weighting complexity is unet_style
+    use_refinement: False # refinement 3D network for TSDF values
+    REFINEMENT:
+      network_depth: 2
+      bias: True # bias in sdf encoder
+      residual_learning: False # residual connection of refienment network
+      output_scale: 0.07 # multiplicative factor after refinement network. Should be a little big larger than the truncation value
+      refinement_model: 'std' # simple or std
+      features_to_sdf_enc: False # feed 2D features to refinement model
+      sdf_enc_to_weight_head: False # feed sdf encoding to alhpa head
 LOSS:
   alpha_single_sensor_supervision: True
   alpha_supervision: False
@@ -83,7 +73,7 @@ LOSS:
   fusion_weight: 6.0
   grid_weight: 6
   grid_weight_gt: 6
-  occ_weight: 0.01
+  occ_weight: 0.01 # REMOVE THIS!
   alpha_weight: 0.01
   feature_regularization: True
   feat_reg_weight: 0.05
@@ -131,7 +121,7 @@ TESTING:
   fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211014-202944/model/best.pth.tar # 
   weight_thresholds: [0.0]
 ROUTING:
-  do: True
+  do: False
   dont_smooth_where_uncertain: False
   threshold: 0.15 # note that confidence threshold for multidepth routingNet is 0.25
   threshold_mono: 0.0
@@ -172,13 +162,13 @@ DATA:
   max_depth_tof: 12.3 # 3.86
   min_depth: 0.0
   max_depth: 12.3
-  fusion_strategy: routingNet # routingNet or fusionNet SHOULD NOT BE NEEDED. USE FILTERING MODEL INSTEAD TO DEAL WITH IT
+  fusion_strategy: fusionNet # routingNet or fusionNet SHOULD NOT BE NEEDED. USE FILTERING MODEL INSTEAD TO DEAL WITH IT
   data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid (Note: if X_shuffle is true, this option serves no purpose)
   load_scenes_at_once: 1
   intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
-  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual #/cluster/work/cvl/esandstroem/data/corbs # #  # ## # #TMPDIR # ## #  # /cluster/work/cvl/esandstroem/data/corbs # TMPDIR ##TMPDIR # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
-  dataset: Replica
-  input: [sgm_stereo, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
+  root_dir: /cluster/work/cvl/esandstroem/data/corbs # TMPDIR #/cluster/work/cvl/esandstroem/data/replica/manual # # #  # ## # #TMPDIR # ## #  # /cluster/work/cvl/esandstroem/data/corbs # TMPDIR ##TMPDIR # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
+  dataset: CoRBS
+  input: [tof, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
   target: gt
   resx_stereo: 256
   resy_stereo: 256
@@ -186,8 +176,8 @@ DATA:
   resy_tof: 256
   resx: 256 # default settings
   resy: 256
-  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/train.txt
-  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/val.txt
+  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/train.txt
+  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/val.txt
   test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt #4_hotel_0_office_0.txt
   transform: ToTensor()
   init_value: 0.0 # init value of tsdf grids

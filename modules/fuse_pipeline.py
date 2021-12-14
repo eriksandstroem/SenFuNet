@@ -84,9 +84,6 @@ class Fuse_Pipeline(torch.nn.Module):
                     config.FEATURE_MODEL, sensor
                 )  # TODO: adapt to when not using features
 
-        config.FUSION_MODEL.train_on_border_voxels = (
-            config.FILTERING_MODEL.MLP_MODEL.train_on_border_voxels
-        )
         self._integrator = Integrator(config.FUSION_MODEL)
 
     def _routing(self, data):

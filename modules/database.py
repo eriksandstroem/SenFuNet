@@ -23,7 +23,7 @@ class Database(Dataset):
         self.trunc_value = config.trunc_value
         self.n_features = config.n_features  # this includes the append_depth option
         self.sensors = config.input
-        self.w_features = config.features_to_sdf_enc or config.features_to_weight_head
+        self.save_features = config.visualize_features_and_proxy
         self.test_mode = config.test_mode
         self.refinement = config.refinement
         self.alpha_supervision = config.alpha_supervision
@@ -170,7 +170,7 @@ class Database(Dataset):
                     compression="gzip",
                     compression_opts=9,
                 )
-            if self.w_features:
+            if self.save_features:
                 with h5py.File(os.path.join(path, featurename), "w") as hf:
                     hf.create_dataset(
                         "features",

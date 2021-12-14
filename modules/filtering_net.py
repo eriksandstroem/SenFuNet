@@ -6,77 +6,52 @@ from torch import nn
 class DoubleConv(nn.Module):
     """Double Convolution block for the filtering network"""
 
-    def __init__(
-        self, c_in, c_out, activation, grouping_strategy, nbr_groups, bias=True
-    ):
+    def __init__(self, c_in, c_out, activation, bias=True):
 
         super(DoubleConv, self).__init__()
 
-        if grouping_strategy == "relative":
-            self.block = nn.Sequential(
-                nn.GroupNorm(num_groups=int(c_in / 2), num_channels=c_in),
-                nn.Conv3d(
-                    c_in,
-                    int(c_out / 2),
-                    3,
-                    padding=1,
-                    padding_mode="replicate",
-                    groups=int(c_in / 2),
-                ),
-                eval(activation),
-                nn.GroupNorm(num_groups=int(c_out / 4), num_channels=int(c_out / 2)),
-                nn.Conv3d(
-                    int(c_out / 2),
-                    c_out,
-                    3,
-                    padding=1,
-                    padding_mode="replicate",
-                    groups=int(c_out / 4),
-                ),
-                eval(activation),
-            )
-        elif grouping_strategy == "absolute":
-            self.block = nn.Sequential(  # nn.GroupNorm(num_groups=nbr_groups, num_channels=c_in),
-                nn.Conv3d(
-                    c_in,
-                    int(c_out / 2),
-                    3,
-                    padding=1,
-                    padding_mode="replicate",
-                    bias=bias,
-                ),
-                eval(activation),
-                # nn.GroupNorm(num_groups=nbr_groups, num_channels=int(c_out/2)),
-                nn.Conv3d(
-                    int(c_out / 2),
-                    c_out,
-                    3,
-                    padding=1,
-                    padding_mode="replicate",
-                    bias=bias,
-                ),
-                eval(activation),
-            )
-            # self.block = nn.Sequential(nn.Conv3d(c_in, c_out, 3, padding=1, padding_mode='replicate', bias=True),
-            #                            eval(activation))
+        self.block = nn.Sequential(
+            nn.Conv3d(
+                c_in,
+                int(c_out / 2),
+                3,
+                padding=1,
+                padding_mode="replicate",
+                bias=bias,
+            ),
+            eval(activation),
+            nn.Conv3d(
+                int(c_out / 2),
+                c_out,
+                3,
+                padding=1,
+                padding_mode="replicate",
+                bias=bias,
+            ),
+            eval(activation),
+        )
+        # self.block = nn.Sequential(nn.Conv3d(c_in, c_out, 3, padding=1, padding_mode='replicate', bias=True),
+        #                            eval(activation))
 
     def forward(self, x):
         return self.block(x)
 
 
-class FilteringNetEncoder(nn.Module):
+class RefinementEncoder(nn.Module):
     def __init__(self, config):
 
-        super(FilteringNetEncoder, self).__init__()
+        super(RefinementEncoder, self).__init__()
 
-        self.tanh_weight = config.FILTERING_MODEL.tanh_weight
-        self.network_depth = config.FILTERING_MODEL.CONV3D_MODEL.network_depth
-        self.grouping_strategy = config.FILTERING_MODEL.CONV3D_MODEL.grouping_strategy
-        self.nbr_groups = config.FILTERING_MODEL.CONV3D_MODEL.nbr_groups
+        self.tanh_weight = config.FILTERING_MODEL.CONV3D_MODEL.tanh_weight
+        self.network_depth = (
+            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.network_depth
+        )
         self.activation = config.FILTERING_MODEL.CONV3D_MODEL.activation
         self.n_features = config.FEATURE_MODEL.n_features
-        self.w_features = config.FILTERING_MODEL.features_to_sdf_enc
-        bias = config.FILTERING_MODEL.CONV3D_MODEL.bias
+        self.w_features = (
+            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
+        )
+        bias = config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.bias
 
         # add encoder blocks
         if self.w_features:
@@ -84,49 +59,33 @@ class FilteringNetEncoder(nn.Module):
                 2 + self.n_features,
                 8,
                 self.activation,
-                self.grouping_strategy,
-                self.nbr_groups,
                 bias,
             )
         else:
-            self.enc_1 = DoubleConv(
-                2, 8, self.activation, self.grouping_strategy, self.nbr_groups, bias
-            )
+            self.enc_1 = DoubleConv(2, 8, self.activation, bias)
 
-        self.enc_2 = DoubleConv(
-            8, 16, self.activation, self.grouping_strategy, self.nbr_groups, bias
-        )
+        self.enc_2 = DoubleConv(8, 16, self.activation, bias)
 
         self.dec_1 = DoubleConv(
             24,  # 16 if not using first residual connection or 24 if using the first residual connection
             16,
             self.activation,
-            self.grouping_strategy,
-            self.nbr_groups,
             bias,
         )
 
         if self.network_depth > 1:
             # encoder block
-            self.enc_3 = DoubleConv(
-                16, 32, self.activation, self.grouping_strategy, self.nbr_groups, bias
-            )
+            self.enc_3 = DoubleConv(16, 32, self.activation, bias)
 
             # decoder block
-            self.dec_2 = DoubleConv(
-                48, 16, self.activation, self.grouping_strategy, self.nbr_groups, bias
-            )
+            self.dec_2 = DoubleConv(48, 16, self.activation, bias)
 
         if self.network_depth > 2:
             # encoder block
-            self.enc_4 = DoubleConv(
-                32, 64, self.activation, self.grouping_strategy, self.nbr_groups
-            )
+            self.enc_4 = DoubleConv(32, 64, self.activation, bias)
 
             # decoder block
-            self.dec_3 = DoubleConv(
-                96, 32, self.activation, self.grouping_strategy, self.nbr_groups, bias
-            )
+            self.dec_3 = DoubleConv(96, 32, self.activation, bias)
 
         # max pooling layer
         self.mp = nn.MaxPool3d(2)
@@ -184,140 +143,22 @@ class FilteringNetEncoder(nn.Module):
         return x
 
 
-class Weighting_Decoder(nn.Module):
-    def __init__(self, config):
-
-        super(Weighting_Decoder, self).__init__()
-
-        # self.network_depth = config.FILTERING_MODEL.CONV3D_MODEL.network_depth
-        self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation)
-        self.n_features = config.FEATURE_MODEL.n_features
-
-        self.features_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
-        self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head
-        self.network_depth = 1  # for now
-
-        # add encoder blocks
-        self.enc_1 = nn.Sequential(
-            nn.Conv3d(
-                len(config.DATA.input)
-                * (
-                    16 * self.sdf_enc_to_weight_head
-                    + self.features_to_weight_head * self.n_features
-                ),
-                24,
-                3,
-                padding=1,
-                padding_mode="replicate",
-            ),
-            self.activation,
-        )
-
-        self.enc_2 = nn.Sequential(
-            nn.Conv3d(24, 16, 3, padding=1, padding_mode="replicate"), self.activation
-        )
-
-        self.dec_1 = nn.Sequential(
-            nn.Conv3d(40, 24, 3, padding=1, padding_mode="replicate"), self.activation
-        )
-
-        self.dec_last = nn.Sequential(
-            nn.Conv3d(24, 12, 1, padding=0),
-            self.activation,
-            nn.Conv3d(12, 1, 1, padding=0),
-        )
-
-        if self.network_depth > 1:
-            # encoder block
-            self.enc_3 = DoubleConv(
-                16, 32, self.activation, self.grouping_strategy, self.nbr_groups
-            )
-
-            # decoder block
-            self.dec_2 = DoubleConv(
-                48, 16, self.activation, self.grouping_strategy, self.nbr_groups
-            )
-
-        if self.network_depth > 2:
-            # encoder block
-            self.enc_4 = DoubleConv(
-                32, 64, self.activation, self.grouping_strategy, self.nbr_groups
-            )
-
-            # decoder block
-            self.dec_3 = DoubleConv(
-                96, 32, self.activation, self.grouping_strategy, self.nbr_groups
-            )
-
-        # max pooling layer
-        self.mp = nn.MaxPool3d(2)
-        # upsampling layer
-        self.up = nn.Upsample(scale_factor=2, mode="nearest")
-        # tanh activation
-        self.tanh = nn.Tanh()
-
-    def forward(self, neighborhood):
-
-        e1 = self.enc_1(neighborhood)
-        # print('e1', e1)
-        x = self.mp(e1)
-        # x = e1
-        e2 = self.enc_2(x)
-
-        if self.network_depth > 1:
-            x = self.mp(e2)
-            # x = e2
-            e3 = self.enc_3(x)
-
-        if self.network_depth > 2:
-            x = self.mp(e3)
-            # x = e3
-            e4 = self.enc_4(x)
-
-            x = self.up(e4)
-            # x = e4
-            e3 = torch.cat([x, e3], dim=1)
-            e3 = self.dec_3(e3)
-
-        if self.network_depth > 1:
-            x = self.up(e3)
-            # x = e3
-            e2 = torch.cat([x, e2], dim=1)
-            e2 = self.dec_2(e2)
-
-        x = self.up(e2)
-        # x = e2
-        x = torch.cat([x, e1], dim=1)
-        x = self.dec_1(x)
-        x = self.dec_last(x)
-
-        return x
-
-
 class Weighting_Encoder(nn.Module):
     def __init__(self, config):
 
         super(Weighting_Encoder, self).__init__()
 
-        # self.network_depth = config.FILTERING_MODEL.CONV3D_MODEL.network_depth
         self.activation = config.FILTERING_MODEL.CONV3D_MODEL.activation
         self.n_features = config.FEATURE_MODEL.n_features
-        self.grouping_strategy = config.FILTERING_MODEL.CONV3D_MODEL.grouping_strategy
-        self.nbr_groups = config.FILTERING_MODEL.CONV3D_MODEL.nbr_groups
         self.features_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
-        self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head
-        self.network_depth = (
-            config.FILTERING_MODEL.CONV3D_MODEL.network_depth_sensor_weighting
-        )
-        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias_weight_net
+        self.network_depth = config.FILTERING_MODEL.CONV3D_MODEL.network_depth
+        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias
 
         # add encoder blocks
         self.enc_1 = DoubleConv(
             self.n_features,
             8,
             self.activation,
-            self.grouping_strategy,
-            self.nbr_groups,
             bias=bias_wn,
         )
 
@@ -325,8 +166,6 @@ class Weighting_Encoder(nn.Module):
             8,
             16,
             self.activation,
-            self.grouping_strategy,
-            self.nbr_groups,
             bias=bias_wn,
         )
 
@@ -334,8 +173,6 @@ class Weighting_Encoder(nn.Module):
             24,  # 16 if not using first residual connection or 24 if using the first residual connection
             16,
             self.activation,
-            self.grouping_strategy,
-            self.nbr_groups,
             bias=bias_wn,
         )
 
@@ -345,8 +182,6 @@ class Weighting_Encoder(nn.Module):
                 16,
                 32,
                 self.activation,
-                self.grouping_strategy,
-                self.nbr_groups,
                 bias=bias_wn,
             )
 
@@ -355,8 +190,6 @@ class Weighting_Encoder(nn.Module):
                 48,
                 16,
                 self.activation,
-                self.grouping_strategy,
-                self.nbr_groups,
                 bias=bias_wn,
             )
 
@@ -366,8 +199,6 @@ class Weighting_Encoder(nn.Module):
                 32,
                 64,
                 self.activation,
-                self.grouping_strategy,
-                self.nbr_groups,
                 bias=bias_wn,
             )
 
@@ -376,8 +207,6 @@ class Weighting_Encoder(nn.Module):
                 96,
                 32,
                 self.activation,
-                self.grouping_strategy,
-                self.nbr_groups,
                 bias=bias_wn,
             )
 
@@ -425,130 +254,19 @@ class Weighting_Encoder(nn.Module):
         return x
 
 
-class concat_5layer(nn.Module):
+class Weighting_Decoder(nn.Module):
     def __init__(self, config):
 
-        super(concat_5layer, self).__init__()
+        super(Weighting_Decoder, self).__init__()
 
         self.config = config
         self.sensors = config.DATA.input
-        self.feature_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
-        self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head
-        self.weight_to_weight_head = config.FILTERING_MODEL.weights_to_weight_head
-        self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation)
-        self.n_features = config.FEATURE_MODEL.n_features
-        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias_weight_net
-        nbr_input = 16 * len(self.sensors) * self.sdf_enc_to_weight_head + len(
-            self.sensors
-        ) * (self.n_features + self.weight_to_weight_head)
-
-        self.weight_encoder1 = nn.Sequential(
-            nn.Conv3d(
-                nbr_input, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-            ),
-            self.activation,
-        )
-        self.weight_encoder2 = nn.Sequential(
-            nn.Conv3d(
-                32 + nbr_input, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-            ),
-            self.activation,
-        )
-        self.weight_encoder3 = nn.Sequential(
-            nn.Conv3d(
-                64 + nbr_input, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-            ),
-            self.activation,
-        )
-        self.weight_decoder1 = nn.Sequential(
-            nn.Conv3d(96 + nbr_input, 32, 1, padding=0, bias=bias_wn), self.activation
-        )
-        self.weight_decoder2 = nn.Conv3d(32, 1, 1, padding=0, bias=bias_wn)
-
-    def forward(self, input_):
-
-        x1 = self.weight_encoder1(input_)
-        x2 = torch.cat((x1, input_), dim=1)
-        x3 = self.weight_encoder2(x2)
-        x4 = torch.cat((x3, x2), dim=1)
-        x5 = self.weight_encoder3(x4)
-        x6 = torch.cat((x5, x4), dim=1)
-        x7 = self.weight_decoder1(x6)
-        x = self.weight_decoder2(x7)
-
-        return x
-
-
-class residual_5layer(nn.Module):
-    def __init__(self, config):
-
-        super(residual_5layer, self).__init__()
-
-        self.config = config
-        self.sensors = config.DATA.input
-        self.feature_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
-        self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head
-        self.weight_to_weight_head = config.FILTERING_MODEL.weights_to_weight_head
-        self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation)
-        self.n_features = config.FEATURE_MODEL.n_features
-        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias_weight_net
-
-        self.weight_decoder1 = nn.Sequential(
-            nn.Conv3d(
-                16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                + len(self.sensors) * (self.n_features + self.weight_to_weight_head),
-                32,
-                3,
-                padding=1,
-                padding_mode="replicate",
-                bias=bias_wn,
-            ),
-            self.activation,
-        )
-        self.weight_decoder2 = nn.Sequential(
-            nn.Conv3d(32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn),
-            self.activation,
-        )
-        self.weight_decoder3 = nn.Sequential(
-            nn.Conv3d(32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn),
-            self.activation,
-        )
-        self.weight_decoder4 = nn.Sequential(
-            nn.Conv3d(32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn),
-            self.activation,
-        )
-        self.weight_decoder5 = nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn)
-
-    def forward(self, input_):
-
-        x1 = self.weight_decoder1(input_)
-        x2 = self.weight_decoder2(x1)
-        x3 = x1 + x2
-        x4 = self.weight_decoder3(x3)
-        x5 = x3 + x4
-        x6 = self.weight_decoder4(x5)
-        x = self.weight_decoder5(x6)
-
-        return x
-
-
-class Weighting_Decoder2(nn.Module):
-    def __init__(self, config):
-
-        super(Weighting_Decoder2, self).__init__()
-
-        self.config = config
-        self.output_scale = config.FILTERING_MODEL.output_scale
-        self.trunc_value = config.DATA.trunc_value
-        self.sensors = config.DATA.input
-        self.feature_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
-        self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head
-        self.weighting_complexity = (
-            config.FILTERING_MODEL.CONV3D_MODEL.weighting_complexity
+        self.sdf_enc_to_weight_head = (
+            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.sdf_enc_to_weight_head
         )
         self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation)
         self.n_features = config.FEATURE_MODEL.n_features
-        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias_weight_net
+        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias
 
         self.encoder = nn.ModuleDict()
         for sensor_ in config.DATA.input:
@@ -619,191 +337,157 @@ class FilteringNet(nn.Module):
         super(FilteringNet, self).__init__()
 
         self.config = config
-        self.output_scale = config.FILTERING_MODEL.output_scale
+        self.output_scale = config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.output_scale
         self.trunc_value = config.DATA.trunc_value
         self.sensors = config.DATA.input
-        self.feature_to_weight_head = config.FILTERING_MODEL.features_to_weight_head
-        self.sdf_enc_to_weight_head = config.FILTERING_MODEL.sdf_enc_to_weight_head
-        self.weight_to_weight_head = config.FILTERING_MODEL.weights_to_weight_head
-        self.sdf_to_weight_head = config.FILTERING_MODEL.sdf_to_weight_head
+        self.feature_to_weight_head = (
+            config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
+        )
+        self.sdf_enc_to_weight_head = (
+            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.sdf_enc_to_weight_head
+        )
+        self.weight_to_weight_head = (
+            config.FILTERING_MODEL.CONV3D_MODEL.weights_to_weight_head
+        )
+        self.sdf_to_weight_head = config.FILTERING_MODEL.CONV3D_MODEL.sdf_to_weight_head
         self.weighting_complexity = (
             config.FILTERING_MODEL.CONV3D_MODEL.weighting_complexity
         )
         self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation)
         self.n_features = config.FEATURE_MODEL.n_features
-        self.residual_learning = config.FILTERING_MODEL.residual_learning
-        self.use_refinement = config.FILTERING_MODEL.use_refinement
-        self.alpha_force = config.FILTERING_MODEL.alpha_force
+        self.residual_learning = (
+            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.residual_learning
+        )
+        self.use_refinement = config.FILTERING_MODEL.CONV3D_MODEL.use_refinement
         self.alpha_supervision = config.LOSS.alpha_supervision
         self.alpha_single_sensor_supervision = (
             config.LOSS.alpha_single_sensor_supervision
         )
-        bias = config.FILTERING_MODEL.CONV3D_MODEL.bias
-        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias_weight_net
-        self.outlier_filter_model = (
-            config.FILTERING_MODEL.CONV3D_MODEL.outlier_filter_model
+        bias = config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.bias
+        bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias
+        self.refinement_model = (
+            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.refinement_model
         )
-        self.add_outlier_channel = config.FILTERING_MODEL.outlier_channel
+        self.outlier_channel = config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel
 
         if self.use_refinement:
             self.encoder = nn.ModuleDict()
             self.sdf_layer = nn.ModuleDict()
             for sensor_ in config.DATA.input:
-                if self.outlier_filter_model == "simple":
+                if self.refinement_model == "simple":
                     self.sdf_layer[sensor_] = nn.Conv3d(
                         1, 1, 3, padding=1, padding_mode="replicate", bias=bias
                     )
                 else:
-                    self.encoder[sensor_] = FilteringNetEncoder(config)
+                    self.encoder[sensor_] = RefinementEncoder(config)
                     self.sdf_layer[sensor_] = nn.Conv3d(16, 1, 1, padding=0, bias=bias)
-                # if self.residual_learning:
-                #     self.encoder[sensor_].apply(init_weights)
-                #     self.sdf_layer[sensor_].apply(init_weights)
 
         # alpha layer
-        if len(config.DATA.input) > 1:
-            if self.weighting_complexity == "1layer":
-                self.weight_decoder = nn.Conv3d(
+        if self.weighting_complexity == "1layer":
+            self.weight_decoder = nn.Conv3d(
+                16 * len(self.sensors) * self.sdf_enc_to_weight_head
+                + len(self.sensors)
+                * (
+                    self.sdf_to_weight_head
+                    + self.n_features * self.feature_to_weight_head
+                    + self.weight_to_weight_head
+                ),
+                1,
+                1,
+                padding=0,
+                bias=bias_wn,
+            )
+        elif self.weighting_complexity == "2layer":
+            self.weight_decoder = nn.Sequential(
+                nn.Conv3d(
                     16 * len(self.sensors) * self.sdf_enc_to_weight_head
                     + len(self.sensors)
-                    * (self.n_features + self.weight_to_weight_head),
-                    1,
-                    1,
-                    padding=0,
+                    * (
+                        self.sdf_to_weight_head
+                        + self.n_features * self.feature_to_weight_head
+                        + self.weight_to_weight_head
+                    ),
+                    16,
+                    3,
+                    padding=1,
+                    padding_mode="replicate",
                     bias=bias_wn,
-                )
-            elif self.weighting_complexity == "3layer":
-                self.weight_decoder = nn.Sequential(
-                    nn.Conv3d(
-                        16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                        + len(self.sensors)
-                        * (
-                            self.sdf_to_weight_head
-                            + self.n_features * self.feature_to_weight_head
-                            + self.weight_to_weight_head
-                        ),
-                        32,
-                        3,
-                        padding=1,
-                        padding_mode="replicate",
-                        bias=bias_wn,
+                ),
+                self.activation,
+                nn.Conv3d(16, 1 + self.outlier_channel, 1, padding=0, bias=bias_wn),
+            )
+        elif self.weighting_complexity == "3layer":
+            self.weight_decoder = nn.Sequential(
+                nn.Conv3d(
+                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
+                    + len(self.sensors)
+                    * (
+                        self.sdf_to_weight_head
+                        + self.n_features * self.feature_to_weight_head
+                        + self.weight_to_weight_head
                     ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn
+                    32,
+                    3,
+                    padding=1,
+                    padding_mode="replicate",
+                    bias=bias_wn,
+                ),
+                self.activation,
+                nn.Conv3d(32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn),
+                self.activation,
+                nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn),
+            )
+
+        elif self.weighting_complexity == "4layer":
+            self.weight_decoder = nn.Sequential(
+                nn.Conv3d(
+                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
+                    + len(self.sensors)
+                    * (
+                        self.sdf_to_weight_head
+                        + self.n_features * self.feature_to_weight_head
+                        + self.weight_to_weight_head
                     ),
-                    self.activation,
-                    nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn),
-                )
-            elif self.weighting_complexity == "3layer_1extra1conv":
-                self.weight_decoder = nn.Sequential(
-                    nn.Conv3d(
-                        16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                        + len(self.sensors)
-                        * (
-                            self.n_features * self.feature_to_weight_head
-                            + self.weight_to_weight_head
-                        ),
-                        32,
-                        3,
-                        padding=1,
-                        padding_mode="replicate",
-                        bias=bias_wn,
+                    32,
+                    3,
+                    padding=1,
+                    padding_mode="replicate",
+                    bias=bias_wn,
+                ),
+                self.activation,
+                nn.Conv3d(32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn),
+                self.activation,
+                nn.Conv3d(32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn),
+                self.activation,
+                nn.Conv3d(16, 1 + self.outlier_channel, 1, padding=0, bias=bias_wn),
+            )
+        elif self.weighting_complexity == "5layer":
+            self.weight_decoder = nn.Sequential(
+                nn.Conv3d(
+                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
+                    + len(self.sensors)
+                    * (
+                        self.sdf_to_weight_head
+                        + self.n_features * self.feature_to_weight_head
+                        + self.weight_to_weight_head
                     ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-                    ),
-                    self.activation,
-                    nn.Conv3d(32, 16, 1, padding=0, bias=bias_wn),
-                    self.activation,
-                    nn.Conv3d(16, 1, 1, padding=0, bias=bias_wn),
-                )
-            elif self.weighting_complexity == "5layer":
-                self.weight_decoder = nn.Sequential(
-                    nn.Conv3d(
-                        16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                        + len(self.sensors)
-                        * (self.n_features + self.weight_to_weight_head),
-                        32,
-                        3,
-                        padding=1,
-                        padding_mode="replicate",
-                        bias=bias_wn,
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn
-                    ),
-                )
-            elif self.weighting_complexity == "4layer":
-                self.weight_decoder = nn.Sequential(
-                    nn.Conv3d(
-                        16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                        + len(self.sensors)
-                        * (self.n_features + self.weight_to_weight_head),
-                        32,
-                        3,
-                        padding=1,
-                        padding_mode="replicate",
-                        bias=bias_wn,
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn
-                    ),
-                )
-            elif self.weighting_complexity == "2layer":
-                self.weight_decoder = nn.Sequential(
-                    nn.Conv3d(
-                        16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                        + len(self.sensors)
-                        * (self.n_features + self.weight_to_weight_head),
-                        16,
-                        3,
-                        padding=1,
-                        padding_mode="replicate",
-                        bias=bias_wn,
-                    ),
-                    self.activation,
-                    nn.Conv3d(
-                        16, 1 + self.add_outlier_channel, 1, padding=0, bias=bias_wn
-                    ),
-                )
-            elif self.weighting_complexity == "residual_5layer":
-                self.weight_decoder = residual_5layer(config)
-            elif self.weighting_complexity == "concat_5layer":
-                self.weight_decoder = concat_5layer(config)
-            elif self.weighting_complexity == "unet":
-                self.weight_decoder = Weighting_Decoder(config)
-            elif self.weighting_complexity == "encode_features_first":
-                self.weight_decoder = Weighting_Decoder2(config)
-                # the negatith concatenating the sdf encoding and the features is that
-                # the sdf encoding already is neighborhood aware with a receptive field big enough.
-                # applying more convolutions to this encoding does not make sense. But we need to apply
-                # processing steps to the 2D features to make then neighborhood aware. This means that
-                # it makes more sense to process the 2D features through a unet separately and then
-                # feed them with the sdf encoding through a final prediction layer/s.
+                    32,
+                    3,
+                    padding=1,
+                    padding_mode="replicate",
+                    bias=bias_wn,
+                ),
+                self.activation,
+                nn.Conv3d(32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn),
+                self.activation,
+                nn.Conv3d(32, 32, 3, padding=1, padding_mode="replicate", bias=bias_wn),
+                self.activation,
+                nn.Conv3d(32, 16, 3, padding=1, padding_mode="replicate", bias=bias_wn),
+                self.activation,
+                nn.Conv3d(16, 1 + self.outlier_channel, 1, padding=0, bias=bias_wn),
+            )
+        elif self.weighting_complexity == "unet_style":
+            self.weight_decoder = Weighting_Decoder(config)
 
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
@@ -817,7 +501,7 @@ class FilteringNet(nn.Module):
 
         for sensor_ in self.sensors:
             if self.use_refinement:
-                if self.outlier_filter_model == "simple":
+                if self.refinement_model == "simple":
                     sdf[sensor_] = self.output_scale * self.tanh(
                         self.sdf_layer[sensor_](
                             neighborhood[sensor_][:, 0, :, :, :].unsqueeze(1)
@@ -874,8 +558,8 @@ class FilteringNet(nn.Module):
                             (inp, neighborhood[sensor_][:, 2:, :, :, :]), dim=1
                         )
                 if self.weight_to_weight_head:
-                    if self.config.FILTERING_MODEL.tanh_weight:
-                        if self.config.FILTERING_MODEL.inverted_weight:
+                    if self.config.FILTERING_MODEL.CONV3D_MODEL.tanh_weight:
+                        if self.config.FILTERING_MODEL.CONV3D_MODEL.inverted_weight:
                             weights = torch.ones_like(
                                 neighborhood[sensor_][:, 1, :, :, :].unsqueeze(1)
                             ) - self.tanh(neighborhood[sensor_][:, 1, :, :, :])
@@ -940,7 +624,7 @@ class FilteringNet(nn.Module):
             ):
                 output["sensor_weighting"] = alpha.squeeze()
 
-            if self.add_outlier_channel:
+            if self.outlier_channel:
                 alpha_sdf = alpha[
                     :, 0, :, :, :
                 ]  # make sure that alpha remains the same!
@@ -988,10 +672,3 @@ class FilteringNet(nn.Module):
             output["tsdf"] = sdf[list(sdf.keys())[0]].squeeze()
 
         return output
-
-
-def init_weights(model):
-    if isinstance(model, nn.Conv3d):
-        nn.init.uniform_(model.weight.data, -0.001, 0.001)
-        if model.bias is not None:
-            nn.init.constant_(model.bias.data, 0)
