@@ -473,32 +473,6 @@ class Filter_Pipeline(torch.nn.Module):
         #                     bbox[2, 0]:bbox[2, 1]]
 
         gt_vol = database[scene_id]["gt"]
-        if self.config.LOSS.gt_loss:
-            raise NotImplementedError
-            # Here I use feat_vol just for now, but ideally, I should use a different feat_vol for when feeding gt depth frames so
-            # that the feature network also can be trained on gt images because it is not clear what feature the gt depth images correspond to
-            # for now I make sure that I don't use gt loss when using features
-            input_1 = self._prepare_input_training(
-                gt_vol.to(device),
-                self.config.FUSION_MODEL.max_weight * torch.ones_like(weights_vol),
-                feat_vol,
-                bbox,
-            )
-
-            input_2 = self._prepare_input_training(
-                gt_vol.to(device),
-                self.config.FUSION_MODEL.max_weight * torch.ones_like(weights_vol),
-                feat_vol_op,
-                bbox,
-            )
-
-            neighborhood = dict()
-            neighborhood[sensor] = input_1["neighborhood"]
-            neighborhood[sensor_op] = input_2["neighborhood"]
-
-            tsdf_gt_filtered = self._filtering(neighborhood)
-        else:
-            tsdf_gt_filtered = None
 
         del neighborhood
 
@@ -558,7 +532,6 @@ class Filter_Pipeline(torch.nn.Module):
 
         output = dict()
         output["tsdf_filtered_grid"] = tsdf_filtered
-        output["tsdf_gt_filtered_grid"] = tsdf_gt_filtered
         output["tsdf_target_grid"] = tsdf_target
         if (
             self.config.LOSS.alpha_supervision

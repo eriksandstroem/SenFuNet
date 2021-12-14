@@ -37,8 +37,6 @@ def train_fusion(args):
 
     config = load_config_from_yaml(args["config"])
 
-    # assert not (config.LOSS.gt_loss and config.FILTERING_MODEL.w_features), "You can only use gt loss when not using features"
-
     config.TIMESTAMP = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
 
     # set seed for reproducibility
@@ -141,20 +139,18 @@ def train_fusion(args):
                     checkpoint["pipeline_state_dict"]
                 )
 
-    if config.TESTING.pretrain_filtering_net:
+    if config.TRAINING.pretrain_filtering_net:
         load_pipeline(
             config.TESTING.fusion_model_path, pipeline
         )  # this is the filtering loading
 
-    if config.TRAINING.pretraining and config.FUSION_MODEL.use_fusion_net:
+    if config.TRAINING.pretrain_fusion_net and config.FUSION_MODEL.use_fusion_net:
         for sensor in config.DATA.input:
             if not config.ROUTING.do:
                 if sensor == "tof" or sensor == "stereo":
                     load_net_old(
                         eval(
-                            "config.TRAINING.pretraining_fusion_"
-                            + sensor
-                            + "_model_path"
+                            "config.TRAINING.pretrain_fusion_" + sensor + "_model_path"
                         ),
                         pipeline.fuse_pipeline._fusion_network[sensor],
                         sensor,
@@ -162,9 +158,7 @@ def train_fusion(args):
                 else:
                     load_net(
                         eval(
-                            "config.TRAINING.pretraining_fusion_"
-                            + sensor
-                            + "_model_path"
+                            "config.TRAINING.pretrain_fusion_" + sensor + "_model_path"
                         ),
                         pipeline.fuse_pipeline._fusion_network[sensor],
                         sensor,
@@ -172,7 +166,7 @@ def train_fusion(args):
             else:
                 load_net(
                     eval(
-                        "config.TRAINING.pretraining_fusionrouting_"
+                        "config.TRAINING.pretrain_fusionrouting_"
                         + sensor
                         + "_model_path"
                     ),
@@ -307,7 +301,6 @@ def train_fusion(args):
             grad_norm_outlier_net[sensor_] = 0
             l_alpha_2d[sensor_] = 0
 
-        l1_gt_grid = 0
         l_feat = 0
 
         l_occ = 0  # single sensor training
@@ -354,7 +347,6 @@ def train_fusion(args):
                     sensor = config.DATA.input[1]
 
                 batch["depth"] = batch[sensor + "_depth"]
-                # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
                 batch["mask"] = batch[sensor + "_mask"]
                 if config.FILTERING_MODEL.model == "routedfusion":
                     batch["sensor"] = config.DATA.input[0]
@@ -399,8 +391,6 @@ def train_fusion(args):
                     ].item()  # note that this loss is a moving average over the training window of log_freq steps
                 if output["l1_grid"] is not None:
                     l1_grid += output["l1_grid"].item()
-                if output["l1_gt_grid"] is not None:
-                    l1_gt_grid += output["l1_gt_grid"].item()
 
                 for sensor_ in config.DATA.input:
                     if output["l1_grid_" + sensor_] is not None:
@@ -422,7 +412,6 @@ def train_fusion(args):
 
                 for sensor in sensors:
                     batch["depth"] = batch[sensor + "_depth"]
-                    # batch['confidence_threshold'] = eval('config.ROUTING.threshold_' + sensor) # not relevant to use anymore
                     batch["mask"] = batch[sensor + "_mask"]
 
                     if config.FILTERING_MODEL.model == "routedfusion":
@@ -472,8 +461,6 @@ def train_fusion(args):
                         ].item()  # note that this loss is a moving average over the training window of log_freq steps
                     if output["l1_grid"] is not None:
                         l1_grid += output["l1_grid"].item()
-                    if output["l1_gt_grid"] is not None:
-                        l1_gt_grid += output["l1_gt_grid"].item()
 
                     for sensor_ in config.DATA.input:
                         if output["l1_grid_" + sensor_] is not None:
@@ -547,7 +534,6 @@ def train_fusion(args):
                 # print('averaged val norm: ', val_norm)
                 l1_interm /= divide
                 l1_grid /= divide
-                l1_gt_grid /= divide
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] /= divide
                     l_occ_dict[sensor_] /= divide
@@ -601,11 +587,6 @@ def train_fusion(args):
                     l1_grid,
                     global_step=i + 1 + epoch * n_batches,
                 )
-                workspace.writer.add_scalar(
-                    "Train/l1_gt_translation",
-                    l1_gt_grid,
-                    global_step=i + 1 + epoch * n_batches,
-                )
                 for sensor_ in config.DATA.input:
                     workspace.writer.add_scalar(
                         "Train/grad_norm_feature_" + sensor_,
@@ -654,7 +635,6 @@ def train_fusion(args):
                     grad_norm_outlier_net[sensor_] = 0
                     l_alpha_2d[sensor_] = 0
 
-                l1_gt_grid = 0
                 l_feat = 0
                 l_occ = 0  # single sensor training
 

@@ -78,7 +78,6 @@ class Pipeline(torch.nn.Module):
                     sensor_ = sensors[1]
 
                 batch["depth"] = batch[sensor_ + "_depth"]
-                # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                 batch["routing_net"] = "self._routing_network_" + sensor_
                 batch["mask"] = batch[sensor_ + "_mask"]
                 if self.config.FILTERING_MODEL.model == "routedfusion":
@@ -94,7 +93,6 @@ class Pipeline(torch.nn.Module):
                 for sensor_ in sensors:
 
                     batch["depth"] = batch[sensor_ + "_depth"]
-                    # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                     batch["routing_net"] = "self._routing_network_" + sensor_
                     batch["mask"] = batch[sensor_ + "_mask"]
                     if self.config.FILTERING_MODEL.model == "routedfusion":
@@ -128,7 +126,6 @@ class Pipeline(torch.nn.Module):
                 self.config.ROUTING.do
                 and self.config.FILTERING_MODEL.model == "tsdf_early_fusion"
             ):
-                # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                 batch["routing_net"] = "self._routing_network"
                 batch["sensor"] = self.config.DATA.input[0]
                 batch[
@@ -139,7 +136,6 @@ class Pipeline(torch.nn.Module):
                 for sensor_ in sensors:
                     # print(sensor_)
                     batch["depth"] = batch[sensor_ + "_depth"]
-                    # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                     batch["routing_net"] = "self._routing_network_" + sensor_
                     batch["mask"] = batch[sensor_ + "_mask"]
                     batch["sensor"] = sensor_
@@ -255,7 +251,6 @@ class Pipeline(torch.nn.Module):
         for sensor_ in sensors:
 
             batch["depth"] = batch[sensor_ + "_depth"]
-            # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
             batch["routing_net"] = "self._routing_network_" + sensor_
             batch["mask"] = batch[sensor_ + "_mask"]
             batch["sensor"] = sensor_
@@ -319,7 +314,6 @@ class Pipeline(torch.nn.Module):
                     sensor_ = sensors[1]
 
                 batch["depth"] = batch[sensor_ + "_depth"]
-                # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                 batch["routing_net"] = "self._routing_network_" + sensor_
                 batch["mask"] = batch[sensor_ + "_mask"]
                 if self.config.FILTERING_MODEL.model == "routedfusion":
@@ -335,7 +329,6 @@ class Pipeline(torch.nn.Module):
                 for sensor_ in sensors:
 
                     batch["depth"] = batch[sensor_ + "_depth"]
-                    # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                     batch["routing_net"] = "self._routing_network_" + sensor_
                     batch["mask"] = batch[sensor_ + "_mask"]
                     if self.config.FILTERING_MODEL.model == "routedfusion":
@@ -420,7 +413,6 @@ class Pipeline(torch.nn.Module):
         if sensor == "fused" or sensor == "weighting":
             for sensor_ in sensors:
                 batch["depth"] = batch[sensor_ + "_depth"]
-                # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
                 batch["routing_net"] = "self._routing_network_" + sensor_
                 batch["mask"] = batch[sensor_ + "_mask"]
                 batch["sensor"] = sensor_
@@ -434,7 +426,6 @@ class Pipeline(torch.nn.Module):
 
         else:
             batch["depth"] = batch[sensor + "_depth"]
-            # batch['confidence_threshold'] = eval('self.config.ROUTING.threshold_' + sensor_)
             batch["routing_net"] = "self._routing_network_" + sensor
             batch["mask"] = batch[sensor + "_mask"]
             batch["sensor"] = sensor

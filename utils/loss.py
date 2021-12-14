@@ -9,13 +9,10 @@ class Fusion_TranslationLoss(torch.nn.Module):
         super(Fusion_TranslationLoss, self).__init__()
 
         self.sensors = config.DATA.input
-        self.l1_weight = config.LOSS.l1_weight
-        self.l2_weight = config.LOSS.l2_weight
         self.grid_weight = config.LOSS.grid_weight
         self.fixed_fusion_net = config.FUSION_MODEL.fixed
-        self.gt_loss = config.LOSS.gt_loss
-        self.grid_weight_gt = config.LOSS.grid_weight_gt
         self.alpha_weight = config.LOSS.alpha_weight
+        self.alpha_2d_weight = config.LOSS.alpha_2d_weight
         self.alpha_supervision = config.LOSS.alpha_supervision
         self.alpha_2d_supervision = config.LOSS.alpha_2d_supervision
         self.alpha_single_sensor_supervision = (
@@ -23,7 +20,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
         )
         self.fusion_weight = config.LOSS.fusion_weight
         self.refinement_loss = config.FILTERING_MODEL.CONV3D_MODEL.use_refinement
-        self.occ_weight = config.LOSS.occ_weight
         self.add_outlier_channel = config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel
         self.use_fusion_net = config.FUSION_MODEL.use_fusion_net
 
@@ -48,10 +44,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
                 init[sensor_] = output["filtered_output"]["tsdf_filtered_grid"][
                     sensor_ + "_init"
                 ]
-
-        if self.gt_loss:
-            raise NotImplementedError
-            est_gt_grid = output["filtered_output"]["tsdf_gt_filtered_grid"]["tsdf"]
 
         if "filtered_output" in output:
             target_grid = output["filtered_output"]["tsdf_target_grid"]
@@ -178,7 +170,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
                     target_alpha = target_alpha.float()
                     # outlier_ratio[sensor_] = ((~(target_alpha.bool())).sum()/target_alpha.shape[0])
                 elif k == 1:
-                    target_alpha = torch.logical_and(tsdf_err > 0.04, sgn_err > 0)
+                    # target_alpha = torch.logical_and(tsdf_err > g0.04, sgn_err > 0)
                     # target_alpha = tsdf_err > 0.04
                     outlier_alpha = target_alpha == True
                     inlier_alpha = target_alpha == False
@@ -340,9 +332,9 @@ class Fusion_TranslationLoss(torch.nn.Module):
             # l_alpha_2d = torch.mean(self.occ.forward(output['confidence_2d'][mask], gt_confidence[mask]))
 
             if l is None:
-                l = self.alpha_weight * l_alpha_2d
+                l = self.alpha_2d_weight * l_alpha_2d
             else:
-                l += self.alpha_weight * l_alpha_2d
+                l += self.alpha_2d_weight * l_alpha_2d
 
         else:
             l_alpha_2d = None
@@ -395,15 +387,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
         else:
             l1_interm = None
 
-        if self.gt_loss:
-            l1_gt_grid = self.l1.forward(est_gt_grid, target_grid)
-
-            normalization = torch.ones_like(l1_gt_grid).sum()
-            l1_gt_grid = l1_gt_grid.sum() / normalization
-            l += self.grid_weight_gt * l1_gt_grid
-        else:
-            l1_gt_grid = None
-
         l_grid_occ_dict = dict()
         for sensor_ in self.sensors:
             l_grid_occ_dict[sensor_] = None
@@ -415,7 +398,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
         output["l1_interm"] = l1_interm  # this mixes all sensors in one logging graph
         output["l1_grid"] = l1_grid
         output["l_occ"] = l_grid_occ
-        output["l1_gt_grid"] = l1_gt_grid
         for sensor_ in self.sensors:
             # print(l1_grid_dict[sensor_])
             output["l1_grid_" + sensor_] = l1_grid_dict[sensor_]
