@@ -1,16 +1,13 @@
 import torch
 import argparse
 import os
-import random
 import numpy as np
-import time
 import open3d as o3d
 import matplotlib.pyplot as plt
 
 from utils import loading
 from utils import setup
-from utils import transform
-from pyquaternion import Quaternion
+
 
 from modules.pipeline import Pipeline
 
@@ -32,7 +29,7 @@ def arg_parse():
 
 def test_fusion(config, scene):
 
-    # Note the reason why we don't see any surface at the back in the beginning of the script is because
+    # Note the reason why we don't see any surface at the back in the beginning of the trajectory is because
     # all 8 vertices of a voxel need to have a non-zero weight counter in order for us to have a
     # a surface registered by the marching cubes algorithm. This is why we see surface closer to the camera
     # i.e. because here the rays are denser and they "activate" all corners of the voxel while further away
@@ -41,6 +38,7 @@ def test_fusion(config, scene):
     # final weight mask and then we can see that wall.
 
     option_file = "/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/videos/render_option_old.json"
+    # not necessarily used
     transform_file = (
         "/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/videos/transform_"
         + scene
@@ -73,8 +71,7 @@ def test_fusion(config, scene):
         )
     else:
         config.FEATURE_MODEL.n_features = (
-            config.FEATURE_MODEL.append_depth
-            + 3 * config.FEATURE_MODEL.w_rgb
+            config.FEATURE_MODEL.append_depth + 3 * config.FEATURE_MODEL.w_rgb
         )  # 1 for label encoding of noise in gaussian threshold data
 
     # get test database
@@ -96,9 +93,6 @@ def test_fusion(config, scene):
     T = np.eye(3)
     T = np.concatenate((T, origin), axis=1)
     T = np.concatenate((T, np.array([[0, 0, 0, 1]])), axis=0)
-
-    resx = config.DATA.resx
-    resy = config.DATA.resy
 
     pipeline.eval()
 
@@ -123,11 +117,6 @@ def test_fusion(config, scene):
             pipeline.test_step_video(batch, database, save_sensor, sensors, device)
             # probably I should not do the outlier filter in an accumulated fashion!
 
-            # intr = batch['intrinsics_tof'].squeeze()
-            # print(intr)
-            # if k < 405:
-            #     continue
-            # intrinsic_obj.set_intrinsics(resx, resy, intr[0,0]/resx, intr[1,1]/resy, intr[0,2], intr[1,2])
             intrinsic_obj.set_intrinsics(
                 512, 512, 512 / 2, 512 / 2, 512 / 2 - 0.5, 512 / 2 - 0.5
             )
@@ -151,8 +140,6 @@ def test_fusion(config, scene):
             # create PinholeCameraTrajectory from the camera list
             trajectory = o3d.camera.PinholeCameraTrajectory()
             trajectory.parameters = [camera_obj]
-
-            scene_id = list(database.scenes_gt.keys())[0]
 
             # create mesh of database grids
             if save_sensor == "fused":

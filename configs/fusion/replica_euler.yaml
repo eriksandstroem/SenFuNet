@@ -63,43 +63,20 @@ FILTERING_MODEL:
       features_to_sdf_enc: False # feed 2D features to refinement model
       sdf_enc_to_weight_head: False # feed sdf encoding to alhpa head
 LOSS:
-  alpha_single_sensor_supervision: True
-  alpha_supervision: False
-  alpha_2d_supervision: False
-  gt_loss: False
-  l1_weight: 1.0 # not used now
-  l2_weight: 0.0 # not used now
-  alpha_2d_weight: 1.0
-  fusion_weight: 6.0
+  alpha_single_sensor_supervision: True # supervise voxels where only one sensor integrates
+  alpha_supervision: False # supervise directly with proxy alpha
+  fusion_weight: 6.0 # l1 weight of fusion net
   grid_weight: 6
-  grid_weight_gt: 6
-  occ_weight: 0.01 # REMOVE THIS!
-  alpha_weight: 0.01
-  feature_regularization: True
-  feat_reg_weight: 0.05
+  alpha_weight: 0.01 # weight of single sensor alpha supervision and proxy supervision
 TRAINING:
-  reset_strategy: True # True or False 
+  reset_strategy: True # May not make any difference
   reset_prob: 0.01 # in percent (used if reset_strategy: True)
-  pretraining: False
-  # pretraining_fusion_gauss_close_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210517-112920/model/best_gauss_close_thresh.pth.tar
-  # pretraining_fusion_gauss_far_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210517-112920/model/best_gauss_far_thresh.pth.tar
-  pretraining_fusion_gauss_close_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210505-232837/model/best_gauss_close_thresh.pth.tar
-  pretraining_fusion_gauss_far_thresh_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210505-232837/model/best_gauss_far_thresh.pth.tar
-  pretraining_fusion_gauss_close_cont_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210521-200056/model/best_gauss_close_cont.pth.tar
-  pretraining_fusion_gauss_far_cont_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210521-200056/model/best_gauss_far_cont.pth.tar
-  pretraining_fusion_left_depth_gt_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210708-111836/model/best_left_depth_gt.pth.tar # if path exists, will load these weights at the start of training
-  pretraining_fusion_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion/workspace/fusion/210426-153135/model/best_tof.pth.tar # if p
-  pretraining_fusion_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion/workspace/fusion/210426-153135/model/best_stereo.pth.tar
-  pretraining_fusionrouting_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210920-230302/model/best_tof.pth.tar # if p
-  pretraining_fusionrouting_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210920-230302/model/best_stereo.pth.tar
-  pretraining_fusion_gauss_red_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-085449/model/best_gauss_red.pth.tar
-  pretraining_fusion_gauss_blue_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-085449/model/best_gauss_blue.pth.tar
-  pretraining_fusion_gauss_red_aug_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-091500/model/best_gauss_red_aug.pth.tar
-  pretraining_fusion_gauss_blue_aug_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210721-091500/model/best_gauss_blue_aug.pth.tar
-  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/211210-174701/model/best.pth.tar # stereo, 210914-144957, proper channels: 211210-174701
-  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/211210-172500/model/best.pth.tar # tof, 210914-144118, proper channels: 211210-172500
-  routing_tof_2_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/211210-172500/model/best.pth.tar
-  routing_sgm_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/211210-173928/model/best.pth.tar # 210919-095139, proper channels: 211210-173928
+  pretrain_filtering_net: False
+  pretrain_fusion_net: False # if True, provide a path called pretrain_fusion_SENSORNAME_model_path. Used to load pretrained and/or fixed fusion nets
+  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/stereo/model/best.pth.tar # stereo, proper channels: 211210-174701
+  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar # tof, proper channels: 211210-172500
+  routing_tof_2_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar
+  routing_sgm_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-095139/model/best.pth.tar # 210919-095139, proper channels: 211210-173928
   routing_lea_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-100411/model/best.pth.tar 
   train_batch_size: 1
   train_shuffle: True
@@ -111,22 +88,19 @@ TESTING:
   visualize_features_and_proxy: False
   routedfusion_nn: True
   routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the weight grids
-  use_outlier_filter: False
+  use_outlier_filter: True
   eval_single_sensors: False # not applicable when evaluating routedfusion
   visualize_sensor_weighting: False
   test_batch_size: 1
   test_shuffle: False
-  pretrain_filtering_net: False
-  routing_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210930-120658/model/best.pth.tar # 210930-120658 and 211210-171028 (sgm stereo and psmnet stereo) 210913-093715 and 211210-171713 (tof and psmnet stereo fusion) 210927-183313 (mono and psmnet stereo fusion) #210907-002732
-  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211014-202944/model/best.pth.tar # 
+  routing_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210930-120658/model/best.pth.tar # 210930-120658 and 211210-171028 (sgm stereo and psmnet stereo) 210913-093715 and 211210-171713 (tof and psmnet stereo fusion) 210927-183313 (mono and psmnet stereo fusion) #210907-002732 Used only for tsdf_early_fusion
+  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211014-205819/model/best.pth.tar # used for conv3d, routedfusion as filtering models
   weight_thresholds: [0.0]
 ROUTING:
   do: False
-  dont_smooth_where_uncertain: False
-  threshold: 0.15 # note that confidence threshold for multidepth routingNet is 0.25
-  threshold_mono: 0.0
-  threshold_stereo: 0.0
-  threshold_tof: 0.0
+  dont_smooth_where_uncertain: False # if True, replaces the routing output with the input depth if the confidence is below the threshold
+  threshold: 0.15 
+  intensity_grad: False # feed grayscale image and its gradient to routing network
 OPTIMIZATION:
   scheduler:
     step_size_filtering: 500
@@ -135,51 +109,40 @@ OPTIMIZATION:
     gamma_fusion: 0.5
   lr_filtering: 1.e-04
   lr_fusion: 1.e-04
-  rho: 0.95
-  eps: 1.e-08
-  momentum: 0.5
-  weight_decay: 0.00
-  accumulate: True
+  rho: 0.95 # rmsprop fusion net
+  eps: 1.e-08 # rmsprop fusion net
+  momentum: 0.5 # rmsprop fusion net
+  weight_decay: 0.00 # rmsprop fusion net
   accumulation_steps: 20 # note that this is normally 8
-  alternate: False
-  alternate_steps: 5
 DATA:
   collaborative_reconstruction: False
-  frames_per_chunk: 100 # used when colaborative reconstruction is true
-  sampling_density_stereo: 1
-  sampling_density_tof: 1
-  mask_stereo_height: 10 #35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
+  frames_per_chunk: 100 # used when colaborative_reconstruction: true
+  mask_stereo_height: 10 # 35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
   # compared to the color camera of the azure kinect
   mask_stereo_width: 10 # in pixels (achieves fov 84.32)
-  mask_tof_height: 10 # 52 # 52 # in pixels. Note that this value depends on the resolution of the image. With resolution 256 this would be 52
+  mask_tof_height: 10 # 52 # in pixels. Note that this value depends on the resolution of the image. With resolution 256 this would be 52
   mask_tof_width: 10 #35 # 35 # in pixels. With resolution 256 this would be 35
-  mask_width: 10
-  mask_height: 10
-  pad: 2
-  min_depth_stereo: 0.0 # 0.5
-  max_depth_stereo: 12.3 # 2.5
-  min_depth_tof: 0.0 # 0.5
-  max_depth_tof: 12.3 # 3.86
-  min_depth: 0.0
-  max_depth: 12.3
-  fusion_strategy: fusionNet # routingNet or fusionNet SHOULD NOT BE NEEDED. USE FILTERING MODEL INSTEAD TO DEAL WITH IT
-  data_load_strategy: max_depth_diversity # max_depth_diversity, hybrid (Note: if X_shuffle is true, this option serves no purpose)
-  load_scenes_at_once: 1
-  intensity_grad: False # weather to load the grayscale image and its gradient and feed to the routing network
-  root_dir: /cluster/work/cvl/esandstroem/data/corbs # TMPDIR #/cluster/work/cvl/esandstroem/data/replica/manual # # #  # ## # #TMPDIR # ## #  # /cluster/work/cvl/esandstroem/data/corbs # TMPDIR ##TMPDIR # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual #training on data from work folder or on local scratch of compute node
-  dataset: CoRBS
-  input: [tof, stereo] #[left_depth_gt, left_depth_gt_2] # , 'stereo'] # # list of sensors to fuse: mono, stereo, tof, gt, 
-  target: gt
+  mask_width: 10 # general sensor
+  mask_height: 10 # general sensor
+  pad: 2 # pad ground truth grid (not needed, but all results are using it)
+  min_depth_stereo: 0.0 # 0.5 (in meters)
+  max_depth_stereo: 12.3 # 2.5 (in meters)
+  min_depth_tof: 0.0 # 0.5 (in meters)
+  max_depth_tof: 12.3 # 3.86 (in meters)
+  min_depth: 0.0 # general sensor (in meters)
+  max_depth: 12.3 # general sensor (in meters)
+  root_dir: /cluster/work/cvl/esandstroem/data/corbs # TMPDIR #/cluster/work/cvl/esandstroem/data/replica/manual /cluster/work/cvl/esandstroem/data/corbs # TMPDIR  # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual # training on data from work folder or on local scratch of compute node
+  dataset: CoRBS # dataset
+  input: [tof, stereo] # list of sensors to fuse
+  target: gt # ground truth depth label
   resx_stereo: 256
   resy_stereo: 256
-  resx_tof: 256 # a tof camera has typically half the resolution of an rgb camera
+  resx_tof: 256
   resy_tof: 256
   resx: 256 # default settings
   resy: 256
   train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/train.txt
   val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/desk.txt #replica/val.txt
-  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt #4_hotel_0_office_0.txt
-  transform: ToTensor()
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/human.txt #replica/test_office_0.txt #4_hotel_0_office_0.txt
   init_value: 0.0 # init value of tsdf grids
   trunc_value: 0.05 # truncation distance
-  truncation_strategy: standard # standard, artificial or none REMOVE I SUPPOSE

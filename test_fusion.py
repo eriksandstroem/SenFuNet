@@ -116,7 +116,7 @@ def test_fusion(config):
     # load network parameters from trained model
     if config.FILTERING_MODEL.model == "tsdf_early_fusion":
         # load trained routing model into parameters
-        assert config.ROUTING.do == True
+        assert config.ROUTING.do is True
         routing_checkpoint = torch.load(config.TESTING.routing_model_path)
         # print(routing_checkpoint)
 
@@ -146,7 +146,7 @@ def test_fusion(config):
 
     # compute f-scores and voxelgrid scores for the test scenes and render visualizations
     if config.FILTERING_MODEL.model == "routedfusion":
-        evaluate_routedfusion(database, config, test_dir)
+        evaluate_routedfusion(database, config, test_dir, test_path)
     else:
         evaluate(database, config, test_dir)
 
@@ -718,7 +718,7 @@ def evaluate(database, config, test_dir):
                     )
 
 
-def evaluate_routedfusion(database, config, test_dir):
+def evaluate_routedfusion(database, config, test_dir, test_path):
 
     # when testing on data located at local scratch of gpu node
     sdf_gt_path = os.getenv(config.DATA.root_dir)

@@ -6,20 +6,11 @@ import numpy as np
 
 from utils import loading
 from utils import setup
-from utils import transform
 
-from modules.extractor import Extractor
-from modules.integrator import Integrator
-from modules.model import FusionNet
-from modules.routing import ConfidenceRouting
 from modules.pipeline import Pipeline
-import random
-from scipy import ndimage
 
 from tqdm import tqdm
 
-from utils.metrics import evaluation
-from utils.setup import *
 import matplotlib.pyplot as plt
 from matplotlib import rc
 

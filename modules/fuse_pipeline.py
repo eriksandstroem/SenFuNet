@@ -58,7 +58,6 @@ class Fuse_Pipeline(torch.nn.Module):
         config.FEATURE_MODEL.n_tail_points_stereo = (
             config.FUSION_MODEL.n_tail_points_stereo
         )
-        config.FEATURE_MODEL.supervision = config.LOSS.alpha_2d_supervision
         config.FEATURE_MODEL.resx = config.DATA.resx
         config.FEATURE_MODEL.resy = config.DATA.resy
 
@@ -171,8 +170,6 @@ class Fuse_Pipeline(torch.nn.Module):
 
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
 
-        if self.config.LOSS.alpha_2d_supervision:
-            output["confidence_2d"] = feat_pred["confidence"]
         feat_pred = feat_pred["feature"].permute(
             0, 2, 3, 1
         )  # (1, 256, 256, n_features)
@@ -617,9 +614,6 @@ class Fuse_Pipeline(torch.nn.Module):
             batch["fusionNet"],
             extraction_band=n_points,
         )
-
-        if self.config.LOSS.alpha_2d_supervision:
-            output["confidence_2d"] = fusion_output["confidence_2d"]
 
         del tsdf_input, feature_input
 

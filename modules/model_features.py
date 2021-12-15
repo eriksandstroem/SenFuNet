@@ -99,7 +99,6 @@ class FeatureNet(nn.Module):
         self.tsdf_out = self.n_points
         layernorm = config.layernorm
         self.append_depth = config.append_depth
-        self.supervision = config.supervision
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
@@ -205,11 +204,6 @@ class FeatureNet(nn.Module):
                 )
             )
 
-        if self.supervision:
-            self.confidence_head = nn.Sequential(
-                nn.Conv2d(self.n_features, 1, (1, 1), padding=0), nn.Sigmoid()
-            )
-
         self.tanh = nn.Tanh()
 
     def forward(self, x):
@@ -244,12 +238,6 @@ class FeatureNet(nn.Module):
             x = torch.cat([x, d], dim=1)
 
         output = dict()
-
-        if self.supervision:
-            conf = self.confidence_head(x)
-            output["confidence"] = conf
-            if self.append_conf:
-                x = torch.cat((x, conf), dim=1)
 
         output["feature"] = x
 
@@ -291,7 +279,6 @@ class FeatureResNet(nn.Module):
         self.tsdf_out = self.n_points
         layernorm = config.layernorm
         self.append_depth = config.append_depth
-        self.supervision = config.supervision
 
         # define network submodules (encoder/decoder)
         self.encoder = nn.ModuleList()
@@ -342,12 +329,6 @@ class FeatureResNet(nn.Module):
                 )
             )
 
-        if self.supervision:
-            self.confidence_head = nn.Sequential(
-                nn.Conv2d(self.n_features, 1, (1, 1), padding=0), nn.Sigmoid()
-            )
-            # nn.ReLU())
-
         self.tanh = nn.Tanh()
 
     def forward(self, x):
@@ -377,12 +358,6 @@ class FeatureResNet(nn.Module):
             x = torch.cat([x, d], dim=1)
 
         output = dict()
-
-        if self.supervision:
-            conf = self.confidence_head(x)
-            output["confidence"] = conf
-            if self.append_conf:
-                x = torch.cat((x, conf), dim=1)
 
         output["feature"] = x
 

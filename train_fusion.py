@@ -292,18 +292,10 @@ def train_fusion(args):
         l1_interm = 0
         l1_grid = 0
         l1_grid_dict = dict()
-        l_occ_dict = dict()
-        l_alpha_2d = dict()
         for sensor_ in config.DATA.input:
             l1_grid_dict[sensor_] = 0
-            l_occ_dict[sensor_] = 0
             grad_norm_feature[sensor_] = 0
             grad_norm_outlier_net[sensor_] = 0
-            l_alpha_2d[sensor_] = 0
-
-        l_feat = 0
-
-        l_occ = 0  # single sensor training
 
         for i, batch in tqdm(enumerate(train_loader), total=len(train_dataset)):
 
@@ -389,8 +381,6 @@ def train_fusion(args):
                 for sensor_ in config.DATA.input:
                     if output["l1_grid_" + sensor_] is not None:
                         l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
-                if output["l_alpha_2d"] is not None:
-                    l_alpha_2d[batch["sensor"]] += output["l_alpha_2d"]
 
                 if output["loss"] is not None:
                     # print('4m: ', torch.cuda.max_memory_allocated(device=device))
@@ -459,8 +449,6 @@ def train_fusion(args):
                     for sensor_ in config.DATA.input:
                         if output["l1_grid_" + sensor_] is not None:
                             l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
-                    if output["l_alpha_2d"] is not None:
-                        l_alpha_2d[batch["sensor"]] += output["l_alpha_2d"]
 
                     if output["loss"] is not None:
                         # print('4m: ', torch.cuda.max_memory_allocated(device=device))
@@ -530,34 +518,9 @@ def train_fusion(args):
                 l1_grid /= divide
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] /= divide
-                    l_occ_dict[sensor_] /= divide
                     grad_norm_feature[sensor_] /= divide
                     grad_norm_outlier_net[sensor_] /= divide
-                    l_alpha_2d[sensor_] /= divide
 
-                l_occ /= divide
-
-                # save if loss is lower than before / only for feature network training. Evaluate each 957 frames
-                # check if current checkpoint is best
-                # is_best_filt = False
-
-                # for sensor in config.DATA.input:
-                #     if l_alpha_2d[sensor] <= best_iou[sensor]:
-                #         is_best[sensor] = True
-                #         best_iou[sensor] = l_alpha_2d[sensor]
-                #         workspace.log('found new best ' + sensor + ' model with loss {} at epoch {}'.format(best_iou[sensor], epoch),
-                #                       mode='val')
-
-                #     else:
-                #         is_best[sensor] = False
-
-                # # save checkpoint
-                # workspace.save_model_state({'pipeline_state_dict': pipeline.state_dict(),
-                #                                 'epoch': epoch},
-                #                                is_best_filt=is_best_filt, is_best=is_best)
-
-                # l_occ /= divide
-                # l_feat /= divide
                 workspace.writer.add_scalar(
                     "Train/loss", train_loss, global_step=i + 1 + epoch * n_batches
                 )
@@ -597,21 +560,7 @@ def train_fusion(args):
                         l1_grid_dict[sensor_],
                         global_step=i + 1 + epoch * n_batches,
                     )
-                    workspace.writer.add_scalar(
-                        "Train/occ_loss_" + sensor_,
-                        l_occ_dict[sensor_],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
-                    workspace.writer.add_scalar(
-                        "Train/l_alpha_2d_" + sensor_,
-                        l_alpha_2d[sensor_],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
 
-                workspace.writer.add_scalar(
-                    "Train/occ_loss", l_occ, global_step=i + 1 + epoch * n_batches
-                )
-                # workspace.writer.add_scalar('Train/feat_loss', l_feat, global_step=i + 1 + epoch*n_batches)
                 divide = 0
                 train_loss = 0
                 grad_norm_alpha_net = 0
@@ -621,16 +570,10 @@ def train_fusion(args):
                 l1_interm = 0
                 l1_grid = 0
                 l1_grid_dict = dict()
-                l_occ_dict = dict()
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] = 0
-                    l_occ_dict[sensor_] = 0
                     grad_norm_feature[sensor_] = 0
                     grad_norm_outlier_net[sensor_] = 0
-                    l_alpha_2d[sensor_] = 0
-
-                l_feat = 0
-                l_occ = 0  # single sensor training
 
             if config.TRAINING.gradient_clipping:
                 torch.nn.utils.clip_grad_norm_(

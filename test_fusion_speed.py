@@ -2,25 +2,10 @@ import torch
 import argparse
 import os
 
-import numpy as np
-
 from utils import loading
 from utils import setup
-from utils import transform
 
-from modules.extractor import Extractor
-from modules.integrator import Integrator
-from modules.model import FusionNet
-from modules.routing import ConfidenceRouting
 from modules.pipeline import Pipeline
-import random
-from scipy import ndimage
-
-from tqdm import tqdm
-
-from utils.setup import *
-
-import h5py
 
 
 def arg_parse():

@@ -12,9 +12,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
         self.grid_weight = config.LOSS.grid_weight
         self.fixed_fusion_net = config.FUSION_MODEL.fixed
         self.alpha_weight = config.LOSS.alpha_weight
-        self.alpha_2d_weight = config.LOSS.alpha_2d_weight
         self.alpha_supervision = config.LOSS.alpha_supervision
-        self.alpha_2d_supervision = config.LOSS.alpha_2d_supervision
         self.alpha_single_sensor_supervision = (
             config.LOSS.alpha_single_sensor_supervision
         )
@@ -28,7 +26,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
         self.bce = torch.nn.BCEWithLogitsLoss(
             reduction=reduction
         )  # , pos_weight=self.focus_outliers_weight)
-        self.occ = torch.nn.BCELoss(reduction=reduction)
 
     def forward(self, output):
 
@@ -203,7 +200,7 @@ class Fusion_TranslationLoss(torch.nn.Module):
                             output["filtered_output"]["alpha_grid"][single_sensor_mask],
                             target_alpha,
                         )
-                    # l1_alpha = torch.mean(self.occ.forward(output['filtered_output']['alpha_grid'][single_sensor_mask], target_alpha))
+
                     l1_outlier_alpha = (
                         10
                         * l1_alpha[outlier_alpha].sum()
@@ -228,116 +225,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
                         if l1_inlier_alpha.sum() > 0:
                             l += self.alpha_weight * l1_inlier_alpha
                         # print('l1 outlier: ', l1_outlier_alpha)
-
-        if self.alpha_2d_supervision:
-            output["gt"] = output["gt"].squeeze()
-            output["confidence_2d"] = output["confidence_2d"].squeeze()
-
-            # plt.imsave('conf2d.png', output['confidence_2d'].cpu().detach().numpy())
-            # 'confidence_2d'
-            # 'tof_mask', 'stereo_mask', 'tof_depth', 'stereo_depth'
-            mask = torch.ones_like(output["confidence_2d"])
-            for sensor_ in self.sensors:
-                mask = torch.logical_and(mask, output[sensor_ + "_mask"].squeeze())
-                output[sensor_ + "_depth"] = output[sensor_ + "_depth"].squeeze()
-                # plt.imsave(sensor_+'depth.png', output[sensor_ + '_depth'].cpu().detach().numpy())
-                # plt.imsave(sensor_+'mask.png', output[sensor_ + '_mask'].squeeze().cpu().detach().numpy())
-
-            # create ground truth map
-            gt_confidence = -torch.ones_like(output["confidence_2d"])
-            # compute mask between
-            mask_between = torch.logical_or(
-                torch.logical_and(
-                    (output[self.sensors[0] + "_depth"] < output["gt"]),
-                    (output["gt"] < output[self.sensors[1] + "_depth"]),
-                ),
-                torch.logical_and(
-                    (output[self.sensors[1] + "_depth"] < output["gt"]),
-                    (output["gt"] < output[self.sensors[0] + "_depth"]),
-                ),
-            )
-
-            mask_between = torch.logical_and(mask_between, mask)
-            gt = output["gt"][mask_between]
-            depth_0 = output[self.sensors[0] + "_depth"][mask_between]
-            depth_1 = output[self.sensors[1] + "_depth"][mask_between]
-
-            # real values confidence with mask between
-            tot_err = abs(gt - depth_0) + abs(gt - depth_1)
-            if output["sensor"] == self.sensors[0]:
-                gt_confidence[mask_between] = abs(gt - depth_1) / (tot_err)
-            else:
-                gt_confidence[mask_between] = abs(gt - depth_0) / (tot_err)
-
-            # binary confidence with mask between
-            # depth_0_err = abs(gt -	depth_0)
-            # depth_1_err = abs(gt -	depth_1)
-            # # if sensor 0 has a smaller err sensor weighting should be 1 i.e. alpha is 1, otherwise 0
-            # if output['sensor'] == self.sensors[0]:
-            # 	gt_confidence[mask_between] = (depth_0_err < depth_1_err).float()
-            # else:
-            # 	gt_confidence[mask_between] = (depth_0_err > depth_1_err).float()
-
-            # compute mask not between
-            mask_not_between = torch.logical_or(
-                torch.logical_and(
-                    (output[self.sensors[0] + "_depth"] <= output["gt"]),
-                    (output[self.sensors[1] + "_depth"] <= output["gt"]),
-                ),
-                torch.logical_and(
-                    (output[self.sensors[1] + "_depth"] >= output["gt"]),
-                    (output[self.sensors[0] + "_depth"] >= output["gt"]),
-                ),
-            )
-            # remove the voxels where only ones sensor integrates
-            mask_not_between = torch.logical_and(mask_not_between, mask)
-
-            gt = output["gt"][mask_not_between]
-            depth_0 = output[self.sensors[0] + "_depth"][mask_not_between]
-            depth_1 = output[self.sensors[1] + "_depth"][mask_not_between]
-            depth_0_err = abs(gt - depth_0)
-            depth_1_err = abs(gt - depth_1)
-            # if sensor 0 has a smaller err sensor weighting should be 1, otherwise 0
-            if output["sensor"] == self.sensors[0]:
-                gt_confidence[mask_not_between] = (depth_0_err < depth_1_err).float()
-            else:
-                gt_confidence[mask_not_between] = (depth_0_err > depth_1_err).float()
-
-            # plt.imsave('conf2dgt.png', gt_confidence.cpu().detach().numpy())
-            # plt.imsave('masknotbet.png', mask_not_between.cpu().detach().numpy())
-            # plt.imsave('maskbet.png', mask_between.cpu().detach().numpy())
-            # plt.imsave('mask.png', mask.cpu().detach().numpy())
-
-            # l1 loss
-            # with exp(-relu(x)) activation
-            l_alpha_2d = self.l1.forward(
-                torch.exp(-output["confidence_2d"][mask]), gt_confidence[mask]
-            )
-            # with sigmoid activation
-            # l_alpha_2d = self.l1.forward(output['confidence_2d'][mask], gt_confidence[mask])
-            normalization = torch.ones_like(l_alpha_2d).sum()
-            l_alpha_2d = l_alpha_2d.sum() / normalization
-
-            # kendall loss
-            # print('out sum: ', output['confidence_2d'].sum())
-            # print('l1 b', self.l1.forward(output[output['sensor'] + '_depth'], output['gt']).sum())
-            # l1_depth_w_c = torch.exp(-output['confidence_2d'])*self.l1.forward(output[output['sensor'] + '_depth'], output['gt'])
-            # normalization = mask.sum()
-            # l1_depth_w_c = l1_depth_w_c[mask].sum() / normalization
-            # l_alpha_2d = l1_depth_w_c + 0.01*output['confidence_2d'][mask].sum()/mask.sum()
-            # print('l1: ', l1_depth_w_c)
-            # print('c: ', output['confidence_2d'][mask].sum()/mask.sum())
-
-            # binary cross entropy loss
-            # l_alpha_2d = torch.mean(self.occ.forward(output['confidence_2d'][mask], gt_confidence[mask]))
-
-            if l is None:
-                l = self.alpha_2d_weight * l_alpha_2d
-            else:
-                l += self.alpha_2d_weight * l_alpha_2d
-
-        else:
-            l_alpha_2d = None
 
         if self.refinement_loss:
             l1_grid_dict = dict()
@@ -387,23 +274,13 @@ class Fusion_TranslationLoss(torch.nn.Module):
         else:
             l1_interm = None
 
-        l_grid_occ_dict = dict()
-        for sensor_ in self.sensors:
-            l_grid_occ_dict[sensor_] = None
-
-        l_grid_occ = None
-
         output = dict()
         output["loss"] = l
         output["l1_interm"] = l1_interm  # this mixes all sensors in one logging graph
         output["l1_grid"] = l1_grid
-        output["l_occ"] = l_grid_occ
         for sensor_ in self.sensors:
             # print(l1_grid_dict[sensor_])
             output["l1_grid_" + sensor_] = l1_grid_dict[sensor_]
-            output["l_occ_" + sensor_] = l_grid_occ_dict[sensor_]
-        output["l_alpha_2d"] = l_alpha_2d
-        # print(l_alpha_2d)
         # print('l: ', l)
         # print('l1_grid: ', l1_grid)
 

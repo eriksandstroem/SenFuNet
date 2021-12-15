@@ -52,13 +52,6 @@ class Pipeline(torch.nn.Module):
             if not self.config.FILTERING_MODEL.model == "routedfusion":
                 return None
 
-        if self.config.LOSS.alpha_2d_supervision:
-            fused_output["sensor"] = batch["sensor"]
-            for sensor_ in self.config.DATA.input:
-                fused_output[sensor_ + "_depth"] = batch[sensor_ + "_depth"].to(device)
-                fused_output[sensor_ + "_mask"] = batch[sensor_ + "_mask"].to(device)
-                fused_output["gt"] = batch["gt"].to(device)
-
         return fused_output
 
     def test(self, loader, dataset, database, sensors, device):
