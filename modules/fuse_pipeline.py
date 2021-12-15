@@ -1,8 +1,7 @@
 import torch
-import datetime
-import time
 
-import matplotlib.pyplot as plt
+# needed when plotting interactively
+# import matplotlib.pyplot as plt
 
 from modules.routing import ConfidenceRouting
 from modules.extractor import Extractor
@@ -10,9 +9,6 @@ from modules.model import FusionNet
 from modules.model_features import FeatureNet
 from modules.model_features import FeatureResNet
 from modules.integrator import Integrator
-import math
-import numpy as np
-from scipy import ndimage
 
 
 class Fuse_Pipeline(torch.nn.Module):
@@ -190,7 +186,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         try:
             n_points = eval("self.config.FUSION_MODEL.n_points_" + sensor)
-        except:
+        except AttributeError:
             n_points = self.config.FUSION_MODEL.n_points
 
         tsdf_est = tsdf_pred.view(b, h * w, n_points)
@@ -314,7 +310,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         try:
             tail_points = eval("self.config.FUSION_MODEL.n_tail_points_" + sensor)
-        except:
+        except AttributeError:
             tail_points = self.config.FUSION_MODEL.n_tail_points
 
         b, h, w = inputs.shape
@@ -414,7 +410,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         try:
             intrinsics = batch["intrinsics" + "_" + batch["sensor"]]
-        except:
+        except KeyError:
             intrinsics = batch["intrinsics"]
 
         extracted_values[batch["sensor"]] = self._extractor[batch["sensor"]].forward(
@@ -431,7 +427,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         try:
             n_points = eval("self.config.FUSION_MODEL.n_points_" + batch["sensor"])
-        except:
+        except AttributeError:
             n_points = self.config.FUSION_MODEL.n_points
         tsdf_input, feature_input = self._prepare_fusion_input(
             frame,
@@ -559,7 +555,7 @@ class Fuse_Pipeline(torch.nn.Module):
         extracted_values = dict()
         try:
             intrinsics = batch["intrinsics" + "_" + batch["sensor"]]
-        except:
+        except KeyError:
             intrinsics = batch["intrinsics"]
 
         extracted_values[batch["sensor"]] = self._extractor[batch["sensor"]].forward(
@@ -592,7 +588,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         try:
             n_points = eval("self.config.FUSION_MODEL.n_points_" + batch["sensor"])
-        except:
+        except AttributeError:
             n_points = self.config.FUSION_MODEL.n_points
         tsdf_input, feature_input = self._prepare_fusion_input(
             frame,

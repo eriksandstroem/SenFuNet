@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from torch import nn
 
 from torch.nn.functional import normalize
@@ -73,7 +72,7 @@ class FeatureNet(nn.Module):
 
         try:
             self.n_points = eval("config.n_points_" + sensor)
-        except:
+        except AttributeError:
             self.n_points = config.n_points
 
         self.n_features = config.n_features - config.append_depth
@@ -253,7 +252,7 @@ class FeatureResNet(nn.Module):
 
         try:
             self.n_points = eval("config.n_points_" + sensor)
-        except:
+        except AttributeError:
             self.n_points = config.n_points
 
         self.n_features = config.n_features - config.append_depth
@@ -269,13 +268,11 @@ class FeatureResNet(nn.Module):
 
         # layer settings
         n_channels_input = self.n_features
-        n_channels_output = self.n_features
         self.n_layers = config.n_layers
         self.height = config.resy
         self.width = config.resx
         resolution = (self.height, self.width)
         enc_activation = eval(config.enc_activation)
-        dec_activation = eval(config.dec_activation)
         self.tsdf_out = self.n_points
         layernorm = config.layernorm
         self.append_depth = config.append_depth

@@ -1,13 +1,9 @@
 import os
-import glob
 
 import sys
-import random
 import numpy as np
 
 from skimage import io
-from skimage.color import rgb2gray
-from skimage import filters
 from torch.utils.data import Dataset
 
 import h5py
@@ -212,7 +208,7 @@ class CoRBS(Dataset):
                 self.rgb_frames[timestamp_rgb].replace("rgb\\", "") + ".geometric.bin",
             )
             depth_stereo = read_array(stereo_file)
-        except:
+        except FileNotFoundError:
             print("stereo frame not found")
             return None
 
@@ -333,7 +329,7 @@ if __name__ == "__main__":
 
     from tqdm import tqdm
 
-    path_to_utils_module = "/home/esandstroem/scratch-second/euler_project/src/late_fusion/utils/"  #'/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
+    path_to_utils_module = "/home/esandstroem/scratch-second/euler_project/src/late_fusion/utils/"  # '/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
     sys.path.append(
         path_to_utils_module
     )  # needed in order to load read_array and associate

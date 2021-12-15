@@ -1,11 +1,8 @@
 import torch
-import datetime
-import time
 
 from modules.filtering_net import *
 import math
 import numpy as np
-from scipy import ndimage
 
 
 class Filter_Pipeline(torch.nn.Module):
@@ -241,7 +238,7 @@ class Filter_Pipeline(torch.nn.Module):
                         # input_['neighborhood_filter']['tof'][0, 1, :, :, :] = 0.0*torch.ones_like(input_['neighborhood_filter']['tof'][0, 1, :, :, :])
                         input_["test_mode"] = True
                         sub_filter_dict = self._filtering(input_)
-                        if sub_filter_dict == None:
+                        if sub_filter_dict is None:
                             print("encountered nan in filtering net. Exit")
                             return
 
@@ -429,7 +426,7 @@ class Filter_Pipeline(torch.nn.Module):
         # else: # CHANGE
         output = self.request_random_bbox(indices, epoch, sensor, frame)  # CHANGE
 
-        if output == None:
+        if output is None:
             return None
         else:
             bbox = output[0]
@@ -466,7 +463,7 @@ class Filter_Pipeline(torch.nn.Module):
 
         tsdf_filtered = self._filtering(neighborhood)
 
-        if tsdf_filtered == None:
+        if tsdf_filtered is None:
             return "save_and_exit"
         # tsdf_filtered = tsdf_vol[bbox[0, 0]:bbox[0, 1], # for now I just feed the intermediate grid as the filtered one
         #                     bbox[1, 0]:bbox[1, 1],

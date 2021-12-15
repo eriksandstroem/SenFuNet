@@ -2,14 +2,15 @@ import os
 import glob
 
 import sys
-import random
 import numpy as np
 
-from skimage import io, transform
+from skimage import io
 from skimage.color import rgb2gray
 from skimage import filters
 from torch.utils.data import Dataset
-import matplotlib.pyplot as plt
+
+# used when saving images for debugging
+# import matplotlib.pyplot as plt
 
 import h5py
 
@@ -54,7 +55,7 @@ class Replica(Dataset):
 
         try:
             self.filtering_model = config_data.filtering_model
-        except:
+        except AttributeError:
             self.filtering_model = len(
                 config_data.input
             )  # used when training routing network
@@ -256,7 +257,7 @@ class Replica(Dataset):
             try:
                 step_x = depth.shape[0] / eval("self.resolution_" + sensor_ + "[0]")
                 step_y = depth.shape[1] / eval("self.resolution_" + sensor_ + "[1]")
-            except:  # default values used in case sensor specific parameters do not exist
+            except AttributeError:  # default values used in case sensor specific parameters do not exist
                 step_x = depth.shape[0] / self.resolution[0]
                 step_y = depth.shape[1] / self.resolution[1]
 
@@ -321,7 +322,7 @@ class Replica(Dataset):
                     mask[:, 0 : eval("self.mask_" + sensor_ + "_width")] = 0
                     mask[:, -eval("self.mask_" + sensor_ + "_width") : -1] = 0
                     sample[sensor_ + "_mask"] = mask
-                except:
+                except AttributeError:
                     mask = depth > self.min_depth
                     mask = np.logical_and(mask, depth < self.max_depth)
 
@@ -413,7 +414,7 @@ class Replica(Dataset):
                 )
 
                 sample["intrinsics_" + sensor_] = intrinsics
-        except:
+        except AttributeError:
             f = (
                 self.resolution[0] / 2.0 * (1.0 / np.tan(np.deg2rad(hfov) / 2))
             )  # I always assume square input images
@@ -511,7 +512,7 @@ if __name__ == "__main__":
 
     from tqdm import tqdm
 
-    path_to_utils_module = "/home/esandstroem/scratch-second/euler_project/src/late_fusion/utils/"  #'/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
+    path_to_utils_module = "/home/esandstroem/scratch-second/euler_project/src/late_fusion/utils/"  # '/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
     sys.path.append(
         path_to_utils_module
     )  # needed in order to load read_array and associate

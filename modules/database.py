@@ -5,10 +5,6 @@ import numpy as np
 
 from torch.utils.data import Dataset
 from modules.voxelgrid import VoxelGrid, FeatureGrid
-import trimesh
-import skimage.measure
-from scipy import ndimage
-
 
 from utils.metrics import evaluation
 

@@ -1,9 +1,9 @@
-import torch
 import os
 import logging
 
-from dataset import Replica  # can be imported because the __init__.py file
+from dataset import Replica
 
+# can be imported because the __init__.py file
 # in the dataset file imports the Replica class from the module replica.
 # we can import dataset in the package utils because the setup.py
 # module is only called from the train or test scripts i.e. from a higher
@@ -21,12 +21,10 @@ from torch.utils.tensorboard import SummaryWriter
 import trimesh
 import skimage.measure
 
-#
 from modules.database import Database
 
 from utils import transform
 
-from easydict import EasyDict
 from copy import copy
 
 from utils.saving import *
@@ -112,14 +110,14 @@ def get_logger(path, name="training"):
     return logger
 
 
-def save_tsdf(filename, data):
+def save_tsdf(filename, data):  # not used
     with h5py.File(filename, "w") as file:
         file.create_dataset(
             "TSDF", shape=data.shape, data=data, compression="gzip", compression_opts=9
         )
 
 
-def save_weights(filename, data):
+def save_weights(filename, data):  # not used
     with h5py.File(filename, "w") as file:
         file.create_dataset(
             "weights",
@@ -130,7 +128,7 @@ def save_weights(filename, data):
         )
 
 
-def save_ply(filename, data):
+def save_ply(filename, data):  # Not used
     voxel_size = 0.01
     vertices, faces, normals, _ = skimage.measure.marching_cubes_lewiner(
         data, level=0, spacing=(voxel_size, voxel_size, voxel_size)
@@ -188,15 +186,15 @@ class Workspace(object):
             )
             plt.clf()
 
-    def save_tsdf_data(self, file, data):
+    def save_tsdf_data(self, file, data):  # not used
         tsdf_file = os.path.join(self.output_path, file)
         save_tsdf(tsdf_file, data)
 
-    def save_weights_data(self, file, data):
+    def save_weights_data(self, file, data):  # not used
         weight_files = os.path.join(self.output_path, file)
         save_weights(weight_files, data)
 
-    def save_ply_data(self, file, data):
+    def save_ply_data(self, file, data):  # not used
         ply_files = os.path.join(self.output_path, file)
         save_ply(ply_files, data)
 

@@ -1,16 +1,11 @@
 import torch
-import datetime
-import time
 from tqdm import tqdm
-import random
 import math
 
 from modules.fuse_pipeline import Fuse_Pipeline
 from modules.filter_pipeline import Filter_Pipeline
 
-import math
 import numpy as np
-from scipy import ndimage
 
 
 class Pipeline(torch.nn.Module):
@@ -79,7 +74,7 @@ class Pipeline(torch.nn.Module):
 
                 batch["routingNet"] = sensor_  # used to be able to train routedfusion
                 batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-                output = self.fuse_pipeline.fuse(batch, database, device)
+                self.fuse_pipeline.fuse(batch, database, device)
             else:
                 # print(batch['frame_id'])
                 for sensor_ in sensors:
@@ -98,7 +93,7 @@ class Pipeline(torch.nn.Module):
                     batch[
                         "fusionNet"
                     ] = sensor_  # used to be able to train routedfusion
-                    output = self.fuse_pipeline.fuse(batch, database, device)
+                    self.fuse_pipeline.fuse(batch, database, device)
 
                     # return
 
@@ -123,7 +118,7 @@ class Pipeline(torch.nn.Module):
                 batch[
                     "fusionNet"
                 ] = None  # We don't use a fusion net during early fusion
-                output = self.fuse_pipeline.fuse(batch, val_database, device)
+                self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 for sensor_ in sensors:
                     # print(sensor_)
@@ -137,7 +132,7 @@ class Pipeline(torch.nn.Module):
                     batch[
                         "fusionNet"
                     ] = sensor_  # used to be able to train routedfusion
-                    output = self.fuse_pipeline.fuse(batch, val_database, device)
+                    self.fuse_pipeline.fuse(batch, val_database, device)
 
             # if k == 10:
             #     break # debug
@@ -248,7 +243,7 @@ class Pipeline(torch.nn.Module):
             batch["sensor"] = sensor_
             batch["routingNet"] = sensor_  # used to be able to train routedfusion
             batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-            output = self.fuse_pipeline.fuse(batch, database, device)
+            self.fuse_pipeline.fuse(batch, database, device)
 
         # run filtering network on all voxels which have a non-zero weight
         scene = batch["frame_id"][0].split("/")[0]
@@ -315,7 +310,7 @@ class Pipeline(torch.nn.Module):
 
                 batch["routingNet"] = sensor_  # used to be able to train routedfusion
                 batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-                output = self.fuse_pipeline.fuse(batch, val_database, device)
+                self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 # print(batch['frame_id'])
                 for sensor_ in sensors:
@@ -334,7 +329,7 @@ class Pipeline(torch.nn.Module):
                     batch[
                         "fusionNet"
                     ] = sensor_  # used to be able to train routedfusion
-                    output = self.fuse_pipeline.fuse(batch, val_database, device)
+                    self.fuse_pipeline.fuse(batch, val_database, device)
 
                     # return
 
@@ -410,7 +405,7 @@ class Pipeline(torch.nn.Module):
                 batch["sensor"] = sensor_
                 batch["routingNet"] = sensor_  # used to be able to train routedfusion
                 batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-                output = self.fuse_pipeline.fuse(batch, database, device)
+                self.fuse_pipeline.fuse(batch, database, device)
 
             # run filtering network on all voxels which have a non-zero weight
             scene = batch["frame_id"][0].split("/")[0]
@@ -423,4 +418,4 @@ class Pipeline(torch.nn.Module):
             batch["sensor"] = sensor
             batch["routingNet"] = sensor  # used to be able to train routedfusion
             batch["fusionNet"] = sensor  # used to be able to train routedfusion
-            output = self.fuse_pipeline.fuse(batch, database, device)
+            self.fuse_pipeline.fuse(batch, database, device)

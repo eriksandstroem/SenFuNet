@@ -11,16 +11,13 @@ class FusionNet(nn.Module):
         self.scale = config.output_scale
         self.conf = config.confidence
 
-        # TODO: try training this with tanh activations. Try with layer normalization as well instead of batch norm?
         try:
             self.n_channels = (
                 2 * eval("config.n_points_" + sensor) + 1 + int(config.confidence)
             )
-            input_channels = 4 * eval("config.n_points_" + sensor)
             self.n_points = eval("config.n_points_" + sensor)
-        except:
+        except AttributeError:
             self.n_channels = 2 * config.n_points + 1 + int(config.confidence)
-            input_channels = 4 * config.n_points
             self.n_points = config.n_points
 
         self.block1 = nn.Sequential(

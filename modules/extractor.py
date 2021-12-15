@@ -1,8 +1,6 @@
 import torch
-import datetime
 from torch import nn
 from torch.nn.functional import normalize
-import time
 
 
 class Extractor(nn.Module):
@@ -19,7 +17,7 @@ class Extractor(nn.Module):
         self.config = config
         try:
             self.n_points = eval("self.config.n_points_" + sensor)
-        except:
+        except AttributeError:
             self.n_points = self.config.n_points
         self.mode = "ray"
         self.n_empty_space_voting = config.n_empty_space_voting

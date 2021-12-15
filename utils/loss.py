@@ -1,7 +1,6 @@
 import torch
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 class Fusion_TranslationLoss(torch.nn.Module):
@@ -162,15 +161,15 @@ class Fusion_TranslationLoss(torch.nn.Module):
                 if k == 0:
                     target_alpha = ~torch.logical_and(tsdf_err > 0.04, sgn_err > 0)
                     # target_alpha = ~(tsdf_err > 0.04)
-                    outlier_alpha = target_alpha == False
-                    inlier_alpha = target_alpha == True
+                    outlier_alpha = target_alpha is False
+                    inlier_alpha = target_alpha is True
                     target_alpha = target_alpha.float()
                     # outlier_ratio[sensor_] = ((~(target_alpha.bool())).sum()/target_alpha.shape[0])
                 elif k == 1:
                     # target_alpha = torch.logical_and(tsdf_err > g0.04, sgn_err > 0)
                     # target_alpha = tsdf_err > 0.04
-                    outlier_alpha = target_alpha == True
-                    inlier_alpha = target_alpha == False
+                    outlier_alpha = target_alpha is True
+                    inlier_alpha = target_alpha is False
                     target_alpha = target_alpha.float()
                     # outlier_ratio[sensor_] = (target_alpha.sum()/target_alpha.shape[0])
 
@@ -865,7 +864,7 @@ class VNL_Loss(
         pw12 = pw[:, :, :, 1] - pw[:, :, :, 0]
         pw13 = pw[:, :, :, 2] - pw[:, :, :, 0]
         pw23 = pw[:, :, :, 2] - pw[:, :, :, 1]
-        ###ignore linear
+        # ignore linear
         pw_diff = torch.cat(
             [
                 pw12[:, :, :, np.newaxis],
@@ -883,8 +882,6 @@ class VNL_Loss(
         q_norm = proj_query.norm(2, dim=2)
         # print(q_norm)
         # print(q_norm.shape)
-        l_norm = proj_key.norm(2, dim=2)
-        # print(l_norm)
         # print(q_norm.view(m_batchsize * groups, index, 1).shape)
         # print(q_norm.view(m_batchsize * groups, 1, index).shape)
         nm = torch.bmm(
@@ -902,11 +899,11 @@ class VNL_Loss(
             torch.sum((norm_energy > delta_cos) + (norm_energy < -delta_cos), 1) > 3
         )  # igonre
         mask_cos = mask_cos.view(m_batchsize, groups)
-        ##ignore padding and invilid depth
+        # ignore padding and invilid depth
         mask_pad = torch.sum(pw[:, :, 2, :] > self.delta_z, 2) == 3
         mask_pad_far = torch.sum(pw[:, :, 2, :] < self.delta_far_z, 2) == 3
 
-        ###ignore near
+        # ignore near
         mask_x = torch.sum(torch.abs(pw_diff[:, :, 0, :]) < delta_diff_x, 2) > 0
         mask_y = torch.sum(torch.abs(pw_diff[:, :, 1, :]) < delta_diff_y, 2) > 0
         mask_z = torch.sum(torch.abs(pw_diff[:, :, 2, :]) < delta_diff_z, 2) > 0
