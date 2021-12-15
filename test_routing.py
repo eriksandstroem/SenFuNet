@@ -33,7 +33,7 @@ def prepare_input_data(batch, config, device):
             inputs = torch.cat((batch[sensor_ + "_depth"].unsqueeze_(1), inputs), 1)
     inputs = inputs.to(device)
 
-    if config.DATA.intensity_grad:
+    if config.ROUTING.intensity_grad:
         intensity = batch["intensity"].unsqueeze_(1)
         grad = batch["gradient"].unsqueeze_(1)
         inputs = torch.cat((intensity, grad, inputs), 1)
@@ -64,7 +64,7 @@ def test(config):
     # define model
     Cin = len(config.DATA.input)
 
-    if config.DATA.intensity_grad:
+    if config.ROUTING.intensity_grad:
         Cin += 2
 
     model = ConfidenceRouting(

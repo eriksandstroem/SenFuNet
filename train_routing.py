@@ -34,7 +34,7 @@ def prepare_input_data(batch, config, device):
             inputs = torch.cat((batch[sensor_ + "_depth"].unsqueeze_(1), inputs), 1)
     inputs = inputs.to(device)
 
-    if config.DATA.intensity_grad:
+    if config.ROUTING.intensity_grad:
         intensity = batch["intensity"].unsqueeze_(1)
         grad = batch["gradient"].unsqueeze_(1)
         inputs = torch.cat((intensity, grad, inputs), 1)
@@ -87,7 +87,7 @@ def train(args, config):
     # define model
     Cin = len(config.DATA.input)
 
-    if config.DATA.intensity_grad:
+    if config.ROUTING.intensity_grad:
         Cin += 2
 
     model = ConfidenceRouting(
@@ -145,7 +145,7 @@ def train(args, config):
             unc = output[:, 1, :, :].unsqueeze_(1)
 
             if not config.LOSS.completion:
-                if config.DATA.fusion_strategy != "routingNet":
+                if len(config.DATA.input) == 1:
                     mask = (
                         batch[config.DATA.input[0] + "_mask"].to(device).unsqueeze_(1)
                     )
@@ -223,7 +223,7 @@ def train(args, config):
                 # workspace.writer.add_image('Val/l1_inp_{}'.format(i), frame_inp_l1, global_step=epoch)
 
             if not config.LOSS.completion:
-                if config.DATA.fusion_strategy != "routingNet":
+                if len(config.DATA.input) == 1:
                     mask = (
                         batch[config.DATA.input[0] + "_mask"].to(device).unsqueeze_(1)
                     )

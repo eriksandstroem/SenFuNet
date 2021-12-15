@@ -24,18 +24,18 @@ class Fuse_Pipeline(torch.nn.Module):
 
         if config.ROUTING.do:
             # define model
-            if config.DATA.intensity_grad:
+            if config.ROUTING.intensity_grad:
                 Cin = 2
             else:
                 Cin = 0
-            if config.DATA.fusion_strategy == "routingNet":
+            if config.FILTERING_MODEL.model == "tsdf_early_fusion":
                 Cin += len(config.DATA.input)
                 self._routing_network = ConfidenceRouting(
                     Cin=Cin,
                     F=config.ROUTING_MODEL.contraction,
                     batchnorms=config.ROUTING_MODEL.normalization,
                 )
-            elif config.DATA.fusion_strategy == "fusionNet":
+            else:
                 self._routing_network = torch.nn.ModuleDict()
                 Cin += 1
                 for sensor_ in config.DATA.input:
@@ -48,12 +48,8 @@ class Fuse_Pipeline(torch.nn.Module):
         else:
             self._routing_network = None
 
-        config.FUSION_MODEL.fusion_strategy = config.DATA.fusion_strategy
         config.FUSION_MODEL.trunc_value = config.DATA.trunc_value
-        if config.DATA.truncation_strategy == "standard":
-            config.FUSION_MODEL.init_value = -config.DATA.init_value
-        elif config.DATA.truncation_strategy == "artificial":
-            config.FUSION_MODEL.init_value = config.DATA.init_value
+        config.FUSION_MODEL.init_value = -config.DATA.init_value
 
         config.FEATURE_MODEL.n_points = config.FUSION_MODEL.n_points
         config.FEATURE_MODEL.n_points_tof = config.FUSION_MODEL.n_points_tof
@@ -87,7 +83,7 @@ class Fuse_Pipeline(torch.nn.Module):
         self._integrator = Integrator(config.FUSION_MODEL)
 
     def _routing(self, data):
-        if self.config.DATA.fusion_strategy == "routingNet":
+        if self.config.FILTERING_MODEL.model == "tsdf_early_fusion":
             for k, sensor_ in enumerate(self.config.DATA.input):
                 if k == 0:
                     inputs = data[sensor_ + "_depth"].unsqueeze_(1)
@@ -105,7 +101,7 @@ class Fuse_Pipeline(torch.nn.Module):
         else:
             inputs = data["depth"].unsqueeze_(1)
 
-            if self.config.DATA.intensity_grad:
+            if self.config.ROUTING.intensity_grad:
                 intensity = data["intensity"].unsqueeze_(1)
                 grad = data["gradient"].unsqueeze_(1)
                 inputs = torch.cat((intensity, grad, inputs), 1)
@@ -372,7 +368,7 @@ class Fuse_Pipeline(torch.nn.Module):
         self.device = device
         # routing
         if self.config.ROUTING.do:
-            if self.config.DATA.fusion_strategy == "routingNet":
+            if self.config.FILTERING_MODEL.model == "tsdf_early_fusion":
                 depth, conf = self._routing(batch)
 
                 frame = depth.squeeze_(1)
@@ -517,7 +513,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         # routing
         if self.config.ROUTING.do:
-            if self.config.DATA.fusion_strategy == "routingNet":
+            if self.config.FILTERING_MODEL.model == "tsdf_early_fusion":
                 depth, conf = self._routing(batch)
 
                 frame = depth.squeeze_(1)

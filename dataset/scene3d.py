@@ -27,9 +27,6 @@ class Scene3D(Dataset):
         else:
             self.root_dir = config_data.root_dir
 
-        self.sampling_density_stereo = config_data.sampling_density_stereo
-        self.sampling_density_tof = config_data.sampling_density_tof
-
         self.resolution_stereo = (config_data.resy_stereo, config_data.resx_stereo)
 
         self.resolution_tof = (config_data.resy_tof, config_data.resx_tof)
@@ -57,9 +54,6 @@ class Scene3D(Dataset):
         self.input = config_data.input
         self.target = config_data.target
         self.mode = config_data.mode
-        self.intensity_gradient = config_data.intensity_grad
-        self.truncation_strategy = config_data.truncation_strategy
-        self.fusion_strategy = config_data.fusion_strategy
 
         self._scenes = []
 
@@ -70,8 +64,6 @@ class Scene3D(Dataset):
             "tof_2": 1,
             "stereo": 2,
         }
-
-        self.scenedir = None
 
         self._load_color()
         self._load_cameras()
@@ -230,7 +222,6 @@ class Scene3D(Dataset):
         image = image[index_x, :]
         sample["image"] = np.asarray(image).astype(np.float32) / 255
 
-        # if self.intensity_gradient:
         intensity = rgb2gray(image)  # seems to be in range 0 - 1
         sample["intensity"] = np.asarray(intensity).astype(np.float32)
         grad_y = filters.sobel_h(intensity)
@@ -343,15 +334,11 @@ class Scene3D(Dataset):
         # read from hdf file!
         f = h5py.File(file, "r")
         voxels = np.array(f["sdf"]).astype(np.float16)
-        if self.truncation_strategy == "artificial":
-            voxels[np.abs(voxels) >= truncation] = truncation
-            # Add padding to grid to give more room to fusion net
-            voxels = np.pad(voxels, self.pad, "constant", constant_values=truncation)
-        elif self.truncation_strategy == "standard":
-            voxels[voxels > truncation] = truncation
-            voxels[voxels < -truncation] = -truncation
-            # Add padding to grid to give more room to fusion net
-            voxels = np.pad(voxels, self.pad, "constant", constant_values=-truncation)
+
+        voxels[voxels > truncation] = truncation
+        voxels[voxels < -truncation] = -truncation
+        # Add padding to grid to give more room to fusion net
+        voxels = np.pad(voxels, self.pad, "constant", constant_values=-truncation)
 
         print(scene, voxels.shape)
         bbox = np.zeros((3, 2))

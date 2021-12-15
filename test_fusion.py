@@ -64,6 +64,8 @@ def test_fusion(config):
     # get test dataset
     data_config = setup.get_data_config(config, mode="test")
     dataset = setup.get_data(config.DATA.dataset, data_config)
+
+    # the DataLoader converts numpy arrays to tensors and keeps other types untouched
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=config.TESTING.test_batch_size,

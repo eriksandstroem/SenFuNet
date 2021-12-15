@@ -35,6 +35,7 @@ from utils.saving import *
 def get_data_config(config, mode):
     #
     data_config = copy(config.DATA)
+    data_config.filtering_model = config.FILTERING_MODEL.model
 
     if mode == "train":
         data_config.mode = "train"

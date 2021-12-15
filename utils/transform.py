@@ -13,7 +13,7 @@ class ToTensor(object):
         for key in sample.keys():
             if type(sample[key]) is np.ndarray:
 
-                if key == 'image':
+                if key == "image":
                     # swap color axis because
                     # numpy image: H x W x C
                     # torch image: C X H X W

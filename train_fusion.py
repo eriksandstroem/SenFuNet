@@ -122,7 +122,7 @@ def train_fusion(args):
 
     # load pretrained routing model into parameters
     if config.ROUTING.do:
-        if config.DATA.fusion_strategy == "routingNet":
+        if config.FILTERING_MODEL.model == "tsdf_early_fusion":
             routing_checkpoint = torch.load(config.TESTING.routing_model_path)
             # print(routing_checkpoint)
             # load_model(config.TESTING.routing_model_path, pipeline._routing_network)
@@ -130,7 +130,7 @@ def train_fusion(args):
             pipeline.fuse_pipeline._routing_network.load_state_dict(
                 routing_checkpoint["pipeline_state_dict"]
             )
-        elif config.DATA.fusion_strategy == "fusionNet":
+        else:
             for sensor_ in config.DATA.input:
                 checkpoint = torch.load(
                     eval("config.TRAINING.routing_" + sensor_ + "_model_path")
@@ -306,12 +306,6 @@ def train_fusion(args):
         l_occ = 0  # single sensor training
 
         for i, batch in tqdm(enumerate(train_loader), total=len(train_dataset)):
-            # reset the database for every new trajectory (if using hybrid loading strategy)
-            # if batch['frame_id'][0].split('/')[-1] == '0' and config.DATA.data_load_strategy == 'hybrid':
-            #     workspace.log('Starting new trajectory {} at step {}'.format(batch['frame_id'][0][:-2], i), mode='train')
-            #     workspace.log('Resetting grid for scene {} at step {}'.format(batch['frame_id'][0].split('/')[0], i),
-            #                       mode='train')
-            #     train_database.reset(batch['frame_id'][0].split('/')[0])
 
             if config.TRAINING.reset_strategy:
                 if np.random.random_sample() <= config.TRAINING.reset_prob:
@@ -523,7 +517,7 @@ def train_fusion(args):
                 print("log!")
                 print("i ", i)
                 #
-                # if config.DATA.fusion_strategy == 'two_fusionNet': # TODO: split plotting into tof and stereo
+                # TODO: split plotting into tof and stereo
                 #     divide = 2*config.SETTINGS.log_freq
                 # else:
                 train_loss /= divide

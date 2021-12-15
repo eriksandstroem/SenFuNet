@@ -62,7 +62,6 @@ class Pipeline(torch.nn.Module):
         return fused_output
 
     def test(self, loader, dataset, database, sensors, device):
-
         for k, batch in tqdm(enumerate(loader), total=len(dataset)):
             if self.config.DATA.collaborative_reconstruction:
                 if (
