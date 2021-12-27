@@ -27,9 +27,6 @@ def visualize_features(
     truncation,
     scene,
 ):
-    # how should I go from 2 features to rgb colors. The most obvious is: get the maximum norm of the features
-    # in both grids and normalize with this value. This means later that the vector length is the alpha in
-    # (RGBA). The phase is then the input to the cmap.
 
     # since I am stuck with the cpu accelerated t-SNE version for now, I need to speed it up more, by
     # removing points that we feed to the t-SNE algorithm. I do this by downsampling the grids to get a
@@ -49,7 +46,6 @@ def visualize_features(
         perplexity=3,
         learning_rate="auto",
         metric="euclidean",
-        # callbacks=ErrorLogger(),
         n_jobs=-1,  # use all cores
         negative_gradient_method="fft",
         random_state=42,
@@ -155,50 +151,6 @@ def visualize_features(
                 axis=0,
             )
 
-        # why do I make the input float32? If the variance is below 10 to the power of -7, a
-        # float 16 number will make it zero, but perhaps that is what I actually want. So I removed it now.
-        # it appears that the tsne.fit function converts the numbers to float32 anyway...
-        # X = features[sensor_][voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2], :] #.astype(np.float32)
-        # # print('Feature input shape: ', X.shape)
-        # # if np.std(X[:, 0]) == 0 and np.std(X[:, 1]) == 0: # I should continue for all dimensions ideally. This gives overflow typically
-        # #     np.savetxt(test_dir + '/feature_embedding_' + sensor_ + '_float16.txt', X)
-        # #     print('No variance in features for float16 sensor; ', sensor_)
-
-        # X = X.astype(np.float32)
-        # if np.std(X[:, 0]) == 0 and np.std(X[:, 1]) == 0: # I should continue for all dimensions ideally
-        #     np.savetxt(test_dir + '/feature_embedding_' + sensor_ + '_float32.txt', X)
-        #     print('No variance in features for float32 sensor; ', sensor_)
-        #     continue
-
-        # tsne_result = tsne.fit(X)
-        # # tsne_result = X
-
-        # # np.savetxt(test_dir + '/feature_embedding_' + sensor_ + '.txt', X)
-        # # np.savetxt(test_dir + '/tsne_embedding_' + sensor_ + '.txt', tsne_result)
-
-        # fig, ax = plt.subplots(1,1)
-        # ax.plot(tsne_result[:, 0], tsne_result[:, 1], 'o',
-        #         color='lightgreen', label=sensor_)
-        # ax.legend(loc='best')
-        # plt.savefig(test_dir + '/tsne_visualization_' + sensor_ + '.png')
-        # plt.clf()
-
-        # # colorize the per sensor meshes with the color that is intra sensor consistent
-
-        # # load mesh using trimesh since trimesh can save RGB and Alpha colors per vertex into two meshes
-        # mesh_phase = trimesh.load_mesh(mesh_paths[sensor_])
-        # mesh_norm = trimesh.load_mesh(mesh_paths[sensor_])
-
-        # colors = get_colors_from_tsne_embedding(tsne_result)
-        # mesh_phase.visual.vertex_colors = (colors['phase'] *255).astype(np.uint8)
-        # mesh_phase.visual.vertex_colors = (colors['norm'] *255).astype(np.uint8)
-
-        # mesh_phase.remove_degenerate_faces()
-        # mesh_norm.remove_degenerate_faces()
-
-        # mesh_phase.export(test_dir + '/intra_feature_visualization_' + sensor_ + '_phase.ply')
-        # mesh_norm.export(test_dir + '/intra_feature_visualization_' + sensor_ + '_norm.ply')
-
     # compute tsne visualization for the inter sensor study
     print("Compute inter sensor t-SNE")
     print("Input shape: ", features_both_sensors.shape)
@@ -215,13 +167,9 @@ def visualize_features(
         return
     # compute tsne embedding of both sensors to compare inter sensor variation of features
     tsne_result = tsne.fit(features_both_sensors)
-    # tsne_result = features_both_sensors
-    # # save tsne data for further analysis
-    # np.savetxt(test_dir + '/tsne_embedding.txt', tsne_result)
-    # tsne_result = np.loadtxt(test_dir + '/tsne_embedding.txt')
+
     # get colors for the tsne embedding of both sensors
     colors_both_sensors = get_colors_from_tsne_embedding(tsne_result)
-    # np.savetxt(test_dir + '/color_both_sensors.txt', colors_both_sensors)
 
     # split the colors to each sensor specific grid
     color_per_sensor = dict()
@@ -262,16 +210,12 @@ def visualize_features(
         c[
             c > 0.85
         ] = 0.85  # controls at what color we threshold / strange that I had to adjust this to get yellow. Normally
-        # this is 0.85 for yellow
+        # this is 0.85 for yellow. Ahh... this is because of the normalization that takes place I guess!
         c += 0.33  # controls where 0 error is - green
         c[c > 1] = c[c > 1] - 1
 
         data = tsne_per_sensor[sensor_]
-        ax.scatter(
-            data[:, 0], data[:, 1], s=0.1, c=c, cmap="hsv", norm=normalize
-        )  # , label=sensor_)
-
-    # ax.legend(loc='best')
+        ax.scatter(data[:, 0], data[:, 1], s=0.1, c=c, cmap="hsv", norm=normalize)
 
     plt.savefig(
         test_dir + "/" + scene + "_tsne_visualization_both_sensors_color_error.png"
@@ -289,11 +233,7 @@ def visualize_features(
         phase = phase / math.pi  # range -1 to 1
         phase = (phase + 1) / 2  # range 0-1
 
-        ax.scatter(
-            data[:, 0], data[:, 1], s=0.1, c=phase, cmap="hsv", norm=normalize
-        )  # , label=sensor_)
-
-    # ax.legend(loc='best')
+        ax.scatter(data[:, 0], data[:, 1], s=0.1, c=phase, cmap="hsv", norm=normalize)
 
     plt.savefig(
         test_dir + "/" + scene + "_tsne_visualization_both_sensors_color_phase.png"
@@ -316,9 +256,7 @@ def visualize_features(
 
         ax.scatter(
             data[:, 0], data[:, 1], s=0.1, c=norm, cmap="inferno", norm=normalize
-        )  # , label=sensor_)
-
-    # ax.legend(loc='best')
+        )
 
     plt.savefig(
         test_dir + "/" + scene + "_tsne_visualization_both_sensors_color_norm.png"
@@ -340,11 +278,7 @@ def visualize_features(
         # this is 0.85 for yellow. Ahh... this is because of the normalization that takes place I guess!
         c += 0.33  # controls where 0 error is - green
         c[c > 1] = c[c > 1] - 1
-        ax.scatter(
-            data[:, 0], data[:, 1], s=0.1, c=c, cmap="hsv", norm=normalize
-        )  # , label=sensor_)
-
-        # ax.legend(loc='best')
+        ax.scatter(data[:, 0], data[:, 1], s=0.1, c=c, cmap="hsv", norm=normalize)
 
         plt.savefig(
             test_dir
@@ -366,11 +300,7 @@ def visualize_features(
         # needs to be transformed to 0-1 for the cmap
         phase = phase / math.pi  # range -1 to 1
         phase = (phase + 1) / 2  # range 0-1
-        ax.scatter(
-            data[:, 0], data[:, 1], s=0.1, c=phase, cmap="hsv"
-        )  # , label=sensor_)
-
-        # ax.legend(loc='best')
+        ax.scatter(data[:, 0], data[:, 1], s=0.1, c=phase, cmap="hsv")
 
         plt.savefig(
             test_dir
@@ -398,9 +328,7 @@ def visualize_features(
 
         ax.scatter(
             data[:, 0], data[:, 1], s=0.1, c=norm, cmap="inferno", norm=normalize
-        )  # , label=sensor_)
-
-        # ax.legend(loc='best')
+        )
 
         plt.savefig(
             test_dir
@@ -412,12 +340,6 @@ def visualize_features(
         )
         plt.clf()
         plt.close()
-
-    # we need to subtract half a voxel size from the vertices to get to the voxel points
-    # since the marching cubes algorithm of open3d thinks that the tsdf voxel vertices are
-    # always located at the mid point between the metric space resolution i.e. if we have a tsdf
-    # grid of shape 2,2,2 and a voxel size of 1, the marching cubes algorithm will generate a surface at 0.5, 0.5, 0.5
-    # to 1.5, 1.5, 1.5.
 
     # colorize the per sensor meshes with the color that is inter sensor consistent
     for sensor_ in features.keys():
@@ -565,10 +487,7 @@ def visualize_features(
     )
     max_dist = 0.05  # controls where we threshold
     c = np.array(error) / max_dist
-    c[
-        c > 0.85
-    ] = 0.85  # controls at what color we threshold / strange that I had to adjust this to get yellow. Normally
-    # this is 0.85 for yellow
+    c[c > 0.85] = 0.85
     c += 0.33  # controls where 0 error is - green
     c[c > 1] = c[c > 1] - 1
 
@@ -600,7 +519,7 @@ def visualize_features(
         c=c[mask],
         cmap="hsv",
         norm=normalize,
-    )  # , label=sensor_)
+    )
 
     # this plots the error of the fused result, but this is also not that interesting. We want to plot
     # the features with the relative error of one of the sensors so that we can see if there is a
@@ -655,9 +574,7 @@ def visualize_features(
         norm / max_norm
     )  # here we have the alpha value for all points. Now they are in range 0-1
 
-    ax.scatter(
-        tsne_result[:, 0], tsne_result[:, 1], s=0.1, c=norm, cmap="inferno"
-    )  # , label=sensor_)
+    ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1, c=norm, cmap="inferno")
 
     plt.savefig(test_dir + "/" + scene + "_tsne_visualization_fused_color_norm.png")
     plt.clf()
@@ -697,23 +614,6 @@ def visualize_features(
     plt.clf()
     plt.close()
 
-    # paste the tsdf middle fusion sensor weighting on the fused tsne plot to compare it against our
-    # learned method. Note that this is just a hard coding!
-    # sensor_weighting_path = '/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211019-170325/test_no_carving/hotel_0.sensor_weighting.hf5'
-    # import h5py
-    # f = h5py.File(sensor_weighting_path, 'r')
-    # sensor_weighting_tsdf_middle_fusion = np.array(f['sensor_weighting']).astype(np.float16)
-    # fig, ax = plt.subplots(1,1)
-    # # downsample sensor weighting grid
-    # sensor_weighting_tsdf_middle_fusion = sensor_weighting_tsdf_middle_fusion[::downsampling_factor, ::downsampling_factor, ::downsampling_factor]
-    # alpha = sensor_weighting_tsdf_middle_fusion[voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2]]
-    # ax.scatter(tsne_result[:, 0], tsne_result[:, 1], s=0.1,
-    #         c=alpha, cmap='inferno', norm=normalize)
-
-    # plt.savefig(test_dir + '/' + 'hotel_0_' + '_tsne_visualization_fused_color_tsdf_middle_fusion_alpha.png')
-    # plt.clf()
-    # plt.close()
-
     # paste the phase and norm colors on the fused mesh
     mesh.compute_vertex_normals()
 
@@ -735,10 +635,7 @@ def visualize_features(
     )
     max_dist = 0.05  # controls where we threshold
     c = np.array(error) / max_dist
-    c[
-        c > 0.85
-    ] = 0.85  # controls at what color we threshold / strange that I had to adjust this to get yellow. Normally
-    # this is 0.85 for yellow
+    c[c > 0.85] = 0.85
     c += 0.33  # controls where 0 error is - green
     c[c > 1] = c[c > 1] - 1
     cm = plt.get_cmap("hsv")
@@ -747,153 +644,6 @@ def visualize_features(
     o3d.io.write_triangle_mesh(
         test_dir + "/" + scene + "_fused_feature_visualization_error.ply", mesh
     )  # will remove this written mesh later
-
-
-# def visualize_features(tsdfs, mesh_paths, features, test_dir, mask, voxel_size):
-#     # how should I go from 2 features to rgb colors. The most obvious is: get the maximum norm of the features
-#     # in both grids and normalize with this value. This means later that the vector length is the alpha in
-#     # (RGBA). The phase is then the input to the cmap.
-
-#     # determine the
-
-#     # but first we need to use tsne to make our feature space 2-dimensional
-
-#     # load feature data into data matrix X
-#     X = None
-#     for k, sensor_ in enumerate(features.keys()):
-#         if k == 0:
-#             X = features[sensor_][mask[sensor_]]
-#         else:
-#             X = np.concatenate((X, features[sensor_][mask[sensor_]]), axis=0)
-
-#     print('Input shape to TSNE: ', X.shape)
-#     # We want to get TSNE embedding with 2 dimensions
-#     # n_components = 2
-#     # tsne = TSNE(n_components)
-#     # tsne_result = tsne.fit_transform(X[:10, :])
-#     # tsne_result.shape
-
-
-#     tsne = TSNE(
-#         perplexity=3,
-#         learning_rate='auto',
-#         metric="euclidean",
-#         # callbacks=ErrorLogger(),
-#         n_jobs=-1, # use all cores
-#         negative_gradient_method='fft',
-#         random_state=42,
-#     )
-#     # compute tsne embedding of both sensors to compare inter sensor variation of features
-#     tsne_result = tsne.fit(X)
-#     # # save tsne data for further analysis
-#     # np.savetxt(test_dir + '/tsne_embedding.txt', tsne_result)
-#     # tsne_result = np.loadtxt(test_dir + '/tsne_embedding.txt')
-#     print('TSNE output shape: ', tsne_result.shape)
-
-
-#     # compute per sensor tsne embeddings to see intra sensor variation of features
-#     tsne_per_sensor = dict()
-#     for sensor_ in features.keys():
-#         X = features[sensor_][mask[sensor_]]
-
-#         if np.std(X[:, 0]) == 0 and np.std(X[:, 1]) == 0:
-#             np.savetxt(test_dir + '/feature_embedding_' + sensor_ + '.txt', X)
-#             continue
-#         tsne_per_sensor[sensor_] = tsne.fit(X)
-
-#     # get colors for the tsne embedding of both sensors
-#     colors_both_sensors = get_colors_from_tsne_embedding(tsne_result)
-
-#     # get colors for the tsne embedding that is sensor specific
-#     colors_per_sensor = dict()
-#     for key in tsne_per_sensor.keys():
-#         colors_per_sensor[key] = get_colors_from_tsne_embedding(tsne_per_sensor[key])
-
-#     # split the colors to each sensor specific grid
-#     color_grid_per_sensor = dict()
-#     color_grid_both_sensors = dict()
-#     tsne_both_sensors = dict()
-
-#     w, h, d, n = features[list(features.keys())[0]].shape
-
-#     # put colors from the inter sensor study in color grids and separete the per sensor tsne embeddings
-#     break_point = features[list(features.keys())[0]][mask[list(features.keys())[0]]].reshape(-1, n).shape[0]
-#     for k, sensor_ in enumerate(features.keys()):
-#         color_grid_both_sensors[sensor_] = np.ones((w, h, d, 4)) # vertices that are
-#         # not assigned a color are white (due to speed up requirement of not embedding
-#         # the entire feature grid as tsne but only close to the 0-crossing)
-
-#         if k == 0:
-#             color = colors_both_sensors[:break_point]
-#             tsne = tsne_result[:break_point]
-#         else:
-#             color = colors_both_sensors[break_point:]
-#             tsne = tsne_result[break_point:]
-
-#         color_grid_both_sensors[sensor_][mask[sensor_], :] = color
-
-#         tsne_both_sensors[sensor_] = tsne
-
-#     # put colors from the intra sensor study in color grids
-#     for sensor_ in tsne_per_sensor.keys():
-#         color_grid_per_sensor[sensor_] = np.ones((w, h, d, 4))
-#         color_grid_per_sensor[sensor_][mask[sensor_], :] = colors_per_sensor[sensor_]
-
-#     # plot tsne data with sensor labels
-#     # make a mapping from category to your favourite colors and labels
-#     sensor_to_color = {list(features.keys())[0]: 'lightgreen'}
-#     if len(list(features.keys())) > 1:
-#         sensor_to_color[list(features.keys())[1]] = 'darkgreen'
-
-#     # plot each category with a distinct label
-#     fig, ax = plt.subplots(1,1)
-#     for sensor_, color in sensor_to_color.items():
-#         data = tsne_both_sensors[sensor_]
-#         ax.plot(data[:, 0], data[:, 1], 'o',
-#                 color=color, label=sensor_)
-
-#     ax.legend(loc='best')
-
-#     plt.savefig(test_dir + '/tsne_visualization_both_sensors.png')
-#     plt.clf()
-
-#     for sensor_ in tsne_per_sensor.keys():
-#         fig, ax = plt.subplots(1,1)
-#         data = tsne_per_sensor[sensor_]
-#         ax.plot(data[:, 0], data[:, 1], 'o',
-#                 color=color, label=sensor_)
-#         ax.legend(loc='best')
-#         plt.savefig(test_dir + '/tsne_visualization_' + sensor_ + '.png')
-#         plt.clf()
-
-
-#     # we need to subtract half a voxel size from the vertices to get to the voxel points
-#     # since the marching cubes algorithm of open3d thinks that the tsdf voxel vertices are
-#     # always located at the mid point between the metric space resolution i.e. if we have a tsdf
-#     # grid of shape 2,2,2 and a voxel size of 1, the marching cubes algorithm will generate a surface at 0.5, 0.5, 0.5
-#     # to 1.5, 1.5, 1.5.
-
-#     # colorize the per sensor meshes with the color that is inter sensor consistent
-#     for sensor_ in features.keys():
-#         # load mesh using trimesh since trimesh can save RGBA colors per vertex
-#         mesh = trimesh.load_mesh(mesh_paths[sensor_])
-#         # read vertices from mesh
-#         vertices = mesh.vertices
-#         voxel_points = np.round(np.asarray(vertices) * 1/voxel_size - voxel_size/2).astype(int)
-#         a = color_grid_both_sensors[sensor_][voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2], :]
-#         mesh.visual.vertex_colors = a
-#         mesh.export(test_dir + '/inter_feature_visualization_' + sensor_ + '.ply')
-
-#     # colorize the per sensor meshes with the color that is intra sensor consistent
-#     for sensor_ in tsne_per_sensor.keys():
-#         # load mesh using trimesh since trimesh can save RGBA colors per vertex
-#         mesh = trimesh.load_mesh(mesh_paths[sensor_])
-#         # read vertices from mesh
-#         vertices = mesh.vertices
-#         voxel_points = np.round(np.asarray(vertices) * 1/voxel_size - voxel_size/2).astype(int)
-#         a = color_grid_per_sensor[sensor_][voxel_points[:, 0], voxel_points[:, 1], voxel_points[:, 2], :]
-#         mesh.visual.vertex_colors = a
-#         mesh.export(test_dir + '/intra_feature_visualization_' + sensor_ + '.ply')
 
 
 def get_colors_from_tsne_embedding(tsne_result):

@@ -176,7 +176,7 @@ class CoRBS(Dataset):
         rgb_image = rgb_image[index_x, :]
         sample["image"] = np.asarray(rgb_image) / 255
 
-        plt.imsave("image.png", np.asarray(rgb_image) / 255)
+        # plt.imsave("image.png", np.asarray(rgb_image) / 255)
 
         frame_id = "{}/{}".format(self._scenes[0], str(timestamp_pose))
         sample["frame_id"] = frame_id
