@@ -125,7 +125,6 @@ def train_fusion(args):
         if config.FILTERING_MODEL.model == "tsdf_early_fusion":
             routing_checkpoint = torch.load(config.TESTING.routing_model_path)
             # print(routing_checkpoint)
-            # load_model(config.TESTING.routing_model_path, pipeline._routing_network)
             # Keep line below until I see that the new loading function works.
             pipeline.fuse_pipeline._routing_network.load_state_dict(
                 routing_checkpoint["pipeline_state_dict"]

@@ -12,12 +12,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     tsdfs, gt_tsdf, test_dir, weights, voxel_size, truncation, scene
 ):
     cmap = plt.get_cmap("inferno")
-    # print weighting histogram - only works in the 2-sensor case! With more sensors we cannot do this in the same way
-    # bad idea to not feed the mask to this function as we will include wrongful values in the histogram which are
-    # not in the initialized mask as we update the entire filtered grid chunks during test time. This means that
-    # the filtered grid and the sensor_weighting grid will be filled with ones even though those voxels are uninitialized.
-    # this skews our perception of the grid histogram.
-    # hist = sensor_weighting[sensor_weighting > -1].flatten()
+
     masks = dict()
     sensors = list(tsdfs.keys())
 
@@ -93,7 +88,7 @@ def compute_proxy_sensor_weighting_and_mesh(
         np.float16
     )
     hist = sensor_weighting_tsdf_middle_fusion[mask].flatten()
-    # print('hist nbr shape nn: ', hist.shape)
+
     n, bins, patches = plt.hist(hist, bins=100)
     for c, p in zip(bins, patches):
         plt.setp(p, "facecolor", cmap(c))
@@ -103,7 +98,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     plt.clf()
 
     hist = sensor_weighting[mask].flatten()
-    # print('hist nbr shape nn: ', hist.shape)
+
     n, bins, patches = plt.hist(hist, bins=100)
     for c, p in zip(bins, patches):
         plt.setp(p, "facecolor", cmap(c))
@@ -111,7 +106,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     plt.clf()
 
     hist = sensor_weighting[mask_between].flatten()
-    # print('hist nbr shape nn: ', hist.shape)
+
     n, bins, patches = plt.hist(hist, bins=100)
     for c, p in zip(bins, patches):
         plt.setp(p, "facecolor", cmap(c))
@@ -124,7 +119,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     plt.clf()
 
     hist = sensor_weighting[mask_not_between].flatten()
-    # print('hist nbr shape nn: ', hist.shape)
+
     n, bins, patches = plt.hist(hist, bins=100)
     for c, p in zip(bins, patches):
         plt.setp(p, "facecolor", cmap(c))
@@ -137,7 +132,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     plt.clf()
 
     hist = sensor_weighting[one_sensor_mask].flatten()
-    # print('hist nbr shape nn: ', hist.shape)
+
     n, bins, patches = plt.hist(hist, bins=100)
     for c, p in zip(bins, patches):
         plt.setp(p, "facecolor", cmap(c))
@@ -186,13 +181,6 @@ def compute_proxy_sensor_weighting_and_mesh(
     indices_y = mask.nonzero()[1]
     indices_z = mask.nonzero()[2]
 
-    # this creates a voxelgrid with max_resolution voxels along the length length. Each
-    # voxel consists of 8 vertices in the tsdf_cube which means that when we have a tsdf_cube
-    # of max_resolution 2 (8 vertices), we will make the uniform volume of size 27 vertices.
-    # This is not a problem, however, since we will only initialize the valid indices. I.e.
-    # the unifor volue is always 1 vertex layer too large compared to the tsdf_cube. To correct
-    # for this, the max_resolution variable should be 1 less than it is now, making length smaller
-    # as well since length is max_resolution times voxel_size
     volume = o3d.integration.UniformTSDFVolume(
         length=length,
         resolution=max_resolution,
@@ -218,11 +206,6 @@ def compute_proxy_sensor_weighting_and_mesh(
 
     vertices = mesh.vertices
 
-    # we need to subtract half a voxel size from the vertices to get to the voxel points
-    # since the marching cubes algorithm of open3d thinks that the tsdf voxel vertices are
-    # always located at the mid point between the metric space resolution i.e. if we have a tsdf
-    # grid of shape 2,2,2 and a voxel size of 1, the marching cubes algorithm will generate a surface at 0.5, 0.5, 0.5
-    # to 1.5, 1.5, 1.5.
     voxel_points = np.round(
         np.asarray(vertices) * 1 / voxel_size - voxel_size / 2
     ).astype(int)
@@ -255,8 +238,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     # print((vals == -1).sum()) # this sum should always be zero when we subtract half a voxel size to get to the voxel
     # coordinate space.
     colors[vals == -1] = [0, 1, 0]  # make all uninitialized voxels green
-    # print(np.asarray(mesh.vertex_colors).shape)
-    # print(colors.shape)
+
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
     o3d.io.write_triangle_mesh(
         test_dir + "/proxy_sensor_weighting_nn" + scene + ".ply", mesh
@@ -267,11 +249,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     n, bins, patches = plt.hist(vals, bins=100)
     for c, p in zip(bins, patches):
         plt.setp(p, "facecolor", cm(c))
-    plt.savefig(
-        test_dir + "/proxy_sensor_weighting_surface_histogram.png"
-    )  # here I see that the averaged alpha values in the neighborhood skews the
-    # distribution of the alpha values a lot. I will try with taking the value of the nearest neighbor as well to compare. Then I don't shift
-    # the alpha distribution at all
+    plt.savefig(test_dir + "/proxy_sensor_weighting_surface_histogram.png")
     plt.clf()
 
     # compute F-score of proxy fused mesh
