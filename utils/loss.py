@@ -123,7 +123,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
             # integrates and check the tsdf error compared to the ground truth. If the error is larger than
             # e.g. 0.04 m, we say that it is an outlier. This means setting the target alpha as "no confidence"
             # to the sensor, otherwise 100 percent confidence.
-            # outlier_ratio = dict()
             for k, sensor_ in enumerate(self.sensors):
                 # get the mask where only sensor_ is active
                 # mask is a variable containing the "and"-region of both sensors. We negate it to get rid of
@@ -160,33 +159,17 @@ class Fusion_TranslationLoss(torch.nn.Module):
 
                 if k == 0:
                     target_alpha = ~torch.logical_and(tsdf_err > 0.04, sgn_err > 0)
-                    # target_alpha = ~(tsdf_err > 0.04)
                     outlier_alpha = target_alpha is False
                     inlier_alpha = target_alpha is True
                     target_alpha = target_alpha.float()
-                    # outlier_ratio[sensor_] = ((~(target_alpha.bool())).sum()/target_alpha.shape[0])
                 elif k == 1:
-                    # target_alpha = torch.logical_and(tsdf_err > g0.04, sgn_err > 0)
-                    # target_alpha = tsdf_err > 0.04
                     outlier_alpha = target_alpha is True
                     inlier_alpha = target_alpha is False
                     target_alpha = target_alpha.float()
-                    # outlier_ratio[sensor_] = (target_alpha.sum()/target_alpha.shape[0])
 
-                # print(sensor_)
-                # print((target_alpha.sum()/target_alpha.shape[0]))
-                # print(single_sensor_mask.sum())
-                # only outleir if tsdf err is larger than 0.04 and sgn err, toherwise inlier
+                # only outlier if tsdf err is larger than 0.04 and sgn err, toherwise inlier
 
                 if single_sensor_mask.sum() > 0:
-                    # ind = (target_grid[single_sensor_mask] > 0.099).nonzero()[:, 0]
-                    # outliers = torch.logical_and(tsdf_err[ind] > 0.01, sgn_err[ind] > 0).float()
-                    # # outliers = (tsdf_err[ind] > 0.01).float()
-                    # print(ind.shape)
-                    # # print(est_grid[single_sensor_mask][ind])
-
-                    # # print(tsdf_err[ind])
-                    # print((outliers.sum()/tsdf_err[ind].shape[0]))
                     if self.add_outlier_channel:
                         l1_alpha = self.l1.forward(
                             output["filtered_output"]["alpha_grid"][1, :, :, :][
@@ -223,7 +206,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
                             l += self.alpha_weight * l1_outlier_alpha
                         if l1_inlier_alpha.sum() > 0:
                             l += self.alpha_weight * l1_inlier_alpha
-                        # print('l1 outlier: ', l1_outlier_alpha)
 
         if self.refinement_loss:
             l1_grid_dict = dict()
@@ -278,59 +260,9 @@ class Fusion_TranslationLoss(torch.nn.Module):
         output["l1_interm"] = l1_interm  # this mixes all sensors in one logging graph
         output["l1_grid"] = l1_grid
         for sensor_ in self.sensors:
-            # print(l1_grid_dict[sensor_])
             output["l1_grid_" + sensor_] = l1_grid_dict[sensor_]
-        # print('l: ', l)
-        # print('l1_grid: ', l1_grid)
 
         return output
-
-
-class FusionLoss(torch.nn.Module):
-    def __init__(self, config, reduction="none", l1=True, l2=True, cos=True):
-        super(FusionLoss, self).__init__()
-
-        self.criterion1 = torch.nn.L1Loss(reduction=reduction)
-        self.criterion2 = torch.nn.MSELoss(reduction=reduction)
-        self.criterion3 = torch.nn.CosineEmbeddingLoss(
-            margin=0.0, reduction="mean"
-        )  # we use mean because the cosineembedingloss otherwise gives the wrong loss
-        # when we take the sum and divide by the numbe of elements - at the core, the problem is that the cosineembeddingloss gives too many copies of the same output
-
-        self.lambda1 = 1.0 if l1 else 0.0
-        self.lambda2 = 0.0 if l2 else 0.0
-        self.lambda3 = 0.1 if cos else 0.0
-
-    def forward(self, est, target):
-
-        if est.shape[1] == 0:
-            return torch.ones_like(est).sum().clamp(min=1)
-
-        x1 = torch.sign(est)
-        x2 = torch.sign(target)
-
-        x1 = x1.reshape(
-            [x1.shape[0], x1.shape[2], x1.shape[1]]
-        )  # we reshape to compute the cosine loss over the rays at a spatial location
-        # if no reshaping is done, the loss is computed for a constant extraction depth over some spatial location.
-        x2 = x2.reshape([x2.shape[0], x2.shape[2], x2.shape[1]])
-
-        label = torch.ones_like(x1)
-
-        l1 = self.criterion1.forward(est, target)
-        l2 = self.criterion2.forward(est, target)
-        l3 = self.criterion3.forward(x1, x2, label)
-
-        normalization = torch.ones_like(l1).sum()
-
-        l1 = l1.sum() / normalization
-        l2 = l2.sum() / normalization
-
-        # NOTE: the l3 loss gives zero-gradients so no learning happens due to L3!
-        l = self.lambda1 * l1 + self.lambda2 * l2 + self.lambda3 * l3
-
-        return l, l1, l3
-
 
 class RoutingLoss(torch.nn.Module):
     def __init__(self, config):
