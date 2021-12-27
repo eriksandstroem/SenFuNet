@@ -141,40 +141,10 @@ def train_fusion(args):
     if config.TRAINING.pretrain_filtering_net:
         load_pipeline(
             config.TESTING.fusion_model_path, pipeline
-        )  # this is the filtering loading
+        )  # TODO: load optimizer if available. See save_checkpoint function in old commit
 
     if config.TRAINING.pretrain_fusion_net and config.FUSION_MODEL.use_fusion_net:
-        for sensor in config.DATA.input:
-            if not config.ROUTING.do:
-                if sensor == "tof" or sensor == "stereo":
-                    load_net_old(
-                        eval(
-                            "config.TRAINING.pretrain_fusion_" + sensor + "_model_path"
-                        ),
-                        pipeline.fuse_pipeline._fusion_network[sensor],
-                        sensor,
-                    )
-                else:
-                    load_net(
-                        eval(
-                            "config.TRAINING.pretrain_fusion_" + sensor + "_model_path"
-                        ),
-                        pipeline.fuse_pipeline._fusion_network[sensor],
-                        sensor,
-                    )
-            else:
-                load_net(
-                    eval(
-                        "config.TRAINING.pretrain_fusionrouting_"
-                        + sensor
-                        + "_model_path"
-                    ),
-                    pipeline.fuse_pipeline._fusion_network[sensor],
-                    sensor,
-                )
-                # load_net(eval('config.TRAINING.pretraining_fusion_' + sensor +  '_model_path'), pipeline.fuse_pipeline._fusion_network[sensor], sensor)
-            # loading gt depth model fusion net
-            # load_net('/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/210507-093251/model/best.pth.tar', pipeline.fuse_pipeline._fusion_network[sensor], 'left_depth_gt_2')
+        raise NotImplementedError
 
     if (
         config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
