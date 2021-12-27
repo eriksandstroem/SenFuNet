@@ -3,8 +3,8 @@ import logging
 
 from dataset import Replica
 
-# can be imported because the __init__.py file
-# in the dataset file imports the Replica class from the module replica.
+# the above import works because the __init__.py file
+# in the dataset folder imports the Replica class from the module replica.
 # we can import dataset in the package utils because the setup.py
 # module is only called from the train or test scripts i.e. from a higher
 # level.
@@ -31,7 +31,6 @@ from utils.saving import *
 
 
 def get_data_config(config, mode):
-    #
     data_config = copy(config.DATA)
     data_config.filtering_model = config.FILTERING_MODEL.model
 
@@ -110,33 +109,6 @@ def get_logger(path, name="training"):
     return logger
 
 
-def save_tsdf(filename, data):  # not used
-    with h5py.File(filename, "w") as file:
-        file.create_dataset(
-            "TSDF", shape=data.shape, data=data, compression="gzip", compression_opts=9
-        )
-
-
-def save_weights(filename, data):  # not used
-    with h5py.File(filename, "w") as file:
-        file.create_dataset(
-            "weights",
-            shape=data.shape,
-            data=data,
-            compression="gzip",
-            compression_opts=9,
-        )
-
-
-def save_ply(filename, data):  # Not used
-    voxel_size = 0.01
-    vertices, faces, normals, _ = skimage.measure.marching_cubes_lewiner(
-        data, level=0, spacing=(voxel_size, voxel_size, voxel_size)
-    )
-    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, vertex_normals=normals)
-    mesh.export(filename)
-
-
 class Workspace(object):
     def __init__(self, path):
 
@@ -185,18 +157,6 @@ class Workspace(object):
                 + ".png"
             )
             plt.clf()
-
-    def save_tsdf_data(self, file, data):  # not used
-        tsdf_file = os.path.join(self.output_path, file)
-        save_tsdf(tsdf_file, data)
-
-    def save_weights_data(self, file, data):  # not used
-        weight_files = os.path.join(self.output_path, file)
-        save_weights(weight_files, data)
-
-    def save_ply_data(self, file, data):  # not used
-        ply_files = os.path.join(self.output_path, file)
-        save_ply(ply_files, data)
 
     def log(self, message, mode="train"):
         if mode == "train":
