@@ -108,10 +108,10 @@ class Integrator(torch.nn.Module):
         index = ys * zs * indices[:, 0] + zs * indices[:, 1] + indices[:, 2]
         indices_insert = torch.unique_consecutive(
             indices[index.sort()[1]], dim=0
-        )  # since the coalesce() operation on the sparse tensors sorts the
+        )  
         vcache = torch.sparse.FloatTensor(
             index.unsqueeze_(0), update, torch.Size([xs * ys * zs])
-        ).coalesce()
+        ).coalesce() # the coalesce() operation on the sparse tensors sorts the tensor
         update = vcache.values()
 
         if indices_insert.shape[0] != update.shape[0]:
@@ -139,7 +139,7 @@ class Integrator(torch.nn.Module):
             )
             indices_empty_insert = torch.unique_consecutive(
                 indices_empty[index_empty.sort()[1]], dim=0
-            )  # since the coalesce() operation on the sparse tensors sorts the
+            ) 
             wcache_empty = torch.sparse.FloatTensor(
                 index_empty.unsqueeze_(0), weights_empty, torch.Size([xs * ys * zs])
             ).coalesce()  # this line adds the values at the same index together
@@ -245,27 +245,6 @@ def get_index_mask(indices, shape):
     )
 
     return valid
-
-
-def extract_values(indices, volume, mask=None):
-    """
-    method to extract values from volume given indices
-    :param indices: positions to extract
-    :param volume: volume to extract from
-    :param mask: optional mask for extraction
-    :return: extracted values
-    """
-
-    if mask is not None:
-        x = torch.masked_select(indices[:, 0], mask)
-        y = torch.masked_select(indices[:, 1], mask)
-        z = torch.masked_select(indices[:, 2], mask)
-    else:
-        x = indices[:, 0]
-        y = indices[:, 1]
-        z = indices[:, 2]
-
-    return volume[x, y, z]
 
 
 def extract_indices(indices, mask):

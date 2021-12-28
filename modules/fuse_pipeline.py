@@ -141,10 +141,7 @@ class Fuse_Pipeline(torch.nn.Module):
             else:
                 tsdf_pred = self._fusion_network[fusionNet].forward(input_)
         else:  # TSDF Fusion
-            # if sensor == 'left_depth_gt': # side step learned fusion net - use tsdf fusion prediction
-            # print(tsdf_pred[:, :, 200, 200])
-
-            tsdf_pred = torch.zeros(
+             tsdf_pred = torch.zeros(
                 (1, extraction_band, input_.shape[2], input_.shape[3])
             )
             temp = torch.linspace(
@@ -156,7 +153,6 @@ class Fuse_Pipeline(torch.nn.Module):
             temp = temp.unsqueeze_(-1)
             temp = temp.unsqueeze_(-1)
             tsdf_pred[:, :, :, :] = temp.expand(-1, -1, 256, 256)
-            # print(tsdf_pred[0, :, 200, 200])
 
         if self.config.FEATURE_MODEL.use_feature_net:
             feat_pred = self._feature_network[sensor].forward(input_features[sensor])
@@ -168,7 +164,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         feat_pred = feat_pred["feature"].permute(
             0, 2, 3, 1
-        )  # (1, 256, 256, n_features)
+        )
 
         # # save feature maps
         # for i in range(feat_pred.shape[-1]):
@@ -254,7 +250,7 @@ class Fuse_Pipeline(torch.nn.Module):
             rgb = rgb.unsqueeze(-1)
             rgb = rgb.permute(
                 3, 1, 2, 0
-            )  # never use view here - that fucked up the order!
+            )  # never use view here 
 
         feature_input = dict()
         feature_input[sensor] = torch.unsqueeze(frame, -1)
@@ -266,8 +262,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         if confidence is not None and self.config.FEATURE_MODEL.confidence:
             confidence = torch.unsqueeze(confidence, -1)
-            # confidence = confidence.permute(0, 3, 1, 2) # never use view here - that fucked up the order!
-            # print(confidence.shape)
+  
             feature_input[sensor] = torch.cat(
                 (feature_input[sensor], confidence), dim=3
             )
@@ -275,7 +270,6 @@ class Fuse_Pipeline(torch.nn.Module):
         if sensor == "stereo" and rgb_warp is not None:
             feature_input[sensor] = torch.cat((feature_input[sensor], rgb_warp), dim=3)
 
-            # del features, feature_weights_sensor
         # permuting input
         feature_input[sensor] = feature_input[sensor].permute(0, -1, 1, 2)
 
@@ -373,12 +367,11 @@ class Fuse_Pipeline(torch.nn.Module):
                 # else:
                 depth, conf = self._routing(
                     batch
-                )  # I don't think I need the depth of both sensors now
-                # since I don't do relative normalization, but I leave it for now
+                )  
                 frame = depth.squeeze_(1)
                 confidence = conf.squeeze_(
                     1
-                )  # Need to implement this if I want to use it again
+                )
 
         else:
             frame = batch["depth"].squeeze_(1)
@@ -518,8 +511,7 @@ class Fuse_Pipeline(torch.nn.Module):
                 # else:
                 depth, conf = self._routing(
                     batch
-                )  # I don't think I need the depth of both sensors now
-                # since I don't do relative normalization, but I leave it for now
+                ) 
                 frame = depth.squeeze_(1)
                 confidence = conf  # Need to implement this if I want to use it again
 
@@ -543,7 +535,7 @@ class Fuse_Pipeline(torch.nn.Module):
             rgb_warp = None
 
         mask = batch["mask"].to(device)  # putting extractor on gpu
-        # mask = batch['mask']
+
         filtered_frame = torch.where(mask == 0, torch.zeros_like(frame), frame)
         del mask
 
@@ -601,7 +593,6 @@ class Fuse_Pipeline(torch.nn.Module):
         )
         del rgb, frame
 
-        # tsdf_target = tsdf_target.view(b, h, w, eval('self.config.FUSION_MODEL.n_points_' + batch['sensor']))
         fusion_output = self._fusion(
             tsdf_input,
             feature_input,

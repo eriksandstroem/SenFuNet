@@ -30,8 +30,6 @@ class DoubleConv(nn.Module):
             ),
             eval(activation),
         )
-        # self.block = nn.Sequential(nn.Conv3d(c_in, c_out, 3, padding=1, padding_mode='replicate', bias=True),
-        #                            eval(activation))
 
     def forward(self, x):
         return self.block(x)
@@ -95,21 +93,13 @@ class RefinementEncoder(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, neighborhood):
-        # stereo_tsdf = neighborhood['stereo']
-        # print(tof_tsdf.shape)
-        # print(neighborhood[0, :, 32, 32, 32])
 
         if self.tanh_weight:
             neighborhood[0, 1, :, :, :] = self.tanh(neighborhood[0, 1, :, :, :])
 
-        if (
-            not self.w_features
-        ):  # this line should not be needed since I don't feed the features if
-            # we dont select features in the config file. Nope, I still need it at test time since get_local_grids function
-            # still feeds the features
+        if not self.w_features:
             neighborhood = neighborhood[:, :2, :, :, :]
         e1 = self.enc_1(neighborhood)
-        # print('e1', e1)
         x = self.mp(e1)
         # x = e1
         e2 = self.enc_2(x)
@@ -305,7 +295,6 @@ class Weighting_Decoder(nn.Module):
                 sdf_enc_input[sensor_] = sensor_input[:, :16, :, :, :]
                 sensor_input = sensor_input[:, 16:, :, :, :]
 
-            # print(sensor_input[:, :, 0, 0, 0])
             feature_encoding[sensor_] = self.encoder[sensor_](sensor_input)
 
         input_ = None
@@ -530,7 +519,6 @@ class FilteringNet(nn.Module):
 
             weight[sensor_] = neighborhood[sensor_][:, 1, :, :, :].unsqueeze(1)
 
-        if len(self.sensors) == 2:
             for sensor_ in self.sensors:
                 output["tsdf_" + sensor_] = sdf[sensor_].squeeze()
                 output[sensor_ + "_init"] = weight[sensor_].squeeze() > 0
@@ -581,37 +569,15 @@ class FilteringNet(nn.Module):
                     input_ = torch.cat((input_, inp), dim=1)
 
                 if k == 0:
-
-                    # if self.sdf_enc_to_weight_head and self.feature_to_weight_head:
-                    #     input_ = torch.cat((enc[sensor_], neighborhood[sensor_][:, 2:, :, :, :]), dim=1)
-                    # elif self.feature_to_weight_head:
-                    #     input_ = neighborhood[sensor_][:, 2:, :, :, :]
-                    # elif self.sdf_enc_to_weight_head:
-                    #     input_ = enc[sensor_]
                     alpha_val[sensor_] = torch.zeros_like(sdf[sensor_])
                 else:
-                    # if self.sdf_enc_to_weight_head and self.feature_to_weight_head:
-                    #     inp = torch.cat((enc[sensor_], neighborhood[sensor_][:, 2:, :, :, :]), dim=1)
-                    # elif self.feature_to_weight_head:
-                    #     inp = neighborhood[sensor_][:, 2:, :, :, :]
-                    # elif self.sdf_enc_to_weight_head:
-                    #     inp = enc[sensor_]
-                    # input_ = torch.cat((input_, inp), dim=1)
                     alpha_val[sensor_] = torch.ones_like(sdf[sensor_])
 
             if input_.isnan().sum() > 0:
                 print("Input isnan: ", input_.isnan().sum())
 
-            # for layer in self.weight_decoder:
-            #     if isinstance(layer, nn.Conv3d):
-            #         if layer.weight.isnan().sum() > 0 or layer.bias.isnan().sum() > 0:
-            #             print(layer)
-            #             print('layer bias nan: ', layer.bias.isnan().sum())
-            #             print('layer weight nan: ', layer.weight.isnan().sum())
-            # print('inputsum: ', input_.sum())
             alpha = self.sigmoid(self.weight_decoder(input_))
 
-            # print('alphasum: ', alpha.sum())
             if alpha.isnan().sum() > 0 or alpha.isinf().sum() > 0:
                 print("alpha nan: ", alpha.isnan().sum())
                 print("alpha inf: ", alpha.isinf().sum())
@@ -627,18 +593,14 @@ class FilteringNet(nn.Module):
             if self.outlier_channel:
                 alpha_sdf = alpha[
                     :, 0, :, :, :
-                ]  # make sure that alpha remains the same!
+                ] 
             else:
                 alpha_sdf = alpha
 
-            # print('input_ ', input_)
-            # print('alpha: ', alpha)
-
             # this step is to not filter the voxels where we only have one sensor observing
-            # note that we save the variable alpha and not alpha_sdf later so we can still
+            # note that we save the variable alpha and not alpha_sdf so we can still
             # use the outlier filter as usual. During test time this step is important to avoid
-            # that we make a smooth decision where only one sensor integrates. This step is
-            # important when we want to keep the single sensor observation during test time.
+            # that we make a smooth decision where only one sensor integrates.
             for sensor_ in self.config.DATA.input:
                 alpha_sdf = torch.where(
                     weight[sensor_] == 0, alpha_val[sensor_], alpha_sdf
@@ -652,18 +614,6 @@ class FilteringNet(nn.Module):
                 else:
                     sdf_final += (1 - alpha_sdf) * sdf[sensor_]
 
-            # print('sdf final: ', sdf_final.sum())
-            # print('after sdf final computation')
-            # for sensor_ in self.config.DATA.input:
-            #     print(sdf[sensor_].sum())
-
-            # input_ = torch.cat((enc['tof'], enc['stereo']), dim=1)
-            # alpha = self.sigmoid(self.weight_decoder(input_))
-
-            # alpha = torch.where(weight['stereo'] == 0, torch.ones_like(alpha), alpha)
-            # alpha = torch.where(weight['tof'] == 0, torch.zeros_like(alpha), alpha)
-
-            # sdf = alpha * sdf['tof'] + (1 - alpha) * sdf['stereo']
             output["tsdf"] = sdf_final.squeeze()
 
         else:

@@ -339,50 +339,6 @@ class Extractor(nn.Module):
 
         return output
 
-    def nearest_neighbor_extraction_features(
-        self, points, feature_volume, feature_weights_volume
-    ):
-        b, h, n, dim = points.shape
-        x, y, z, nbr_features = feature_volume.shape
-
-        # get indices from the points which are already in the voxel grid but floating point coordinates
-        points = points.contiguous().view(b * h * n, dim)
-        indices = torch.cat(
-            (
-                torch.round(points[:, 0].unsqueeze_(-1)),
-                torch.round(points[:, 1].unsqueeze_(-1)),
-                torch.round(points[:, 2].unsqueeze_(-1)),
-            ),
-            dim=-1,
-        ).long()
-
-        # get valid indices
-        valid = get_index_mask(indices, (x, y, z))
-
-        valid_idx = torch.nonzero(valid)[:, 0]
-
-        features = extract_values(indices, feature_volume, valid)
-        weights = extract_values(indices, feature_weights_volume, valid)
-
-        feature_container = (
-            0
-            * torch.ones(
-                (valid.shape[0], nbr_features), device=self.config.device
-            ).float()
-        )
-        weight_container = torch.zeros_like(valid).float()
-
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float()
-        feature_container[valid_idx, :] = features.float()
-        weight_container[valid_idx] = weights.float()
-
-        del features, weights
-
-        feature_container = feature_container.view(b, h, n, nbr_features)
-        weight_container = weight_container.view(b, h, n)
-
-        return feature_container, indices, weight_container
-
 
 def interpolation_weights(points):
 

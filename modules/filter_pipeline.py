@@ -11,15 +11,12 @@ class Filter_Pipeline(torch.nn.Module):
         super(Filter_Pipeline, self).__init__()
 
         self.config = config
-        self.defined_bboxes = dict()  # CHANGE
+        self.defined_bboxes = dict()
         for sensor_ in config.DATA.input:
             self.defined_bboxes[sensor_] = dict()
-            self.defined_bboxes[sensor_]["bbox"] = dict()  # CHANGE
-            self.defined_bboxes[sensor_]["valid_indices"] = dict()  # CHANGE
+            self.defined_bboxes[sensor_]["bbox"] = dict()
+            self.defined_bboxes[sensor_]["valid_indices"] = dict()
 
-        # if len(config.DATA.input) > 1:
-        #     self._filtering_network = FilteringNetFuseSensors(config)
-        # else:
         self._filtering_network = FilteringNet(config)
 
     def _filtering(self, neighborhood):
@@ -32,7 +29,6 @@ class Filter_Pipeline(torch.nn.Module):
         return output
 
     def _prepare_input_training(self, volumes, bbox, device):
-        # print(bbox)
         # Now we have a bounding box which we know have valid indices. Now it is time to extract this volume from the input grid,
         # which is already on the gpu.
 
@@ -119,7 +115,7 @@ class Filter_Pipeline(torch.nn.Module):
 
             feat = feat.permute(
                 3, 0, 1, 2
-            )  # (-1, feat.shape[0], feat.shape[1], feat.shape[2]) # DO NOT USE VIEW HERE! THAT FUKKED UP THE ORDER
+            )  # (-1, feat.shape[0], feat.shape[1], feat.shape[2]) # DO NOT USE VIEW HERE!
 
             # concatenate the two grids and make them on the form N, C, D, H, W
             local_grid = torch.cat(
@@ -138,28 +134,18 @@ class Filter_Pipeline(torch.nn.Module):
         self, scene, database, device
     ):  # here we use a stride which is half the chunk size
         self.device = device
-        # why do I have astype in16? Memory saveing? Well yeah I suppose I can save a bool as int16
+
         indices = np.zeros_like(database.scenes_gt[scene].volume)
         for sensor_ in self.config.DATA.input:
-            # there should not really be a difference if we use the feature weights here or the weights
-            # which include the online outlier filter since the bbox does not really change
             indices = np.logical_or(
                 indices, database.fusion_weights[sensor_][scene] > 0
-            )  # - indices_and
-            # break
+            )
+
         uninit_indices = np.invert(indices)
         indices = np.transpose(indices.nonzero()).astype(np.int16)
         uninit_indices = np.transpose(uninit_indices.nonzero()).astype(np.int16)
         chunk_size = self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size
 
-        # for testing my idea of zero-initial volume to remove outliers and keep geometry
-        # an attempt to not attend to uninitialized voxel values (though this should be handled by the
-        # weights which form a natural mask
-        # idx  = (database.feature_weights_tof[scene] == 0).astype(np.int16) # changed here
-        # idx = np.transpose(idx.nonzero()).astype(np.int16) # changed here
-        # database.scenes_est_tof[scene].volume[idx[:, 0], idx[:, 1], idx[:, 2]] = 0 # changed here
-
-        # print(indices.shape)
         # get minimum box size
         x_size = indices[:, 0].max() - indices[:, 0].min()
         y_size = indices[:, 1].max() - indices[:, 1].min()
@@ -199,7 +185,6 @@ class Filter_Pipeline(torch.nn.Module):
             for sensor_ in self.config.DATA.input:
                 tsdf_refined_local_grid[sensor_] = torch.zeros_like(filtered_local_grid)
 
-        # print(filtered_local_grid.shape)
         # traverse the local grid, extracting chunks from the local grid to feed to the
         # filtering network one at a time.
         moving_bbox = np.zeros_like(bbox)
@@ -231,11 +216,7 @@ class Filter_Pipeline(torch.nn.Module):
                             moving_bbox[2, 0] : moving_bbox[2, 1],
                         ].to(self.device)
 
-                    # print(local_grids['tof'].shape)
-                    # print(input_['tof'].shape)
                     with torch.no_grad():
-                        # input_['neighborhood_filter']['tof'][0, 0, :, :, :] = -0.0*torch.ones_like(input_['neighborhood_filter']['tof'][0, 0, :, :, :])
-                        # input_['neighborhood_filter']['tof'][0, 1, :, :, :] = 0.0*torch.ones_like(input_['neighborhood_filter']['tof'][0, 1, :, :, :])
                         input_["test_mode"] = True
                         sub_filter_dict = self._filtering(input_)
                         if sub_filter_dict is None:
@@ -380,14 +361,16 @@ class Filter_Pipeline(torch.nn.Module):
                     bbox[2, 0] : bbox[2, 1],
                 ] = refined_local_grid.numpy().squeeze()
 
-                # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized
-                # voxel values with their default value. Why do I do this? Later during evaluation
-                # I will anyway only consider the indices where the weight is non-zero. Here I actually use the
-                # unini_indices variable that is the union of both sensors so this is not the correct index set to use
-                # but it does not matter in the end...
+                # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized.
+                uninit_sensor_indices = database.fusion_weights[sensor_][scene] == 0
+                uninit_sensor_indices = np.transpose(
+                    uninit_sensor_indices.nonzero()
+                ).astype(np.int16)
 
                 database.tsdf_refined[sensor_][scene].volume[
-                    uninit_indices[:, 0], uninit_indices[:, 1], uninit_indices[:, 2]
+                    uninit_sensor_indices[:, 0],
+                    uninit_sensor_indices[:, 1],
+                    uninit_sensor_indices[:, 2],
                 ] = self.config.DATA.init_value
 
             del tsdf_refined_local_grid
@@ -412,19 +395,16 @@ class Filter_Pipeline(torch.nn.Module):
 
     def filter_training(
         self, input_dir, database, epoch, frame, scene_id, sensor, device
-    ):  # CHANGE
-        # this function computes
-
+    ):
         self.device = device
 
         indices = input_dir["indices"].cpu()
-        # print('ind fed: ', indices.shape)
         del input_dir["indices"]
 
-        # if epoch > 0: # CHANGE
-        #     output = self.request_defined_bbox(sensor, frame) # CHANGE
-        # else: # CHANGE
-        output = self.request_random_bbox(indices, epoch, sensor, frame)  # CHANGE
+        # debugging
+        # output = self.request_defined_bbox(sensor, frame)
+
+        output = self.request_random_bbox(indices, epoch, sensor, frame)
 
         if output is None:
             return None
@@ -432,12 +412,6 @@ class Filter_Pipeline(torch.nn.Module):
             bbox = output[0]
             valid_indices = output[1]
 
-        # print('2',bbox)
-        # bbox[:, 1] += 1 # in order to make sure that we extract the limits of the bounding box. Without the plus 1, the bounding box
-        # will be one to small due to the fact that extraction with n:n+1 only extracts n.
-        # print(bbox)
-        # Ideally I need to check that the extended box if uneven, still is valid. For the purposes
-        # of training, I could also subtract so that I don't need to filter all indices
         neighborhood = dict()
         neighborhood["test_mode"] = False
         for sensor_ in self.config.DATA.input:
@@ -465,9 +439,6 @@ class Filter_Pipeline(torch.nn.Module):
 
         if tsdf_filtered is None:
             return "save_and_exit"
-        # tsdf_filtered = tsdf_vol[bbox[0, 0]:bbox[0, 1], # for now I just feed the intermediate grid as the filtered one
-        #                     bbox[1, 0]:bbox[1, 1],
-        #                     bbox[2, 0]:bbox[2, 1]]
 
         gt_vol = database[scene_id]["gt"]
 
@@ -477,9 +448,8 @@ class Filter_Pipeline(torch.nn.Module):
         tsdf_target = gt_vol[
             bbox[0, 0] : bbox[0, 1], bbox[1, 0] : bbox[1, 1], bbox[2, 0] : bbox[2, 1]
         ]
-        # tsdf_target = gt_vol[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-        # print('tsdf target shape: ', tsdf_target.shape)
-        tsdf_target = tsdf_target.float()  # .unsqueeze_(-1)
+
+        tsdf_target = tsdf_target.float()
 
         if (
             self.config.LOSS.alpha_supervision
@@ -493,7 +463,7 @@ class Filter_Pipeline(torch.nn.Module):
                     bbox[1, 0] : bbox[1, 1],
                     bbox[2, 0] : bbox[2, 1],
                 ]
-                # alpha_target = proxy_alpha[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
+
                 alpha_target = alpha_target.float()
                 alpha_target = alpha_target.to(device)
 
@@ -506,24 +476,6 @@ class Filter_Pipeline(torch.nn.Module):
         # tsdf_filtered variable. Thus, I should be able to take the valid_indices minus
         # bbox[:, 0] in order to get the correct valid indices for tsdf_filtered
         valid_indices = valid_indices - bbox[:, 0]
-        # mask filtered loss - no, there is no need for it
-        # tsdf_filtered['tsdf'] = tsdf_filtered['tsdf'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-        # if self.config.LOSS.alpha_supervision or self.config.LOSS.alpha_single_sensor_supervision:
-
-        #     alpha = alpha[valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-
-        # if self.config.LOSS.gt_loss:
-        #     tsdf_gt_filtered['tsdf'] = tsdf_gt_filtered['tsdf'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-
-        # if len(self.config.DATA.input) > 1:
-        #     for sensor_ in self.config.DATA.input:
-        #         tsdf_filtered['tsdf_'+ sensor_] = tsdf_filtered['tsdf_'+ sensor_][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
-        #         # the init key is important for the per sensor head supervision since we have fewer initialized indices in the case of the "opposite sensor".
-        #         # i.e. if we integrate a tof frame, we will have X indices to supervise on for the tof head and the fused head, but X - Y indices
-        #         # to supervise for the stereo head. We use the init key to guide what stereo indices are initialized. For the tof supervision
-        #         # the init key will not do anything since it contains the same information as the valid_indices variable. When doing
-        #         # single sensor training, we thus don't need an init key.
-        #         tsdf_filtered[sensor_ + '_init'] = tsdf_filtered[sensor_ + '_init'][valid_indices[:, 0], valid_indices[:, 1], valid_indices[:, 2]]
 
         tsdf_target = tsdf_target.to(device)
 
@@ -565,7 +517,7 @@ class Filter_Pipeline(torch.nn.Module):
         # than the chunk size, extract the minimum bound
         idx_threshold = 2000
 
-        # we sample at most 5 times a random box and if any box is higher than some threshold, we select this box
+        # we sample at most 600 times a random box and if any box is higher than some threshold, we select this box
         for i in range(600):
             if x_size / self.config.FILTERING_MODEL.CONV3D_MODEL.chunk_size > 1:
                 bbox[0, 0] = np.random.random_integers(
@@ -604,12 +556,8 @@ class Filter_Pipeline(torch.nn.Module):
                 bbox[2, 0] = bbox_input[2, 0]
                 bbox[2, 1] = bbox_input[2, 1]
 
-            # make sure that each dimension of the bounding box is divisible by 8 (requires to do 3 max pooling layers, otherwise subtract
-            # appropriate dimensions. When doing the extraction we will extract the 'correct' indices with this technique. No plus 1 needed since
-            # the difference will be correct and the difference is what is extracted when doing n:n plus m
-            # Here I do minus instead of plus as at test time because it does not matter during training
-            # that not all indices are filtered. Also, I don't have to do more computations since I know that
-            # all indices are within the volume.
+            # make sure that each dimension of the bounding box is divisible by 2
+            # this was only necessary when I used the Unet 3D nets as weighting networks.
             if (
                 bbox[0, 1] - bbox[0, 0]
             ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth != 0:
@@ -631,14 +579,7 @@ class Filter_Pipeline(torch.nn.Module):
 
             # compute a mask determining what indices should be used in the loss out of all indices in the bbox. Note
             # that the bbox is not the full min bounding volume of the indices, but only a random extraction
-            # according to the chunk size. Thus, we need to select the valid indices within the chunk volume. No, we should
-            # not need to do that. This only matters if we want to propagate gradients to the fusion net, but otherwise, since
-            # it does not seem like we will do this, it is also fine to just take the initialized indices within the chunk
-            # to compute the loss and gradients for the filtering network. The downside of this strategy is that
-            # if we train the fusion network jointly with the filtering network, the fusion network will compute
-            # very few gradients from the total chunk bbox while the loss is computed for the entire bbox so the
-            # fusion net might not train well given this low information flow i.e. we may need to increase the
-            # hyperparamter that controls the intermediate loss. Well the feature net is affected equally by this.
+            # according to the chunk size. Thus, we need to select the valid indices within the chunk volume. We don't necessarily need to do this, since we can also used indices that were not updated by the feature net to train the weighting network, but for training consistency, I train both networks on the exact same indices.
             valid_indices = (
                 (indices[:, 0] >= bbox[0, 0])
                 & (indices[:, 0] < bbox[0, 1])
@@ -656,15 +597,11 @@ class Filter_Pipeline(torch.nn.Module):
             valid_indices = indices[
                 valid_indices, :
             ]  # extract the indices in the global grid for the valid indices
-            # within the chunk volume
-            # print('final valid_indices.shape: ', valid_indices.shape)
-            # print(valid_indices.shape[0])
 
-            if epoch == 0:  # CHANGE
-                self.defined_bboxes[sensor]["bbox"][frame] = bbox  # CHANGE
-                self.defined_bboxes[sensor]["valid_indices"][
-                    frame
-                ] = valid_indices  # CHANGE
+            if epoch == 0:
+                # save fixed bboxes for each frame for debugging
+                self.defined_bboxes[sensor]["bbox"][frame] = bbox
+                self.defined_bboxes[sensor]["valid_indices"][frame] = valid_indices
 
             if valid_indices.shape[0] > idx_threshold:
                 return bbox, valid_indices
@@ -674,8 +611,17 @@ class Filter_Pipeline(torch.nn.Module):
         )
         return None
 
-    def request_defined_bbox(self, sensor, frame):  # CHANGE
+    def request_defined_bbox(self, sensor, frame):
+        """Debugging Function. Not used in final model.
+
+        Args:
+            sensor (string): sensor name
+            frame (int): frame
+
+        Returns:
+            ndarray, ndarray: fixed defined bbox with valid indixes
+        """
         return (
             self.defined_bboxes[sensor]["bbox"][frame],
             self.defined_bboxes[sensor]["valid_indices"][frame],
-        )  # CHANGE
+        )
