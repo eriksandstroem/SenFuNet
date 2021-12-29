@@ -1,0 +1,148 @@
+SETTINGS:
+  gpu: True # run on cpu or gpu
+  experiment_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion # path where the logging is done and the models are saved.
+  eval_freq: 442 # how many global steps before evaluation and saving the model
+  log_freq: 442 #957 383 # how many global steps before logging the training loss
+  seed: 52 # seed for shuffling operations
+FUSION_MODEL:
+  use_fusion_net: False # use learned fusion net as done by RoutedFusion
+  fixed: True # use fixed or finetune weights when use_fusion_net is true
+  output_scale: 1.0 # output scale from fusion net (same as RoutedFusion)
+  n_points: 11 # extraction band samples
+  n_tail_points: 9 # samples along the ray which update the grid
+  n_points_tof: 11 # tof specific extraction band samples
+  n_tail_points_tof: 9
+  n_points_stereo: 11 # stereo specific extraction band samples
+  n_tail_points_stereo: 9
+  confidence: False # feed 2D confidence map to learned fusion net (only when using routing)
+  n_empty_space_voting: 0 # samples with free space update
+  max_weight: 500 # max weight
+  extraction_strategy: 'nearest_neighbor' # nearest_neighbor or trilinear_interpolation
+FEATURE_MODEL:
+  confidence: False # feed 2D confidence map to learned fusion net (only when using routing)
+  stereo_warp_right: False # concatenate the right stereo view warped to the left view using the left stereo view depth as input to the feature net
+  network: resnet # anything else but "resnet" will give a standard network
+  use_feature_net: True # use learned feature net. When false, yields the depth as feature
+  append_depth: True # append depth to feature vector
+  w_rgb: True # concatenate rgb to stereo or mvs depth sensors as input to feature net
+  w_rgb_tof: False # concatenate rgb to tof sensor as input to the feature net
+  w_intensity_gradient: False # concatenate rgb intensity and gradient as input to the feature net 
+  normalize: True # normalize the feature vector
+  fixed: False # fix weights of feature net - when true does not declare an optimzer
+  n_features: 4 # output dimension from feature net
+  n_layers: 6 # layers 
+  enc_activation: torch.nn.Tanh()
+  dec_activation: torch.nn.Tanh()
+  depth: True # concatenate depth as input to feature net
+  layernorm: False
+ROUTING_MODEL:
+  contraction: 64 # hidden dimension of routing network
+  normalization: False # apply batch normalization
+FILTERING_MODEL:
+  model: '3dconv' # 3dconv, tsdf_early_fusion, tsdf_middle_fusion, routedfusion
+  CONV3D_MODEL:
+    fixed: False # fix network weights
+    outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. 
+    features_to_weight_head: True # feed 2D features directly to alpha head
+    sdf_to_weight_head: False # feed sdf values directly wo encoding to alpha head (not implemented when weighting_complexity: unet_style)
+    weights_to_weight_head: True # feed the tsdf weights to the alpha head (not implemented when weighting_complexity: unet_style)
+    tanh_weight: True # apply tanh-transform to weight counter
+    inverted_weight: False # when tanh_weight: true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head: true
+    bias: True # bias in alpha head
+    chunk_size: 64 # determines the size of the window used during training and testing that is fed to the 3D convnet
+    activation: torch.nn.ReLU()
+    weighting_complexity: '3layer' # Xlayer or unet_style
+    network_depth: 2 # only used when weighting complexity is unet_style
+    use_refinement: False # refinement 3D network for TSDF values
+    REFINEMENT:
+      network_depth: 2
+      bias: True # bias in sdf encoder
+      residual_learning: False # residual connection of refienment network
+      output_scale: 0.07 # multiplicative factor after refinement network. Should be a little big larger than the truncation value
+      refinement_model: 'std' # simple or std
+      features_to_sdf_enc: False # feed 2D features to refinement model
+      sdf_enc_to_weight_head: False # feed sdf encoding to alhpa head
+LOSS:
+  alpha_single_sensor_supervision: True # supervise voxels where only one sensor integrates
+  alpha_supervision: False # supervise directly with proxy alpha in 3D
+  fusion_weight: 6.0 # l1 weight of fusion net
+  grid_weight: 6
+  alpha_weight: 0.01 # weight of single sensor alpha supervision and proxy supervision
+TRAINING:
+  reset_strategy: True # May not make any difference
+  reset_prob: 0.01 # in percent (used if reset_strategy: True)
+  pretrain_filtering_net: False
+  pretrain_fusion_net: False # if True, provide a path called pretrain_fusion_SENSORNAME_model_path. Used to load pretrained and/or fixed fusion nets
+  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/stereo/model/best.pth.tar # stereo, proper channels: 211210-174701
+  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar # tof, proper channels: 211210-172500
+  routing_tof_2_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar
+  routing_sgm_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-095139/model/best.pth.tar # 210919-095139, proper channels: 211210-173928
+  routing_lea_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-100411/model/best.pth.tar 
+  train_batch_size: 1
+  train_shuffle: True
+  val_batch_size: 1
+  val_shuffle: False
+  n_epochs: 1000
+  gradient_clipping: True
+TESTING:
+  visualize_features_and_proxy: False
+  routedfusion_nn: True
+  routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the weight grids
+  use_outlier_filter: True
+  eval_single_sensors: False # not applicable when evaluating routedfusion
+  visualize_sensor_weighting: False
+  test_batch_size: 1
+  test_shuffle: False
+  routing_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210930-120658/model/best.pth.tar # 210930-120658 and 211210-171028 (sgm stereo and psmnet stereo) 210913-093715 and 211210-171713 (tof and psmnet stereo fusion) 210927-183313 (mono and psmnet stereo fusion) #210907-002732 Used only for tsdf_early_fusion
+  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211018-111054/model/best.pth.tar # used for conv3d, routedfusion as filtering models
+  weight_thresholds: [0.0]
+ROUTING:
+  do: False
+  dont_smooth_where_uncertain: False # if True, replaces the routing output with the input depth if the confidence is below the threshold
+  threshold: 0.15 
+  intensity_grad: False # feed grayscale image and its gradient to routing network
+OPTIMIZATION:
+  scheduler:
+    step_size_filtering: 500
+    step_size_fusion: 100
+    gamma_filtering: 0.1
+    gamma_fusion: 0.5
+  lr_filtering: 1.e-04
+  lr_fusion: 1.e-04
+  rho: 0.95 # rmsprop fusion net
+  eps: 1.e-08 # rmsprop fusion net
+  momentum: 0.5 # rmsprop fusion net
+  weight_decay: 0.00 # rmsprop fusion net
+  accumulation_steps: 20 # note that this is normally 8
+DATA:
+  collaborative_reconstruction: False
+  frames_per_chunk: 100 # used when colaborative_reconstruction: true
+  mask_stereo_height: 10 # 35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
+  # compared to the color camera of the azure kinect
+  mask_stereo_width: 10 # in pixels (achieves fov 84.32)
+  mask_tof_height: 10 # 52 # in pixels. Note that this value depends on the resolution of the image. With resolution 256 this would be 52
+  mask_tof_width: 10 #35 # 35 # in pixels. With resolution 256 this would be 35
+  mask_width: 10 # general sensor
+  mask_height: 10 # general sensor
+  pad: 2 # pad ground truth grid (not needed, but all results are using it)
+  min_depth_stereo: 0.0 # 0.5 (in meters)
+  max_depth_stereo: 12.3 # 2.5 (in meters)
+  min_depth_tof: 0.0 # 0.5 (in meters)
+  max_depth_tof: 12.3 # 3.86 (in meters)
+  min_depth: 0.0 # general sensor (in meters)
+  max_depth: 12.3 # general sensor (in meters)
+  root_dir: /cluster/work/cvl/esandstroem/data/scene3d # Path to data folder
+  dataset: Scene3D # dataset
+  input: [tof, stereo] # list of sensors to fuse
+  target: gt # ground truth depth label
+  resx_stereo: 256 # I assume square input images
+  resy_stereo: 256
+  resx_tof: 256
+  resy_tof: 256
+  resx: 256 # default settings
+  resy: 256
+  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/scene3d/stonewall.txt
+  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/scene3d/stonewall.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/scene3d/copyroom.txt
+  init_value: 0.0 # init value of tsdf grids
+  trunc_value: 0.05 # truncation distance
