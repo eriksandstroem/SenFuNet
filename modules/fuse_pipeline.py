@@ -66,14 +66,17 @@ class Fuse_Pipeline(torch.nn.Module):
             self._extractor[sensor] = Extractor(config.FUSION_MODEL, sensor)
             if config.FUSION_MODEL.use_fusion_net:
                 self._fusion_network[sensor] = FusionNet(config.FUSION_MODEL, sensor)
-            if config.FEATURE_MODEL.network == "resnet":
-                self._feature_network[sensor] = FeatureResNet(
-                    config.FEATURE_MODEL, sensor
-                )  # TODO: adapt to when not using features
+            if config.FEATURE_MODEL.use_feature_net:
+                if config.FEATURE_MODEL.network == "resnet":
+                    self._feature_network[sensor] = FeatureResNet(
+                        config.FEATURE_MODEL, sensor
+                    )
+                else:
+                    self._feature_network[sensor] = FeatureNet(
+                        config.FEATURE_MODEL, sensor
+                    )
             else:
-                self._feature_network[sensor] = FeatureNet(
-                    config.FEATURE_MODEL, sensor
-                )  # TODO: adapt to when not using features
+                self._feature_network[sensor] = None
 
         self._integrator = Integrator(config.FUSION_MODEL)
 

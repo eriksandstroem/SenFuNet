@@ -103,12 +103,13 @@ def train_fusion(args):
                 ": ",
                 count_parameters(pipeline.fuse_pipeline._fusion_network[sensor]),
             )
-        print(
-            "Feature Net ",
-            sensor,
-            ": ",
-            count_parameters(pipeline.fuse_pipeline._feature_network[sensor]),
-        )
+        if config.FEATURE_MODEL.use_feature_net:
+            print(
+                "Feature Net ",
+                sensor,
+                ": ",
+                count_parameters(pipeline.fuse_pipeline._feature_network[sensor]),
+            )
 
     if pipeline.filter_pipeline is not None:
         print(
@@ -145,10 +146,7 @@ def train_fusion(args):
     if config.TRAINING.pretrain_fusion_net and config.FUSION_MODEL.use_fusion_net:
         raise NotImplementedError
 
-    if (
-        config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
-        or config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
-    ):
+    if config.FEATURE_MODEL.use_feature_net:
         feature_params = []
         for sensor in config.DATA.input:
             feature_params += list(
@@ -467,11 +465,12 @@ def train_fusion(args):
                     global_step=i + 1 + epoch * n_batches,
                 )
                 for sensor_ in config.DATA.input:
-                    workspace.writer.add_scalar(
-                        "Train/grad_norm_feature_" + sensor_,
-                        grad_norm_feature[sensor_],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
+                    if config.FEATURE_MODEL.use_feature_net:
+                        workspace.writer.add_scalar(
+                            "Train/grad_norm_feature_" + sensor_,
+                            grad_norm_feature[sensor_],
+                            global_step=i + 1 + epoch * n_batches,
+                        )
                     workspace.writer.add_scalar(
                         "Train/grad_norm_outlier_net" + sensor_,
                         grad_norm_outlier_net[sensor_],
@@ -505,10 +504,7 @@ def train_fusion(args):
             if (
                 i + 1
             ) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
-                if (
-                    config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
-                    or config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
-                ):
+                if config.FEATURE_MODEL.use_feature_net:
                     optimizer_feature.step()
                     scheduler_feature.step()
                     optimizer_feature.zero_grad(set_to_none=True)
@@ -528,7 +524,7 @@ def train_fusion(args):
                     optimizer_filt.step()
                     scheduler_filt.step()
                     optimizer_filt.zero_grad(set_to_none=True)
-                if not config.FUSION_MODEL.fixed:
+                if not config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
                     optimizer_fusion.step()
                     scheduler_fusion.step()
                     optimizer_fusion.zero_grad(set_to_none=True)
@@ -541,14 +537,11 @@ def train_fusion(args):
             ):
                 val_database.reset()
                 # zero out all grads
-                if (
-                    config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
-                    or config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
-                ):
+                if config.FEATURE_MODEL.use_feature_net:
                     optimizer_feature.zero_grad(set_to_none=True)
                 if not config.FILTERING_MODEL.CONV3D_MODEL.fixed:
                     optimizer_filt.zero_grad(set_to_none=True)
-                if not config.FUSION_MODEL.fixed:
+                if not config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
                     optimizer_fusion.zero_grad(set_to_none=True)
 
                 pipeline.eval()

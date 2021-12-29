@@ -73,10 +73,7 @@ class FeatureNet(nn.Module):
             self.n_points = config.n_points
 
         self.n_features = config.n_features - config.append_depth
-        if (
-            self.n_features == 0
-        ):  # then we don't use the feature net at all, but to stop errors being raised we set it to one TODO: do not create feature net at all if we specify that we don't use learned features.
-            self.n_features = 1
+
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
         self.w_stereo_warp_right = config.stereo_warp_right
@@ -84,7 +81,7 @@ class FeatureNet(nn.Module):
         self.confidence = config.confidence
 
         # layer settings
-        n_channels_input = self.n_feawtures
+        n_channels_input = self.n_features
         n_channels_output = self.n_features
         self.n_layers = config.n_layers
         self.height = config.resy
@@ -248,10 +245,7 @@ class FeatureResNet(nn.Module):
             self.n_points = config.n_points
 
         self.n_features = config.n_features - config.append_depth
-        if (
-            self.n_features == 0
-        ):  # then we don't use the feature net at all, but to stop errors being raised we set it to one TODO: do not create feature net at all if we specify that we don't use learned features.
-            self.n_features = 1
+
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
         self.w_stereo_warp_right = config.stereo_warp_right
