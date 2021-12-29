@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # path to config file
-CONFIG_FILE=/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/routing/replica_euler.yaml
+CONFIG_FILE=/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/routing/replica.yaml
 
 # function that retrieves the training or validation scenes depending on input mode
 retrieve_scenes() {
@@ -27,6 +27,6 @@ do
 done
 
 
-python /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/train_routing.py --config /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/routing/replica_euler.yaml
+python /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/train_routing.py --config /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/routing/replica.yaml
 
 

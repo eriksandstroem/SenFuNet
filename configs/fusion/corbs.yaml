@@ -131,7 +131,7 @@ DATA:
   max_depth_tof: 12.3 # 3.86 (in meters)
   min_depth: 0.0 # general sensor (in meters)
   max_depth: 12.3 # general sensor (in meters)
-  root_dir: /cluster/work/cvl/esandstroem/data/corbs # TMPDIR #/cluster/work/cvl/esandstroem/data/replica/manual /cluster/work/cvl/esandstroem/data/corbs # TMPDIR  # /#TMPDIR ##/home/esandstroem/scratch-second/euler_work/data/replica/manual # training on data from work folder or on local scratch of compute node
+  root_dir: /cluster/work/cvl/esandstroem/data/corbs # training on data from work folder or on local scratch of compute node
   dataset: CoRBS # dataset
   input: [tof, stereo] # list of sensors to fuse
   target: gt # ground truth depth label

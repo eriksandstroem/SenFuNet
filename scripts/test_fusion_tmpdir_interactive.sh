@@ -25,4 +25,4 @@ done
 
 
 
-python -u /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/test_fusion.py --config /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/fusion/replica_euler.yaml
+python -u /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/test_fusion.py --config /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/fusion/replica.yaml
