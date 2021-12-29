@@ -17,7 +17,6 @@ FUSION_MODEL:
   n_tail_points_stereo: 9
   confidence: False
   n_empty_space_voting: 10
-  with_peek: False
   max_weight: 500
   extraction_strategy: 'trilinear_interpolation' # nearest_neighbor or trilinear_interpolation
 FEATURE_MODEL:
@@ -48,10 +47,10 @@ ROUTING_MODEL:
   normalization: False
 FILTERING_MODEL:
   outlier_channel: False # if True, outputs another channel from the filtering network to be used with the single sensor outlier loss. Only works with 5layer model
-  use_outlier_filter: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
+  use_refinement: False # one can consider only training this for outliers by only applying a loss if the error is larger than some threshold and the sign is wrong
   residual_learning: False
   alpha_force: False # I can remove this now!
-  model: 'routedfusion_middle' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
+  model: 'routedfusion' # mlp or 3dconv. I run the neighborhood weighted average model using the same pipeline as mlp but with a different filtering net
   setting: translate # or avg (relevant only for the mlp model)
   features_to_sdf_enc: False # feed 2D features to sdf encoding head
   features_to_weight_head: True # feed 2D features directly to sensor weighting head
@@ -60,7 +59,6 @@ FILTERING_MODEL:
   weights_to_weight_head: True # wheather or not to feed the tsdf weights to the sensor weighting head- only works for 5layer model now!
   output_scale: 0.12
   fixed: True
-  erosion: False 
   tanh_weight: True
   inverted_weight: False # when tanh_weight is true, we make 0 to 1 and 1 to 0. Only relevant when weights_to_weight_head is true
   MLP_MODEL:
@@ -123,6 +121,11 @@ TRAINING:
   n_epochs: 1000
   gradient_clipping: True
 TESTING:
+  visualize_features_and_proxy: True
+  routedfusion_nn: False
+  routedfusion_nn_model: 211009-101812 # specify from what tsdf fusion model (or SenFuNet model) to use the weight grids
+  use_outlier_filter: True
+  visualize_sensor_weighting: True
   test_batch_size: 1
   test_shuffle: False
   pretrain_filtering_net: False

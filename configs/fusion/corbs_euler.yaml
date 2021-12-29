@@ -15,7 +15,6 @@ FUSION_MODEL:
   confidence: False
   n_empty_space_voting: 10
   n_empty_space_voting_behind: 10
-  with_peek: False
   max_weight: 500
 FEATURE_MODEL:
   fixed: False
@@ -35,7 +34,6 @@ FEATURE_MODEL:
 TRANSLATION_MODEL:
   fixed: False
   train_on_border_voxels: False
-  erosion: False
   neighborhood: 5 # side length of voxel neighborhood cube, needs to be an odd number
   count: absolute
   superresolve: False
@@ -62,12 +60,6 @@ FILTERING_MODEL:
   train_on_border_voxels: False
   attend_to_uninit: False
   attend_to_uninit_conditioned: False
-  erosion: False # faq hur blir det mer erosion med neighborhood 7 som input...? I need to make the tail subtraction
-  # more aggressive. Now it is 2, but I need to make it 3. The image erosion should be fine since it is 6 now. But what 
-  # about during validation? I would ideally have to erode 3 times in order to get rid of those outliers... I cannot afford that.
-  # The only solutions is to make the tail longer and pad more if that is required or hope that the filtering network can handle it with 
-  # only 1 erosion step. Needs more investigation. Since we extract a larger grid and predict for a smaller one, we actually will not include the tsdf 
-  # values of those uninit voxels at the border so we are still safe with one erosion, but it might make the predictions fukked, I am not sure.
   sensor_label: False
   neighborhood: 5 # side length of voxel neighborhood cube, needs to be an odd number (this is the input size)
   neighborhood_out: 3
