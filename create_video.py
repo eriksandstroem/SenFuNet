@@ -98,7 +98,7 @@ def test_fusion(config, scene):
 
     sensors = config.DATA.input
 
-    save_sensor = "fused"  # or 'stereo' or 'fused'
+    save_sensor = "fused"  # or sensor name or 'fused', 'weighting'
 
     # define output dir
     model = config.TESTING.fusion_model_path.split("/")[-3]
@@ -178,9 +178,7 @@ def test_fusion(config, scene):
 
             def custom_draw_geometry_with_camera_trajectory(mesh):
                 custom_draw_geometry_with_camera_trajectory.index = -1
-                custom_draw_geometry_with_camera_trajectory.trajectory = (
-                    trajectory  # o3d.io.read_pinhole_camera_trajectory('traj.json')
-                )
+                custom_draw_geometry_with_camera_trajectory.trajectory = trajectory
                 custom_draw_geometry_with_camera_trajectory.vis = (
                     o3d.visualization.Visualizer()
                 )
@@ -209,13 +207,8 @@ def test_fusion(config, scene):
 
                     glb.index = glb.index + 1
                     if glb.index < len(glb.trajectory.parameters):
-                        # Here is where I should load the fixed camera view, or simply remove this/only run ones perhaps
+                        # load fixed camera view
                         ctr.convert_from_pinhole_camera_parameters(fixed_camera)
-                        # input()
-                        # camera = o3d.geometry.LineSet()
-                        # camera = camera.create_camera_visualization(300, 300, glb.trajectory.parameters[0].intrinsic.intrinsic_matrix,
-                        #         glb.trajectory.parameters[0].extrinsic, scale=0.25)
-                        # vis.add_geometry(camera)
                     else:
                         custom_draw_geometry_with_camera_trajectory.vis.register_animation_callback(
                             None
@@ -226,12 +219,7 @@ def test_fusion(config, scene):
                 vis = custom_draw_geometry_with_camera_trajectory.vis
                 vis.create_window(width=512, height=512, visible=False)
                 vis.add_geometry(mesh)
-                # here is where I want to create a geometry camera and add this
-                # lineset geometry to the vis object. But no, that cannot be it,
-                # since I want to load another geometry each time. Check
-                # how davide did it! But yes, since the trajectory only contains one
-                # camera, then it works! So I should pick the same camera as is in the
-                # trajectory.parameters at the first index all the time.
+
                 camera = o3d.geometry.LineSet()
                 camera = camera.create_camera_visualization(
                     300,
@@ -248,13 +236,15 @@ def test_fusion(config, scene):
             custom_draw_geometry_with_camera_trajectory(mesh)
 
     # create video of the rendered images
-    # os.system('ffmpeg -framerate 30 -i ' + output_folder + '/%05d_' + save_sensor + '.png -vcodec libx264 -preset veryslow -c:a libmp3lame -r 15 ' + output_folder + '.mp4')
-
-    # if save_sensor == 'fused':
-    #     os.system('ffmpeg -framerate 30 -i ' + output_folder + '/%05d_' + save_sensor + '_sensor_weighting.png -vcodec libx264 -preset veryslow -c:a libmp3lame -r 15 ' + output_folder + '.mp4')
-
-    # remove the images folder
-    # os.system('rm -r ' + output_folder)
+    os.system(
+        "ffmpeg -framerate 30 -i "
+        + output_folder
+        + "/%05d_"
+        + save_sensor
+        + ".png -vcodec libx264 -preset veryslow -c:a libmp3lame -r 15 "
+        + output_folder
+        + ".mp4"
+    )
 
 
 def get_mesh(save_sensor, database, transform, voxel_size, scene, truncation):
@@ -291,7 +281,7 @@ def get_mesh(save_sensor, database, transform, voxel_size, scene, truncation):
         volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
 
     mesh = volume.extract_triangle_mesh()
-    # mesh = o3d.io.read_triangle_mesh('/cluster/work/cvl/esandstroem/data/ground_truth_data/standard_truncation_0.1/copyroom.ply')
+
     # add vertex coloring
     mesh.paint_uniform_color(np.array([0.6, 0.6, 0.6]))
 
@@ -374,8 +364,7 @@ def get_mesh_weighting(database, transform, sensors, voxel_size, scene, truncati
     # print((vals == -1).sum()) # this sum should always be zero when we subtract half a voxel size to get to the voxel
     # coordinate space.
     colors[vals == -1] = [0, 1, 0]  # make all uninitialized voxels green
-    # print(np.asarray(mesh.vertex_colors).shape)
-    # print(colors.shape)
+
     sensor_weighting_mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
 
     sensor_weighting_mesh.transform(transform)
@@ -415,13 +404,6 @@ def get_mesh_fused(database, transform, sensors, voxel_size, scene, truncation):
         if sensor_ == sensors[0]:
             rem_indices = torch.logical_and(only_sensor_mask, sensor_weighting < 0.5)
         else:
-            # before I fixed the bug always ended up here when I had tof and stereo as sensors
-            # but this would mean that for the tof sensor I removed those indices
-            # if alpha was larger than 0.5 which it almost always is. This means that
-            # essentially all (cannot be 100 % sure) voxels where we only integrated
-            # tof, was removed. Since the histogram is essentially does not have
-            # any voxels with trust less than 0.5, we also removed all alone stereo voxels
-            # so at the end we end up with a mask very similar to the and_mask
             rem_indices = torch.logical_and(only_sensor_mask, sensor_weighting > 0.5)
 
         mesh_mask[rem_indices] = 0

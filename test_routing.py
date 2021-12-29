@@ -160,9 +160,7 @@ if __name__ == "__main__":
     if args["config"]:
         config = load_config(args["config"])
     else:
-        raise ValueError(
-            "Missing configuration: Please either specify config or experiment."
-        )
+        raise ValueError("Missing configuration: Please specify config.")
 
     # train
     test(config)

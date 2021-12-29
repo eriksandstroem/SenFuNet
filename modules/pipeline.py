@@ -34,7 +34,7 @@ class Pipeline(torch.nn.Module):
         if self.filter_pipeline is not None:
             filtered_output = self.filter_pipeline.filter_training(
                 fused_output, database, epoch, frame, scene_id, batch["sensor"], device
-            )  # CHANGE
+            )
         else:
             filtered_output = None
 
@@ -76,7 +76,6 @@ class Pipeline(torch.nn.Module):
                 batch["fusionNet"] = sensor_  # used to be able to train routedfusion
                 self.fuse_pipeline.fuse(batch, database, device)
             else:
-                # print(batch['frame_id'])
                 for sensor_ in sensors:
 
                     batch["depth"] = batch[sensor_ + "_depth"]
@@ -99,7 +98,7 @@ class Pipeline(torch.nn.Module):
 
             # if k == 5:
             #     break # debug
-        # only apply the outlier filter during validation. For testing, we need the original grids to evaluate the single sensor reconstructions
+
         if self.filter_pipeline is not None:
             # run filtering network on all voxels which have a non-zero weight
             for scene in database.filtered.keys():
@@ -168,68 +167,6 @@ class Pipeline(torch.nn.Module):
                     out=np.zeros_like(weight_sum),
                     where=weight_sum != 0.0,
                 )
-
-        elif (
-            self.config.FILTERING_MODEL.model == "tsdf_plain_average_fusion"
-        ):  # simple average fusion
-            for scene in val_database.filtered.keys():
-                for sensor_ in sensors:
-                    val_database.filtered[scene].volume += val_database.tsdf[sensor_][
-                        scene
-                    ].volume
-                val_database.filtered[scene].volume /= len(
-                    sensors
-                )  # this can shift the outliers more i.e. we take the average
-                # even if only one sensor integrates compared to the middle fusion case where we don't consider
-                # uninitialized voxels in the average. But we cannot get rid of the outliers though....
-
-                val_database.sensor_weighting[scene][:, :, :] = 0.5
-
-        elif (
-            self.config.FILTERING_MODEL.model == "tsdf_average_fusion"
-        ):  # simple average fusion
-            for scene in val_database.filtered.keys():
-                weight_mask = np.zeros_like(val_database.filtered[scene].volume)
-                for sensor_ in sensors:
-                    val_database.filtered[scene].volume += val_database.tsdf[sensor_][
-                        scene
-                    ].volume
-                    weight_mask += val_database.fusion_weights[sensor_][scene] > 0
-
-                val_database.filtered[scene].volume = np.divide(
-                    val_database.filtered[scene].volume,
-                    weight_mask,
-                    out=np.zeros_like(weight_mask),
-                    where=weight_mask != 0.0,
-                )
-
-                # here I don't divide by 2 everywhere, but 1 where we only have 1 sensor integration
-                val_database.sensor_weighting[scene][
-                    :, :, :
-                ] = 0.5  # this is not correct. It should be 0.5 and 0 and 1, but I don't care about this now
-
-        elif (
-            self.config.FILTERING_MODEL.model == "tsdf_plain_average_andmask_fusion"
-        ):  # simple average fusion
-            for scene in val_database.filtered.keys():
-                and_mask = np.ones_like(val_database.filtered[scene].volume)
-                for sensor_ in sensors:
-                    and_mask = np.logical_and(
-                        and_mask, val_database.fusion_weights[sensor_][scene] > 0
-                    )
-                    val_database.filtered[scene].volume += val_database.tsdf[sensor_][
-                        scene
-                    ].volume
-                val_database.filtered[scene].volume /= len(
-                    sensors
-                )  # this can shift the outliers more i.e. we take the average
-                # even if only one sensor integrates compared to the middle fusion case where we don't consider
-                # uninitialized voxels in the average. But we cannot get rid of the outliers though....
-                for sensor_ in sensors:
-                    val_database.fusion_weights[sensor_][scene] = and_mask.astype(
-                        np.float32
-                    )
-                val_database.sensor_weighting[scene][:, :, :] = 0.5
 
     def test_step(
         self, batch, database, sensors, device
@@ -312,7 +249,6 @@ class Pipeline(torch.nn.Module):
                 batch["fusionNet"] = sensor_  # used to be able to train routedfusion
                 self.fuse_pipeline.fuse(batch, val_database, device)
             else:
-                # print(batch['frame_id'])
                 for sensor_ in sensors:
 
                     batch["depth"] = batch[sensor_ + "_depth"]
@@ -354,12 +290,10 @@ class Pipeline(torch.nn.Module):
                     sensor_mask = dict()
 
                     for sensor_ in self.config.DATA.input:
-                        # print(sensor_)
                         weights = val_database.fusion_weights[sensor_][scene]
                         mask = np.logical_or(mask, weights > 0)
                         and_mask = np.logical_and(and_mask, weights > 0)
                         sensor_mask[sensor_] = weights > 0
-                        # break
 
                     # load weighting sensor grid
                     if self.config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
@@ -379,18 +313,10 @@ class Pipeline(torch.nn.Module):
                                 only_sensor_mask, sensor_weighting < 0.5
                             )
                         else:
-                            # before I fixed the bug always ended up here when I had tof and stereo as sensors
-                            # but this would mean that for the tof sensor I removed those indices
-                            # if alpha was larger than 0.5 which it almost always is. This means that
-                            # essentially all (cannot be 100 % sure) voxels where we only integrated
-                            # tof, was removed. Since the histogram is essentially does not have
-                            # any voxels with trust less than 0.5, we also removed all alone stereo voxels
-                            # so at the end we end up with a mask very similar to the and_mask
                             rem_indices = np.logical_and(
                                 only_sensor_mask, sensor_weighting > 0.5
                             )
 
-                        # rem_indices = rem_indices.astype(dtype=bool)
                         val_database[scene]["weights_" + sensor_][rem_indices] = 0
 
     def test_step_video(

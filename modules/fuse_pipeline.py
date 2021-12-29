@@ -141,7 +141,7 @@ class Fuse_Pipeline(torch.nn.Module):
             else:
                 tsdf_pred = self._fusion_network[fusionNet].forward(input_)
         else:  # TSDF Fusion
-             tsdf_pred = torch.zeros(
+            tsdf_pred = torch.zeros(
                 (1, extraction_band, input_.shape[2], input_.shape[3])
             )
             temp = torch.linspace(
@@ -162,9 +162,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
 
-        feat_pred = feat_pred["feature"].permute(
-            0, 2, 3, 1
-        )
+        feat_pred = feat_pred["feature"].permute(0, 2, 3, 1)
 
         # # save feature maps
         # for i in range(feat_pred.shape[-1]):
@@ -248,9 +246,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         if rgb is not None:
             rgb = rgb.unsqueeze(-1)
-            rgb = rgb.permute(
-                3, 1, 2, 0
-            )  # never use view here 
+            rgb = rgb.permute(3, 1, 2, 0)  # never use view here
 
         feature_input = dict()
         feature_input[sensor] = torch.unsqueeze(frame, -1)
@@ -262,7 +258,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         if confidence is not None and self.config.FEATURE_MODEL.confidence:
             confidence = torch.unsqueeze(confidence, -1)
-  
+
             feature_input[sensor] = torch.cat(
                 (feature_input[sensor], confidence), dim=3
             )
@@ -365,13 +361,9 @@ class Fuse_Pipeline(torch.nn.Module):
                 #     frame = batch[batch['sensor'] + '_depth'].squeeze_(1).to(device)
                 #     confidence = None
                 # else:
-                depth, conf = self._routing(
-                    batch
-                )  
+                depth, conf = self._routing(batch)
                 frame = depth.squeeze_(1)
-                confidence = conf.squeeze_(
-                    1
-                )
+                confidence = conf.squeeze_(1)
 
         else:
             frame = batch["depth"].squeeze_(1)
@@ -509,9 +501,7 @@ class Fuse_Pipeline(torch.nn.Module):
                 #     frame = batch[batch['sensor'] + '_depth'].squeeze_(1).to(device)
                 #     confidence = None
                 # else:
-                depth, conf = self._routing(
-                    batch
-                ) 
+                depth, conf = self._routing(batch)
                 frame = depth.squeeze_(1)
                 confidence = conf  # Need to implement this if I want to use it again
 

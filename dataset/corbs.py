@@ -64,15 +64,6 @@ class CoRBS(Dataset):
 
         self.__init_dataset()
 
-        # Not needed for corbs
-        # if self.mode == 'val':
-        #     keys = list(self.poses_matched.keys())
-        #     keys = keys[::4]
-        #     self.poses_matched_tmp = dict()
-        #     for key in keys:
-        #         self.poses_matched_tmp[key] = self.poses_matched[key]
-        #     self.poses_matched = self.poses_matched_tmp
-
     def __init_dataset(self):
 
         # read paths to data from scene list file

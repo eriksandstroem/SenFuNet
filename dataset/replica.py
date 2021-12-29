@@ -18,10 +18,9 @@ import h5py
 class Replica(Dataset):
     def __init__(self, config_data):
         self.root_dir = os.getenv(config_data.root_dir)
-        # if self.root_dir:
-        #     self.root_dir += '/cluster/work/cvl/esandstroem/data/replica/manual' # when training on local scratch
-        # # os.getenv returns none when the input does not exist. When
-        # # it returns none, we want to train on the work folder
+
+        # os.getenv returns none when the input does not exist. When
+        # it returns none, we want to train on the work folder
         if not self.root_dir:
             self.root_dir = config_data.root_dir
 
@@ -112,7 +111,7 @@ class Replica(Dataset):
                     for file in files:
                         self.depth_images[sensor_].append(file)
 
-        # perhaps it will be important to order the frames for testing and training the fusion network.
+        # sort frame order
         for sensor_ in self.depth_images.keys():
             self.depth_images[sensor_] = sorted(
                 self.depth_images[sensor_],
@@ -213,10 +212,6 @@ class Replica(Dataset):
 
     def __getitem__(self, item):
 
-        # there is something strane if you print the item and frame here s.t. I don't print them in order
-        # but when I print the frame id in the test function in the pipeline.py everything is in order.
-        # I think the issue is with the printing and the need to flush.
-
         sample = dict()
         sample["item_id"] = item
 
@@ -271,9 +266,7 @@ class Replica(Dataset):
 
             sample[sensor_ + "_depth"] = np.asarray(depth)
 
-            if (
-                sensor_ == "stereo"
-            ):  # perhaps remove this since this is only for the psmnet stereo sensor and not for sgm stereo
+            if sensor_.endswith("stereo"):
                 # load right rgb image
                 file = self.color_images[item]
                 file = (
@@ -461,10 +454,6 @@ class Replica(Dataset):
         idx_right = idx_right[idx_x_valid, :]
         # remove the same indices amongst left indices
         idx_left = idx_left[idx_x_valid, :]
-
-        # right_valid = np.zeros((512, 512, 3))
-        # right_valid[idx_right[:, 0], idx_right[:, 1], :] = right_rgb[idx_right[:, 0], idx_right[:, 1], :]
-        # cv2.imwrite('testrimg.png', right_valid)
 
         # warp right image to left image
         right_warp = np.zeros((size, size, 3)).astype(np.float32)

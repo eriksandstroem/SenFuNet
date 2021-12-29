@@ -118,8 +118,7 @@ def test_fusion(config):
         # load trained routing model into parameters
         assert config.ROUTING.do is True
         routing_checkpoint = torch.load(config.TESTING.routing_model_path)
-        # print(routing_checkpoint)
-        # Keep line below until I see that the new loading function works.
+
         pipeline.fuse_pipeline._routing_network.load_state_dict(
             routing_checkpoint["pipeline_state_dict"]
         )

@@ -24,7 +24,7 @@ def count_parameters(model):
 
 def test_fusion(config):
     # define output dir
-    test_path = "/test_no_carving"
+    test_path = "/test"
     test_dir = (
         config.SETTINGS.experiment_path
         + "/"

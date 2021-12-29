@@ -107,10 +107,6 @@ class Scene3D(Dataset):
                 key=lambda x: os.path.splitext(x.split("/")[-1])[0],
             )
 
-        # downsample dataset size to be comparable to neuralfusion
-        # for sensor_ in self.depth_images.keys():
-        #     self.depth_images[sensor_]  = self.depth_images[sensor_][::10]
-
     def _load_color(self):
         self.color_images = []
 
@@ -133,9 +129,6 @@ class Scene3D(Dataset):
         self.color_images = sorted(
             self.color_images, key=lambda x: os.path.splitext(x.split("/")[-1])[0]
         )
-
-        # downsample dataset size to be comparable to neuralfusion
-        # self.color_images = self.color_images[::10]
 
     def _load_cameras(self):
         def grouper_it(n, iterable):
@@ -179,9 +172,7 @@ class Scene3D(Dataset):
                             extrinsics[1, :] = second
                             extrinsics[2, :] = third
                             extrinsics[3, :] = fourth
-                            # I should not need to invert since the extrinsics are
-                            # from camera to world and that is what the extractor expects
-                            # extrinsics = np.linalg.inv(extrinsics)
+
                             self.cameras[
                                 line[0].split("/")[0] + "/" + frame_id
                             ] = extrinsics
@@ -194,10 +185,6 @@ class Scene3D(Dataset):
         return len(self.color_images)
 
     def __getitem__(self, item):
-
-        # there is something strane if you print the item and frame here s.t. I don't print them in order
-        # but when I print the frame id in the test function in the pipeline.py everything is in order.
-        # I think the issue is with the printing and the need to flush.
 
         sample = dict()
         sample["item_id"] = item

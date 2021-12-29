@@ -29,9 +29,6 @@ class EncoderBlock(nn.Module):
             )
 
     def forward(self, x):
-        # print('input enc: ', x.isnan().sum())
-        # print(self.block[0].weight)
-        # print('output enc: ', self.block(x).isnan().sum())
         return self.block(x)
 
 
@@ -78,7 +75,7 @@ class FeatureNet(nn.Module):
         self.n_features = config.n_features - config.append_depth
         if (
             self.n_features == 0
-        ):  # then we don't use the feature net at all, but to stop error we set it to one
+        ):  # then we don't use the feature net at all, but to stop errors being raised we set it to one TODO: do not create feature net at all if we specify that we don't use learned features.
             self.n_features = 1
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
@@ -216,11 +213,9 @@ class FeatureNet(nn.Module):
 
         for enc in self.encoder:
             xmid = enc(x)
-            # print(xmid)
             if xmid.isnan().sum() > 0 or xmid.isinf().sum() > 0:
                 print("xmid nan: ", xmid.isnan().sum())
                 print("xmid inf: ", xmid.isinf().sum())
-            # print('enc: ', xmid.isnan().sum())
             x = torch.cat([x, xmid], dim=1)
 
         # decoding
@@ -229,9 +224,6 @@ class FeatureNet(nn.Module):
 
         if self.normalize:
             x = normalize(x, p=2, dim=1)
-
-        # line below only for specific test
-        # x = torch.zeros_like(x)
 
         if self.append_depth:
             x = torch.cat([x, d], dim=1)
@@ -258,7 +250,7 @@ class FeatureResNet(nn.Module):
         self.n_features = config.n_features - config.append_depth
         if (
             self.n_features == 0
-        ):  # then we don't use the feature net at all, but to stop error we set it to one
+        ):  # then we don't use the feature net at all, but to stop errors being raised we set it to one TODO: do not create feature net at all if we specify that we don't use learned features.
             self.n_features = 1
         self.normalize = config.normalize
         self.w_rgb = config.w_rgb
@@ -287,7 +279,9 @@ class FeatureResNet(nn.Module):
                 + 2 * int(self.w_intensity_gradient)
                 + int(self.confidence)
             )
-        elif sensor == "stereo":
+        elif (
+            sensor == "stereo"
+        ):  # I did not feed rgb to sgm_stereo. This line should have been sensor.endswith("stereo"):
             n_channels_first = (
                 config.depth
                 + 3 * int(self.w_rgb)
@@ -342,7 +336,7 @@ class FeatureResNet(nn.Module):
             if xmid.isnan().sum() > 0 or xmid.isinf().sum() > 0:
                 print("xmid nan: ", xmid.isnan().sum())
                 print("xmid inf: ", xmid.isinf().sum())
-            # print('enc: ', xmid.isnan().sum())
+
             if k > 0:
                 x = x + xmid
             else:

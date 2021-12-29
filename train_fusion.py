@@ -84,7 +84,7 @@ def train_fusion(args):
     else:
         config.FEATURE_MODEL.n_features = (
             config.FEATURE_MODEL.append_depth + 3 * config.FEATURE_MODEL.w_rgb
-        )  # 1 for label encoding of noise in gaussian threshold data
+        )
 
     # get database
     # get train database
@@ -124,8 +124,7 @@ def train_fusion(args):
     if config.ROUTING.do:
         if config.FILTERING_MODEL.model == "tsdf_early_fusion":
             routing_checkpoint = torch.load(config.TESTING.routing_model_path)
-            # print(routing_checkpoint)
-            # Keep line below until I see that the new loading function works.
+
             pipeline.fuse_pipeline._routing_network.load_state_dict(
                 routing_checkpoint["pipeline_state_dict"]
             )
@@ -220,8 +219,7 @@ def train_fusion(args):
     best_iou = dict()
     is_best = dict()
     for sensor in config.DATA.input:
-        best_iou[sensor] = 0.0  # USE THIS FOR REAL TRAINING
-        # best_iou[sensor] = 10000 # USE THIS FOR FEATURE NETWORK TRAINING
+        best_iou[sensor] = 0.0
         is_best[sensor] = False
 
     # copy sensor list so that we can shuffle the sensors but still have the same
@@ -234,7 +232,7 @@ def train_fusion(args):
             "Training epoch {}/{}".format(epoch, config.TRAINING.n_epochs), mode="train"
         )
 
-        pipeline.train()  # need to change! Check so that gradients can pass!
+        pipeline.train()
 
         if config.ROUTING.do:
             pipeline.fuse_pipeline._routing_network.eval()
@@ -250,8 +248,7 @@ def train_fusion(args):
         train_database.reset()
         val_database.reset()
 
-        # I want to handle the plotting of training data in a more elegant way - probably best to include this
-        # functionality in the workspace so that it can do the writing of the appropriate properties
+        # TODO: include logging variables in workspace
         divide = 0
         train_loss = 0
         grad_norm_alpha_net = 0
@@ -284,10 +281,6 @@ def train_fusion(args):
                     )
                     train_database.reset(batch["frame_id"][0].split("/")[0])
 
-            # take care of the fusion strategy here i.e. loop through the 3 integrations randomly by adding the "mask" and depth
-            # as keys in the batch. But I also need knowledge of sensor label for the routing network. I create the 'routing_net'
-            # and 'depth' keys and pass that to the fuse_training function in three steps. Also pass the routing threshold as a
-            # key.
             if config.DATA.collaborative_reconstruction:
                 if (
                     math.ceil(
@@ -318,7 +311,6 @@ def train_fusion(args):
                 ):  # output is None when no valid indices were found for the filtering net within the random
                     # bbox within the bounding volume of the integrated indices
                     print("output None from pipeline")
-                    # break
                     continue
 
                 if output == "save_and_exit":
@@ -332,9 +324,6 @@ def train_fusion(args):
 
                 output = criterion(output)
 
-                # loss = criterion(output['tsdf_filtered_grid'], output['tsdf_target_grid'])
-                # if loss.grad_fn: # this is needed because when the mono mask filters out all pixels, this results in a failure
-                # print('bef backward: ', torch.cuda.memory_allocated(device))
                 if output["loss"] is not None:
                     divide += 1
                     train_loss += output[
@@ -352,11 +341,7 @@ def train_fusion(args):
                         l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
 
                 if output["loss"] is not None:
-                    # print('4m: ', torch.cuda.max_memory_allocated(device=device))
-                    # print('4: ', torch.cuda.memory_allocated(device=device))
                     output["loss"].backward()
-                    # print('5m: ', torch.cuda.max_memory_allocated(device=device))
-                    # print('5: ', torch.cuda.memory_allocated(device=device))
                 # break
             else:
                 # fusion pipeline
@@ -400,9 +385,6 @@ def train_fusion(args):
 
                     output = criterion(output)
 
-                    # loss = criterion(output['tsdf_filtered_grid'], output['tsdf_target_grid'])
-                    # if loss.grad_fn: # this is needed because when the mono mask filters out all pixels, this results in a failure
-                    # print('bef backward: ', torch.cuda.memory_allocated(device))
                     if output["loss"] is not None:
                         divide += 1
                         train_loss += output[
@@ -420,19 +402,13 @@ def train_fusion(args):
                             l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
 
                     if output["loss"] is not None:
-                        # print('4m: ', torch.cuda.max_memory_allocated(device=device))
-                        # print('4: ', torch.cuda.memory_allocated(device=device))
                         output["loss"].backward()
-                        # print('5m: ', torch.cuda.max_memory_allocated(device=device))
-                        # print('5: ', torch.cuda.memory_allocated(device=device))
                     # break
 
             del batch
 
             for name, param in pipeline.named_parameters():
                 if param.grad is not None:
-                    # print(name)
-                    # print(param.grad)
                     if (
                         (i + 1) % config.OPTIMIZATION.accumulation_steps == 0
                         or i == n_batches - 1
@@ -449,40 +425,19 @@ def train_fusion(args):
                             )
                         else:
                             grad_norm_alpha_net += torch.norm(param.grad)
-                        # print(torch.norm(param.grad))
-                    # optimizer.zero_grad() # REMOVE LATER!
                     val_norm += torch.norm(param)
-                    # print('grad norm: ', torch.norm(param.grad))
-                    # print('val norm: ' , torch.norm(param))
-                # if name.startswith('fuse_pipeline._feature'):
-
-                # if param.isnan().sum() > 0:
-                #     print(name)
-                #     print(param)
-                # print('isnan sum: ', param.isnan().sum())
-                # if param.grad is not None:
-                #     print(name)
-                #     print(param.grad)
 
                 # Note, gradients that have been not None at one time, will never
                 # be none again since the zero_Grad option just makes them zero again.
                 # In pytorch 1.7.1 there is the option to set the gradients to none again
 
-                # print(name, param.grad)
-
             if (i + 1) % config.SETTINGS.log_freq == 0:
-                print("log!")
-                print("i ", i)
-                #
-                # TODO: split plotting into tof and stereo
-                #     divide = 2*config.SETTINGS.log_freq
-                # else:
+
                 train_loss /= divide
                 grad_norm_alpha_net /= divide
 
                 val_norm /= divide
-                # print('averaged grad norm: ', grad_norm)
-                # print('averaged val norm: ', val_norm)
+
                 l1_interm /= divide
                 l1_grid /= divide
                 for sensor_ in config.DATA.input:
@@ -502,9 +457,7 @@ def train_fusion(args):
                 workspace.writer.add_scalar(
                     "Train/val_norm", val_norm, global_step=i + 1 + epoch * n_batches
                 )
-                # workspace.writer.add_scalar('Train/lr_filt', get_lr(optimizer_filt), global_step=i + 1 + epoch*n_batches)
-                # workspace.writer.add_scalar('Train/lr_fusion', get_lr(optimizer_fusion), global_step=i + 1 + epoch*n_batches)
-                # workspace.writer.add_scalar('Train/loss_coeff', loss_coeff(i), global_step=i + 1 + epoch*n_batches)
+
                 workspace.writer.add_scalar(
                     "Train/l1_interm", l1_interm, global_step=i + 1 + epoch * n_batches
                 )
@@ -570,9 +523,7 @@ def train_fusion(args):
                             ):
                                 if torch.norm(param.grad) == 0:
                                     print("gradient norm is zero for: ", name)
-                                    # print(torch.norm(param.grad))
                                     param.grad = None
-                                    # print(param.grad)
 
                     optimizer_filt.step()
                     scheduler_filt.step()
@@ -587,9 +538,7 @@ def train_fusion(args):
                 (i + 1) % config.SETTINGS.eval_freq == 0
                 or i == n_batches - 1
                 or (i == 2 and epoch == 0)
-            ):  # evaluate after 20 steps wince then we have integrated at least one frame for each scene
-                # if epoch % 2 == 0 and i == 0:
-                # print(i)
+            ):
                 val_database.reset()
                 # zero out all grads
                 if (
@@ -612,7 +561,6 @@ def train_fusion(args):
                     device,
                 )
 
-                # val_database.filter(value=1.) # the more frames you integrate, the higher can the value be
                 val_eval, val_eval_fused = val_database.evaluate(
                     mode="val", workspace=workspace
                 )
@@ -689,10 +637,6 @@ def train_fusion(args):
 
                     else:
                         is_best[sensor] = False
-
-                # save models
-                # train_database.save_to_workspace(workspace, mode='latest_train', save_mode=config.SETTINGS.save_mode)
-                # val_database.save_to_workspace(workspace, is_best, is_best_tof, is_best_stereo, save_mode=config.SETTINGS.save_mode)
 
                 # save alpha histogram
                 workspace.save_alpha_histogram(val_database, config.DATA.input, epoch)
