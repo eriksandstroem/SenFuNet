@@ -9,39 +9,24 @@ The code has been tested with Python 3.8.5
 
 ## Installation
 
-1. Clone the repository to your local directory: <pre><code>git clone https://github.com/tfy14esa/evaluate_3d_reconstruction_lib.git</code></pre>
-2. Open the file <pre><code>evaluate_3d_reconstruction/evaluate_3d_reconstruction/config.py</code></pre> and revise the paths to where you store the ground truth meshes and the transformation matrices. Then open the file <pre><code>evaluate_3d_reconstruction/evaluate_3d_reconstruction/evaluate_3d_reconstruction.py</code></pre> and revise the shebang at the top to point to the python executable of your virtual environment (this is useful if you want to execute the evaluation script directly from the command line (see below)).
-2. Activate your virtual environment
-3. Enter the root folder of the library: <pre><code>cd evaluate_3d_reconstruction</code></pre>
-4. Install the library: <pre><code>pip install .</code></pre>
+1. Clone the repository and submodules to your local directory: <pre><code>git clone --recursive https://github.com/tfy14esa/SenFuNet.git</code></pre>
+2. Create a python virtual environment: <pre><code>python -m venv senfunet_env</code></pre>
+3. Activate the virtual environment: <pre><code>source senfunet_env/bin/activate</code></pre>
+4. Install the dependencies: <pre><code>pip install --ignore-installed -r requirements.txt</code></pre>
+5. You may need to add the venv.patch file to include it and run bash venv.patch and place this file in the bin of the virtual environment. Ask Samuel if needed.
  
-### Usage
+### Data Preparation
+Put script of how to generate the MVS depth data here for scene3d and corbs, but not much more info.
 
-The main function of the library is 
-<pre><code>def run_evaluation(pred_ply, path_to_pred_ply, scene, transformation=None):
-    """
-    Calculates the F-score from a predicted mesh to a reference mesh. Generates
-    a directory and fills this numerical and mesh results.
+For replica: put some data on biwimaster01
+/usr/biwimaster01/data-biwi01/$USERNAME perhaps. Wait for Kris's answer.
 
-    Args:
-        pred_ply: string object to denote the name of predicted mesh (as a .ply file)
-        scene: string object to denote the scene name (a corresponding ground 
-                    truth .ply file with the name "scene + .ply" needs to exist)
-        path_to_pred_ply: string object to denote the full path to the pred_ply file
-        transformation: boolean to denote if to use the available transformation matrix for
-                    the ground truth mesh.
-    Returns:
-        None
-    """
-</code></pre>
+### Training
+Describe 
 
-The main function can be called in two principled ways:
+List the execution script in pure python form or as a batch job.
+### Testing
+Describe names of models that are available. Create folder with trained models with appropriate names. List the execution script in pure python form or as a batch job.
 
-1. As an executable directly from the command line as:
-<pre><code>evaluate_3d_reconstruction.py pred_ply scene transformation</code></pre>
-,or
-<pre><code>evaluate_3d_reconstruction.py pred_ply scene</code></pre>
-if the predicted and ground truth meshes are already aligned. To achieve this, run <pre><code>chmod +x evaluate_3d_reconstruction.py</code></pre> and export the path to the script in your bashrc-file i.e. add similar to the following to your bashrc: <pre><code># Export path to my python evaluate 3d reconstruction script
-export PATH="/cluster/project/cvl/esandstroem/src/late_fusion_3dconv/deps/evaluate_3d_reconstruction/evaluate_3d_reconstruction:$PATH"</code></pre>
-
-2. As a normal function in other python scripts. To achieve this, simply import the function using <pre><code>from evaluate_3d_reconstruction import run_evaluation</code></pre>
+### Config Options
+List some common config options that the use may want to change.
