@@ -88,7 +88,7 @@ TESTING:
   visualize_sensor_weighting: False
   test_batch_size: 1
   test_shuffle: False
-  fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211018-111054/model/best.pth.tar # used for conv3d, routedfusion as filtering models
+  fusion_model_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion/tof_mvs_scene3d/model/best.pth.tar # used for conv3d, routedfusion as filtering models
   weight_thresholds: [0.0]
 ROUTING:
   do: False # needs to be false at all times
