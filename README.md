@@ -19,8 +19,9 @@ The code has been tested with Python 3.8.5
 1. Clone the repository and submodules to your local directory: <pre><code>git clone --recursive https://github.com/tfy14esa/SenFuNet.git</code></pre>
 2. Create a python virtual environment: <pre><code>python -m venv senfunet_env</code></pre>
 3. Activate the virtual environment: <pre><code>source senfunet_env/bin/activate</code></pre>
-4. Install the dependencies: <pre><code>pip install --ignore-installed -r requirements.txt</code></pre>
-5. TODO: You may need to add the venv.patch file to include it and run bash venv.patch and place this file in the bin of the virtual environment. Ask Samuel if needed. Check riot how the file is executed.
+4. Open the requirements.txt and change the path to the submodule evaluate-3d-reconstruction according to your file structure.
+5. Install the dependencies: <pre><code>pip install --ignore-installed -r requirements.txt</code></pre>
+6. TODO: You may need to add the venv.patch file to include it and run bash venv.patch and place this file in the bin of the virtual environment. Ask Samuel if needed. Check riot how the file is executed.
  
 ## Data Preparation
 For replica: put some data on biwimaster01
@@ -144,11 +145,17 @@ The test script creates the output 16-bit depth images from the routing network 
 TODO: I can create the depth evaluation code as a separete python library and link here.
 
 ## Baseline Methods
-In the event that you want to reproduce our baseline results, we provide the trained models which can be tested directly by modifying the config files.
+In the event that you want to reproduce our baseline results, follow the steps outlined below.
 
 ### Early Fusion
-
+The early fusion baseline is only applicable to the Replica dataset since it requires ground truth depth maps for training. 
+1. Select the appropriate sensor suite i.e. ToF+PSMNet or SGM+PSMNet. Change config variable <pre><code>DATA.input</code></pre> appropriately.
+2. Specify the path to the routing network using the config variable <pre><code>TESTING.routing_model_path</code></pre> For example, the early fusion routing network for ToF+PSMNet fusion is available at ROOT_FOLDER/models/routing/tof_psmnet/model/best.pth.tar
+3. Set <pre><code>TESTING.use_outlier_filter: False</code></pre>
+4. Set <pre><code>FILTERING_MODEL.model: 'tsdf_early_fusion'</code></pre>
+5. Set <pre><code>ROUTING.do: True</code></pre>
+6. Test using the test_fusion.py script with the config as input.
 ### TSDF Fusion
-
+3. Do not use the outlier filter: <pre><code>TESTING.use_outlier_filter: False</code></pre>
 ### RoutedFusion
-
+3. Do not use the outlier filter: <pre><code>TESTING.use_outlier_filter: False</code></pre>
