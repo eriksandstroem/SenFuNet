@@ -73,11 +73,10 @@ TRAINING:
   reset_prob: 0.01 # in percent (used if reset_strategy: True)
   pretrain_filtering_net: False
   pretrain_fusion_net: False # if True, provide a path called pretrain_fusion_SENSORNAME_model_path. Used to load pretrained and/or fixed fusion nets
-  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/stereo/model/best.pth.tar # stereo, proper channels: 211210-174701
-  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar # tof, proper channels: 211210-172500
+  routing_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/stereo/model/best.pth.tar
+  routing_tof_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar
   routing_tof_2_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/tof/model/best.pth.tar
-  routing_sgm_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-095139/model/best.pth.tar # 210919-095139, proper channels: 211210-173928
-  routing_lea_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-100411/model/best.pth.tar 
+  routing_sgm_stereo_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/routing/210919-095139/model/best.pth.tar
   train_batch_size: 1
   train_shuffle: True
   val_batch_size: 1
@@ -88,7 +87,7 @@ TESTING:
   visualize_features_and_proxy: False
   routedfusion_nn: True
   routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the weight grids
-  use_outlier_filter: True
+  use_outlier_filter: True # only true when FILTERING_MODEL.model: '3dconv'
   eval_single_sensors: False # not applicable when evaluating routedfusion
   visualize_sensor_weighting: False
   test_batch_size: 1
@@ -97,7 +96,7 @@ TESTING:
   fusion_model_path: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211014-204024/model/best.pth.tar # used for conv3d, routedfusion as filtering models
   weight_thresholds: [0.0]
 ROUTING:
-  do: False
+  do: False # use routing network
   dont_smooth_where_uncertain: False # if True, replaces the routing output with the input depth if the confidence is below the threshold
   threshold: 0.15 
   intensity_grad: False # feed grayscale image and its gradient to routing network
@@ -115,7 +114,7 @@ OPTIMIZATION:
   weight_decay: 0.00 # rmsprop fusion net
   accumulation_steps: 20 # note that this is normally 8
 DATA:
-  collaborative_reconstruction: False
+  collaborative_reconstruction: False # multi-agent reconstruction
   frames_per_chunk: 100 # used when colaborative_reconstruction: true
   mask_stereo_height: 10 # 35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
   # compared to the color camera of the azure kinect
@@ -131,7 +130,7 @@ DATA:
   max_depth_tof: 12.3 # 3.86 (in meters)
   min_depth: 0.0 # general sensor (in meters)
   max_depth: 12.3 # general sensor (in meters)
-  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual # use TMPDIR for training. Path to data folder
+  root_dir: /cluster/work/cvl/esandstroem/data/replica/manual # use TMPDIR for training using the euler cluster. Path to data folder
   dataset: Replica # dataset
   input: [tof, stereo] # list of sensors to fuse
   target: gt # ground truth depth label
