@@ -143,8 +143,12 @@ The test script creates the output 16-bit depth images from the routing network 
 
 TODO: I can create the depth evaluation code as a separete python library and link here.
 
-TODO: Write testing of baseline methods
+## Baseline Methods
+In the event that you want to reproduce our baseline results, we provide the trained models which can be tested directly by modifying the config files.
 
+### Early Fusion
 
+### TSDF Fusion
 
+### RoutedFusion
 
