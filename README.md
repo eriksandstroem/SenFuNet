@@ -145,17 +145,27 @@ The test script creates the output 16-bit depth images from the routing network 
 TODO: I can create the depth evaluation code as a separete python library and link here.
 
 ## Baseline Methods
-In the event that you want to reproduce our baseline results, follow the steps outlined below.
+In the event that you want to reproduce our baseline results on the Replica dataset, follow the steps outlined below.
 
 ### Early Fusion
 The early fusion baseline is only applicable to the Replica dataset since it requires ground truth depth maps for training. 
 1. Select the appropriate sensor suite i.e. ToF+PSMNet or SGM+PSMNet. Change config variable <pre><code>DATA.input</code></pre> appropriately.
 2. Specify the path to the routing network using the config variable <pre><code>TESTING.routing_model_path</code></pre> For example, the early fusion routing network for ToF+PSMNet fusion is available at ROOT_FOLDER/models/routing/tof_psmnet/model/best.pth.tar
-3. Set <pre><code>TESTING.use_outlier_filter: False</code></pre>
-4. Set <pre><code>FILTERING_MODEL.model: 'tsdf_early_fusion'</code></pre>
-5. Set <pre><code>ROUTING.do: True</code></pre>
+3. Set <pre><code>TESTING.use_outlier_filter: False
+FILTERING_MODEL.model: 'tsdf_early_fusion'
+ROUTING.do: True</code></pre>
 6. Test using the test_fusion.py script with the config as input.
 ### TSDF Fusion
-3. Do not use the outlier filter: <pre><code>TESTING.use_outlier_filter: False</code></pre>
+1. Select the appropriate sensor suite i.e. ToF+PSMNet or SGM+PSMNet. Change config variable <pre><code>DATA.input</code></pre> appropriately.
+2. Set <pre><code>TESTING.use_outlier_filter: False</code></pre>
+3. Set <pre><code>FILTERING_MODEL.model: 'tsdf_middle_fusion'</code></pre>
+4. Test using the test_fusion.py script with the config as input.
 ### RoutedFusion
-3. Do not use the outlier filter: <pre><code>TESTING.use_outlier_filter: False</code></pre>
+1. Select the appropriate sensor suite i.e. ToF+PSMNet or SGM+PSMNet. Change config variable <pre><code>DATA.input</code></pre> appropriately.
+2. Specify the path to the fusion network using the config variable <pre><code>TESTING.fusion_model_path</code></pre> For example, the fusion network for ToF+PSMNet fusion without routing is available at ROOT_FOLDER/models/fusion/tof_psmnet_routedfusion/model/best.pth.tar
+3. Set <pre><code>FUSION_MODEL.use_fusion_net: True 
+FUSION_MODEL.extraction_strategy: 'trilinear_interpolation'
+TESTING.use_outlier_filter: False
+FILTERING_MODEL.model: 'routedfusion'</code></pre>
+4. Note that to avoid excessive outliers from the RoutedFusion model, to produce the mesh from the predicted TSDF grid, we apply the nearest neighbor mask from the nearest neighbor extraction strategy and not the trilinear interpolation strategy. This requires loading a separate weight grid from a model of the same sensor suite but using nearest neighbor extraction. Set the name of the config variable <pre><code>TESTING.routedfusion_nn_model:</code></pre>. Note that this requires testing and saving the grid of this model first.
+5. Test using the test_fusion.py script with the config as input.
