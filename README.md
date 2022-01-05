@@ -34,7 +34,7 @@ Prepare ground truth 3D data
 Note that the user needs the tsdf GT grids and gt meshes. Specify paths in F-score eval config.py
 
 ### Replica
-[**here**](https://data.vision.ee.ethz.ch/esandstroem).
+[**here**](https://data.vision.ee.ethz.ch/esandstroem/testzip.zip).
 ### CoRBS
 [**here**](http://corbs.dfki.uni-kl.de/). H1 trajectory for human. D1 trajectory for desk.
 ### Scene3D
