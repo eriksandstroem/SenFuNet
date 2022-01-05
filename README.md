@@ -33,8 +33,13 @@ Replica stuff
 Prepare ground truth 3D data
 Note that the user needs the tsdf GT grids and gt meshes. Specify paths in F-score eval config.py
 
+Note: be sure to set the variable "ground_truth_data_base" to the directory where you store the ground truth .ply meshes.
+This variable is located in the config.py file of the evaluate_3d_reconstruction library. I.e. set the path to the "gt_meshes" folder including the "gt_meshes" name. While not needed for 
+this codebase, there is also the option to set the path to the tranformation folder where transformation matrices 
+are stored which aligns the ground truth mesh and the predicted mesh before F-score evaluation.
+
 ### Replica
-[**here**](https://data.vision.ee.ethz.ch/esandstroem/testzip.zip).
+[**here**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_1.tar).
 
 [**here2**](https://data.vision.ee.ethz.ch/esandstroem).
 ### CoRBS
@@ -44,6 +49,8 @@ Note that the user needs the tsdf GT grids and gt meshes. Specify paths in F-sco
 
 Put script of how to generate the MVS depth data here for scene3d and corbs, but not much more info.
 
+Also make the reader aware that one needs to set the paths to the image, tof and mvs depth folders as well ast he 
+camera matrices folder in the list .txt file. Mention this for the scene3d and corbs dataset.
 
 ## Training
 To train SenFuNet, execute the script:
