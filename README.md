@@ -35,6 +35,8 @@ Note that the user needs the tsdf GT grids and gt meshes. Specify paths in F-sco
 
 ### Replica
 [**here**](https://data.vision.ee.ethz.ch/esandstroem/testzip.zip).
+
+[**here2**](https://data.vision.ee.ethz.ch/esandstroem).
 ### CoRBS
 [**here**](http://corbs.dfki.uni-kl.de/). H1 trajectory for human. D1 trajectory for desk.
 ### Scene3D
