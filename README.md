@@ -25,7 +25,7 @@ The code has been tested with Python 3.8.5
  
 ## Data Preparation
 For replica: put some data on biwimaster01
-/usr/biwimaster01/data-biwi01/$USERNAME perhaps. Wait for Kris's answer.
+/usr/biwimaster01/data-biwi01/$USERNAME perhaps.
 
 Prepare 2D data
 Replica stuff
@@ -33,6 +33,12 @@ Replica stuff
 Prepare ground truth 3D data
 Note that the user needs the tsdf GT grids and gt meshes. Specify paths in F-score eval config.py
 
+### Replica
+[**here**](https://data.vision.ee.ethz.ch/esandstroem).
+### CoRBS
+[**here**](http://corbs.dfki.uni-kl.de/). H1 trajectory for human. D1 trajectory for desk.
+### Scene3D
+[**here**](https://www.qianyi.info/scenedata.html).
 
 Put script of how to generate the MVS depth data here for scene3d and corbs, but not much more info.
 
