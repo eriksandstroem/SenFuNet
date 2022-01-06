@@ -64,7 +64,7 @@ FILTERING_MODEL:
       sdf_enc_to_weight_head: False # feed sdf encoding to alhpa head
 LOSS:
   alpha_single_sensor_supervision: True # supervise voxels where only one sensor integrates
-  alpha_supervision: False # supervise directly with proxy alpha in 3D
+  alpha_supervision: False # supervise directly with proxy alpha in 3D. Only available on some scenes e.g. office 0, hotel 0
   fusion_weight: 6.0 # l1 weight of fusion net
   grid_weight: 6
   alpha_weight: 0.01 # weight of single sensor alpha supervision and proxy supervision

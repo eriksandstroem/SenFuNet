@@ -24,33 +24,45 @@ The code has been tested with Python 3.8.5
 6. TODO: You may need to add the venv.patch file to include it and run bash venv.patch and place this file in the bin of the virtual environment. Ask Samuel if needed. Check riot how the file is executed.
  
 ## Data Preparation
-For replica: put some data on biwimaster01
-/usr/biwimaster01/data-biwi01/$USERNAME perhaps.
-
-Prepare 2D data
-Replica stuff
-
-Prepare ground truth 3D data
-Note that the user needs the tsdf GT grids and gt meshes. Specify paths in F-score eval config.py
-
-Note: be sure to set the variable "ground_truth_data_base" to the directory where you store the ground truth .ply meshes.
-This variable is located in the config.py file of the evaluate_3d_reconstruction library. I.e. set the path to the "gt_meshes" folder including the "gt_meshes" name. While not needed for 
-this codebase, there is also the option to set the path to the tranformation folder where transformation matrices 
-are stored which aligns the ground truth mesh and the predicted mesh before F-score evaluation.
 
 ### Replica
-[**here**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_1.tar).
+Train Dataset: [**room 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/room_0.tar), 
+[**room 2**](https://data.vision.ee.ethz.ch/esandstroem/replica/room_2.tar), [**office 3**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_3.tar), [**office 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_1.tar), [**apartment 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/apartment_1.tar), [**frl apartment 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/frl_apartment_0.tar)
 
-[**here2**](https://data.vision.ee.ethz.ch/esandstroem).
+Validation Dataset: [**frl apartment 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/frl_apartment_1.tar)
+
+Test Dataset: [**office 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_0.tar), [**hotel 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/hotel_0.tar), [**office 4**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_4.tar)
+
+Important: Store your dataset at a location specified in the config variable <pre><code>DATA.root_dir</code></pre> of the <pre><code>ROOT_FOLDER/configs/fusion/replica.yaml config file</code></pre>.
+
+Quick Setup: In the event that you don't want to donwload the full dataset at first, only download the office 0 scene and use this for training, validation and testing. In that case, please change the paths of the variables <pre><code>DATA.train_scene_list, DATA.val_scene_list, DATA.test_scene_list</code></pre> listed in the config file <pre><code>ROOT_FOLDER/configs/fusion/replica.yaml</code></pre>.
+
 ### CoRBS
-[**here**](http://corbs.dfki.uni-kl.de/). H1 trajectory for human. D1 trajectory for desk.
+The CoRBS dataset can be downloaded [**here**](http://corbs.dfki.uni-kl.de/). The CoRBS dataset does not include multi-view stereo (MVS) depth maps nor the ground truth signed distance grids (SDF). We provide these separately. 
+
+Train and Validation Dataset: Download the D1 trajectory of the desk scene. The corresponding MVS depth maps and ground truth SDF grid is available [**here**](https://data.vision.ee.ethz.ch/esandstroem/corbs/desk.tar).
+
+Test Dataset: Download the H1 trajectory of the human scene. The corresponding MVS depth maps and ground truth SDF grid is available [**here**](https://data.vision.ee.ethz.ch/esandstroem/corbs/human.tar).
+
+Prepare the data such that the paths to the depth sensors and camera matrices are provided in the files <pre><code>ROOT_FOLDER/lists/human.txt</code></pre> and <pre><code>ROOT_FOLDER/lists/desk.txt</code></pre>. The entries, separated by spaces are structured as follows: <pre><code>PATH_TO_MVS_DEPTH PATH_TO_FOLDER_WITH_TOF_DEPTH PATH_TO_RGB_TIMESTAMP_FILE PATH_TO_TOF_TIMESTAMP_FILE CAMERA_MATRICES</code></pre>.
+
 ### Scene3D
-[**here**](https://www.qianyi.info/scenedata.html).
+Download the stonewall and copy room scenes of the Scene3D dataset available [**here**](https://www.qianyi.info/scenedata.html). Next, use the script <pre><code>ROOT_FOLDER/data/save_every_tenth_frame.py</code></pre> to save every tenth sample (we only integrate every tenth frame).
 
-Put script of how to generate the MVS depth data here for scene3d and corbs, but not much more info.
+Next, download the MVS depth sensor for both scenes and ground truth SDF grid for the stonewall training scene. Download links: [**stonewall**](https://data.vision.ee.ethz.ch/esandstroem/scene3d/stonewall.tar), [**copy room**](https://data.vision.ee.ethz.ch/esandstroem/scene3d/copy_room.tar).
 
-Also make the reader aware that one needs to set the paths to the image, tof and mvs depth folders as well ast he 
-camera matrices folder in the list .txt file. Mention this for the scene3d and corbs dataset.
+Arrange the data such that the paths listed in the corresponding <pre><code>ROOT_FOLDER/lists/*.txt</code></pre> match your folder structure. The entries, separated by spaces are structured as follows: <pre><code>PATH_TO_RGB PATH_TO_TOF_DEPTH PATH_TO_MVS_DEPTH CAMERA_MATRICES</code></pre>.
+
+### Generate Multi-View Stereo Depth
+In the event that you want to reproduce or generate your own MVS depth sensors, we provide the scripts for this. These are available in the folder <pre><code>ROOT_FOLDER/data/mvs_depth_estimation</code></pre>. First use the <pre><code>setup_colmap.py</code></pre> script and then the <pre><code>reconstruct_colmap_slurm_SCENE.sh</code></pre> to use colmap to generate the MVS depth maps. For information, we refer to the [**colmap**](https://colmap.github.io/faq.html) documentation.
+
+### Ground Truth Meshes
+Download the ground truth meshes used for F-score evaluation [**here**](https://data.vision.ee.ethz.ch/esandstroem/gt_meshes.tar)
+
+Note: be sure to set the variable "ground_truth_data_base" to the directory where you store the ground truth .ply meshes.
+This variable is located in the config.py file of the evaluate_3d_reconstruction library. While not needed for 
+this codebase, there is also the option to set the path to the tranformation folder where transformation matrices 
+are stored which aligns the ground truth mesh and the predicted mesh before F-score evaluation.
 
 ## Training
 To train SenFuNet, execute the script:
