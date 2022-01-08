@@ -1,7 +1,5 @@
 # SenFuNet
-TODO: What license should I use? Have I "cited" e.g. the colmap.py script correctly? It should be enough to include the header I suppose?
 TODO: marching cubes issue! Check where the surface is drawn between open3d and skimage see comment on 1.5.
-TODO: Check what other people typically put in these kind of readmes.
 
 This is the official source code of the research paper [**Learning Online Multi-Sensor Depth Fusion**](add_link_here).
 
