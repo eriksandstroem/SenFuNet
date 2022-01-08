@@ -17,8 +17,9 @@ def save_checkpoint(state, is_best, checkpoint, is_best_filt=None):
     checkpoint + 'best.pth.tar'
     Args:
        state: (dict) contains model's state_dict, may contain other keys such as epoch, optimizer state_dict
-       is_best: (bool) True if it is the best model seen till now
+       is_best: (dict) Dict of bools for each sensor. True at one sensor if it is the best model seen untill now
        checkpoint: (string) folder where parameters are to be saved
+       is_best_filt: (bool) True if it is the best filtered model seen until now
     """
     if not os.path.exists(checkpoint):
         print(

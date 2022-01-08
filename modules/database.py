@@ -58,16 +58,6 @@ class Database(Dataset):
                     self.scenes_gt[s].shape, dtype=np.float16
                 )
 
-                # if config.w_features:# TODO: adapt to when not using features
-                # fusion_feature_shape = (
-                #     self.scenes_gt[s].volume.shape[0],
-                #     self.scenes_gt[s].volume.shape[1],
-                #     self.scenes_gt[s].volume.shape[2],
-                #     self.n_features,
-                # )
-                # self.features[sensor][s] = np.zeros(
-                #     fusion_feature_shape, dtype=np.float16
-                # )
                 self.features[sensor][s] = FeatureGrid(
                     voxel_size, self.n_features, bbox
                 )

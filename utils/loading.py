@@ -64,7 +64,7 @@ def load_pipeline(
         print("loading full model")
     except:
         print("loading model partly")
-        # print(model.state_dict().keys())
+
         print(
             "nbr of entries in checkpoint model: ",
             len(checkpoint["pipeline_state_dict"].keys()),

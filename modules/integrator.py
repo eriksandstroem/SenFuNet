@@ -106,12 +106,10 @@ class Integrator(torch.nn.Module):
 
         # tsdf
         index = ys * zs * indices[:, 0] + zs * indices[:, 1] + indices[:, 2]
-        indices_insert = torch.unique_consecutive(
-            indices[index.sort()[1]], dim=0
-        )  
+        indices_insert = torch.unique_consecutive(indices[index.sort()[1]], dim=0)
         vcache = torch.sparse.FloatTensor(
             index.unsqueeze_(0), update, torch.Size([xs * ys * zs])
-        ).coalesce() # the coalesce() operation on the sparse tensors sorts the tensor
+        ).coalesce()  # the coalesce() operation on the sparse tensors sorts the tensor
         update = vcache.values()
 
         if indices_insert.shape[0] != update.shape[0]:
@@ -139,7 +137,7 @@ class Integrator(torch.nn.Module):
             )
             indices_empty_insert = torch.unique_consecutive(
                 indices_empty[index_empty.sort()[1]], dim=0
-            ) 
+            )
             wcache_empty = torch.sparse.FloatTensor(
                 index_empty.unsqueeze_(0), weights_empty, torch.Size([xs * ys * zs])
             ).coalesce()  # this line adds the values at the same index together
@@ -227,12 +225,16 @@ class Integrator(torch.nn.Module):
 
 
 def get_index_mask(indices, shape):
+    """Method to check whether indices are valid.
+
+    Args:
+        indices: indices to check
+        shape: constraints for indices
+
+    Returns:
+        mask
     """
-    method to check whether indices are valid
-    :param indices: indices to check
-    :param shape: constraints for indices
-    :return: mask
-    """
+
     xs, ys, zs = shape
 
     valid = (
@@ -248,12 +250,7 @@ def get_index_mask(indices, shape):
 
 
 def extract_indices(indices, mask):
-    """
-    method to extract indices according to mask
-    :param indices:
-    :param mask:
-    :return:
-    """
+    """Method to extract indices according to mask."""
 
     x = torch.masked_select(indices[:, 0], mask)
     y = torch.masked_select(indices[:, 1], mask)
@@ -266,13 +263,7 @@ def extract_indices(indices, mask):
 
 
 def insert_values(values, indices, volume):
-    """
-    method to insert values back into volume
-    :param values:
-    :param indices:
-    :param volume:
-    :return:
-    """
+    """Method to insert values back into volume."""
     # print(volume.dtype)
     # print(values.dtype)
     if volume.dim() == 3:

@@ -476,17 +476,6 @@ class Fuse_Pipeline(torch.nn.Module):
 
         """
         Learned real-time depth map fusion pipeline
-
-        :param batch:
-        :param extractor:
-        :param routing_model:
-        :param tsdf_model:
-        :param database:
-        :param device:
-        :param config:
-        :param routing_config:
-        :param mode:
-        :return:
         """
         output = dict()
 

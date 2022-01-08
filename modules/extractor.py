@@ -6,8 +6,8 @@ from torch.nn.functional import normalize
 class Extractor(nn.Module):
     """
     This module extracts voxel rays or blocks around voxels that are given by the
-    reconstructed 2D depth map as well as the given groundtruth volume and the
-    current state of the reconstruction volume
+    2D depth map as well as the given groundtruth volume and the
+    current state of the reconstruction volume.
     """
 
     def __init__(self, config, sensor):
@@ -36,19 +36,22 @@ class Extractor(nn.Module):
         gpu,
         weights_volume,
     ):
-        """
-        Computes the forward pass of extracting the rays/blocks and the corresponding coordinates
+        """Computes the forward pass of extracting the rays/blocks and the corresponding coordinates.
 
-        :param depth: depth map with the values that define the center voxel of the ray/block
-        :param extrinsics: camera extrinsics matrix for mapping
-        :param intrinsics: camera intrinsics matrix for mapping
-        :param volume_gt: groundtruth voxel volume
-        :param volume_current: current state of reconstruction volume
-        :param origin: origin of groundtruth volume in world coordinates
-        :param resolution: resolution of voxel volume
-        :return: values/voxels of groundtruth and current as well as at its coordinates and indices
-        """
+        Args:
+            depth: depth map with the values that define the center voxel of the ray/block
+            extrinsics: camera extrinsics matrix for mapping
+            intrinsics: camera intrinsics matrix for mapping
+            tsdf_volume: current state of reconstruction tsdf volume
+            feature_volume: current state of reconstruction feature volume
+            origin: origin of groundtruth volume in world coordinates
+            resolution: resolution of voxel volume
+            g: true when using gpu
+            weights_volume: current state of reconstruction weight volume
 
+        Returns:
+            dict: values/voxels of current reconstruction volume as well as at its indices
+        """
         intrinsics = intrinsics.float()
         extrinsics = extrinsics.float()
 
@@ -95,9 +98,8 @@ class Extractor(nn.Module):
         return output
 
     def compute_coordinates(
-        self, depth, extrinsics, intrinsics, origin, resolution, gpu
+        self, depth: int, extrinsics, intrinsics, origin, resolution, gpu
     ):
-
         b, h, w = depth.shape
         n_points = h * w
 
