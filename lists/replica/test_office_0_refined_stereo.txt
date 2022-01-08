@@ -1,1 +1,0 @@
-office_0/1/left_depth_gt office_0/1/left_depth_noise_5.0 office_0/1/left_bts_depth office_0/1/left_stereo_routing_refined office_0/1/left_oracle_depth office_0/1/left_rgb office_0/1/left_camera_matrix

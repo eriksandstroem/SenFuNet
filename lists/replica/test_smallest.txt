@@ -1,1 +1,0 @@
-frl_apartment_2/2/left_depth_gt frl_apartment_2/2/left_depth_noise_5.0 frl_apartment_2/2/left_bts_depth frl_apartment_2/2/left_psmnet_depth frl_apartment_2/2/left_oracle_depth frl_apartment_2/2/left_rgb frl_apartment_2/2/left_camera_matrix

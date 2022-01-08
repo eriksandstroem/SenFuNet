@@ -1,1 +1,0 @@
-cabinet/colmap/dense/stereo/depth_maps cabinet/data/E1_pre_registereddata cabinet/data/E1_pre_registereddata/rgb.txt cabinet/data/E1_pre_registereddata/depth.txt cabinet/data/E1_Trajectory/groundtruth.txt

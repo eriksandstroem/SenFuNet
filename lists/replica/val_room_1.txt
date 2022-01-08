@@ -1,1 +1,0 @@
-room_1/1/left_depth_gt room_1/1/left_depth_noise_5.0 room_1/1/left_bts_depth room_1/1/left_psmnet_depth room_1/1/left_oracle_depth room_1/1/left_rgb room_1/1/left_camera_matrix
