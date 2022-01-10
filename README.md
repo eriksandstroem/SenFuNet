@@ -5,9 +5,9 @@ This is the official source code of the research paper [**Learning Online Multi-
 
 ![Architecture](https://github.com/tfy14esa/SenFuNet/blob/main/images/architecture.png)
 
-Please check out [**this**](https://youtu.be/woA8FU05AM0) video which describes our method and shows the most important results.
-
 Many hand-held or mixed reality devices typically use a single sensor for 3D reconstruction although they often comprise multiple sensors. Multi-sensor depth fusion is able to substantially improve the robustness and accuracy of 3D reconstruction methods, but existing techniques are not robust enough to handle sensors which operate in different domains. To this end, we introduce SenFuNet, a depth fusion approach that learns sensor-specific noise and outlier statistics and combines the data streams of depth frames from different sensors in an online fashion. Our method fuses multi-sensor depth streams regardless of synchronization and calibration and generalizes well with little training data.
+
+Please check out [**this**](https://youtu.be/woA8FU05AM0) video which describes our method and shows the most important results.
 
 This repository provides all necessary steps to reproduce the results in the paper including data preparation and trained models that can be tested by the user directly.
 
