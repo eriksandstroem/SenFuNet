@@ -80,6 +80,7 @@ TRAINING:
   n_epochs: 1000
   gradient_clipping: True
 TESTING:
+  mc: 'skimage'
   visualize_features_and_proxy: False
   routedfusion_nn: True # using nearest neighbor mask or trilinear interpolation mask. When true, requires specifying the path to the model containing the nearest neighbor weight grid in the variable routedfusion_nn_model.
   routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the nearest neighbor weight grids
@@ -118,9 +119,9 @@ DATA:
   mask_tof_width: 10 #35 # 35 # in pixels. With resolution 256 this would be 35
   mask_width: 10 # general sensor
   mask_height: 10 # general sensor
-  pad: 2 # pad ground truth grid (not needed, but all results are using it)
-  min_depth_stereo: 0.0 # 0.5 (in meters)
-  max_depth_stereo: 12.3 # 2.5 (in meters)
+  pad: 0 # pad ground truth grid (not needed, but all results are using it)
+  min_depth_stereo: 0.5 # 0.5 (in meters)
+  max_depth_stereo: 3.0 # 2.5 (in meters)
   min_depth_tof: 0.0 # 0.5 (in meters)
   max_depth_tof: 12.3 # 3.86 (in meters)
   min_depth: 0.0 # general sensor (in meters)

@@ -80,6 +80,7 @@ TRAINING:
   n_epochs: 1000
   gradient_clipping: True
 TESTING:
+  mc: 'skimage'
   visualize_features_and_proxy: False
   routedfusion_nn: True # using nearest neighbor mask or trilinear interpolation mask. When true, requires specifying the path to the model containing the nearest neighbor weight grid in the variable routedfusion_nn_model.
   routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the nearest neighbor weight grids
