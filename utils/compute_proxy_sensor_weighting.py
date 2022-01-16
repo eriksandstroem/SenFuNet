@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 
 
 def compute_proxy_sensor_weighting_and_mesh(
-    tsdfs, gt_tsdf, test_dir, weights, voxel_size, truncation, scene
+    tsdfs, gt_tsdf, test_dir, weights, voxel_size, truncation, scene, mc
 ):
     cmap = plt.get_cmap("inferno")
 
@@ -174,37 +174,51 @@ def compute_proxy_sensor_weighting_and_mesh(
     resolution = gt_tsdf.shape
     max_resolution = np.array(resolution).max()
     length = (max_resolution) * voxel_size
-    tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-    tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = filtered_tsdf
 
-    indices_x = mask.nonzero()[0]
-    indices_y = mask.nonzero()[1]
-    indices_z = mask.nonzero()[2]
+    if mc == "Open3D":
+        tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
+        tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = filtered_tsdf
 
-    volume = o3d.integration.UniformTSDFVolume(
-        length=length,
-        resolution=max_resolution,
-        sdf_trunc=truncation,
-        color_type=o3d.integration.TSDFVolumeColorType.RGB8,
-    )
+        indices_x = mask.nonzero()[0]
+        indices_y = mask.nonzero()[1]
+        indices_z = mask.nonzero()[2]
 
-    for i in range(indices_x.shape[0]):
-        volume.set_tsdf_at(
-            tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
-            indices_x[i],
-            indices_y[i],
-            indices_z[i],
+        volume = o3d.integration.UniformTSDFVolume(
+            length=length,
+            resolution=max_resolution,
+            sdf_trunc=truncation,
+            color_type=o3d.integration.TSDFVolumeColorType.RGB8,
         )
-        volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
 
-    print("Extract a triangle mesh from the volume and visualize it.")
-    mesh = volume.extract_triangle_mesh()
+        for i in range(indices_x.shape[0]):
+            volume.set_tsdf_at(
+                tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
+                indices_x[i],
+                indices_y[i],
+                indices_z[i],
+            )
+            volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
 
-    del volume
-    mesh.compute_vertex_normals()
-    # o3d.visualization.draw_geometries([mesh])
+        print("Extract a triangle mesh from the volume and visualize it.")
+        mesh = volume.extract_triangle_mesh()
 
-    vertices = mesh.vertices
+        del volume
+        mesh.compute_vertex_normals()
+        # o3d.visualization.draw_geometries([mesh])
+
+        vertices = mesh.vertices
+    elif mc == "skimage":
+        (verts, faces, normals, values) = skimage.measure.marching_cubes_lewiner(
+            filtered_tsdf,
+            level=0,
+            spacing=(voxel_size, voxel_size, voxel_size),
+            mask=preprocess_weight_grid(mask),
+        )
+
+        mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
+        vertices = (
+            mesh.vertices + 0.5 * voxel_size
+        )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
 
     voxel_points = np.round(
         np.asarray(vertices) * 1 / voxel_size - voxel_size / 2
@@ -264,3 +278,23 @@ def compute_proxy_sensor_weighting_and_mesh(
     )
 
     return sensor_weighting
+
+
+def preprocess_weight_grid(weights):
+    mask = np.zeros_like(weights)
+    indices = np.array(weights.nonzero())
+    indices = indices[:, ~np.any(indices == 0, axis=0)]
+    for index in range(indices.shape[1]):
+        i = indices[:, index][0]
+        j = indices[:, index][1]
+        k = indices[:, index][2]
+        mask[i, j, k] = weights[i, j, k]
+        mask[i, j, k] = mask[i, j, k] and weights[i, j, k - 1]
+        mask[i, j, k] = mask[i, j, k] and weights[i, j - 1, k]
+        mask[i, j, k] = mask[i, j, k] and weights[i, j - 1, k - 1]
+        mask[i, j, k] = mask[i, j, k] and weights[i - 1, j, k]
+        mask[i, j, k] = mask[i, j, k] and weights[i - 1, j, k - 1]
+        mask[i, j, k] = mask[i, j, k] and weights[i - 1, j - 1, k]
+        mask[i, j, k] = mask[i, j, k] and weights[i - 1, j - 1, k - 1]
+
+    return mask > 0

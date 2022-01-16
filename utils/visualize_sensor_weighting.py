@@ -17,6 +17,7 @@ def visualize_sensor_weighting(
     resolution,
     voxel_size,
     outlier_channel,
+    mc,
 ):
     cmap = plt.get_cmap("inferno")
 

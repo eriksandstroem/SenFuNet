@@ -266,13 +266,13 @@ def evaluate(database, config, test_dir):
             for key in eval_results_scene:
                 logger.info(key + ": " + str(eval_results_scene[key]))
 
-            # Create the mesh using the given mask
-            tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-            tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
-
             if config.TESTING.mc == "Open3D":
                 # OPEN3D MARCHING CUBES
                 # ---------------------------------------------
+                # Create the mesh using the given mask
+                tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
+                tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
+
                 indices_x = mask.nonzero()[0]
                 indices_y = mask.nonzero()[1]
                 indices_z = mask.nonzero()[2]
@@ -309,13 +309,13 @@ def evaluate(database, config, test_dir):
                 verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(
                     tsdf,
                     level=0,
-                    spacing=(0.01, 0.01, 0.01),
+                    spacing=(voxel_size, voxel_size, voxel_size),
                     mask=preprocess_weight_grid(mask),
                 )
 
                 mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
                 mesh.vertices = (
-                    mesh.vertices + 0.5 * 0.01
+                    mesh.vertices + 0.5 * voxel_size
                 )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
 
                 mesh.export(os.path.join(test_dir, model_test + ".ply"))
@@ -374,6 +374,7 @@ def evaluate(database, config, test_dir):
                     resolution,
                     voxel_size,
                     config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel,
+                    config.TESTING.mc,
                 )
 
                 os.system(
@@ -434,43 +435,74 @@ def evaluate(database, config, test_dir):
                     for key in eval_results_scene:
                         logger.info(key + ": " + str(eval_results_scene[key]))
 
-                    # Create the mesh using the given mask
-                    tsdf_cube = np.zeros(
-                        (max_resolution, max_resolution, max_resolution)
-                    )
-                    tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
-
-                    indices_x = mask.nonzero()[0]
-                    indices_y = mask.nonzero()[1]
-                    indices_z = mask.nonzero()[2]
-
-                    volume = o3d.integration.UniformTSDFVolume(
-                        length=length,
-                        resolution=max_resolution,
-                        sdf_trunc=truncation,
-                        color_type=o3d.integration.TSDFVolumeColorType.RGB8,
-                    )
-
-                    for i in range(indices_x.shape[0]):
-                        volume.set_tsdf_at(
-                            tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
-                            indices_x[i],
-                            indices_y[i],
-                            indices_z[i],
+                    if config.TESTING.mc == "Open3D":
+                        # OPEN3D MARCHING CUBES
+                        # ---------------------------------------------
+                        # Create the mesh using the given mask
+                        tsdf_cube = np.zeros(
+                            (max_resolution, max_resolution, max_resolution)
                         )
-                        volume.set_weight_at(
-                            1, indices_x[i], indices_y[i], indices_z[i]
+                        tsdf_cube[
+                            : resolution[0], : resolution[1], : resolution[2]
+                        ] = tsdf
+
+                        indices_x = mask.nonzero()[0]
+                        indices_y = mask.nonzero()[1]
+                        indices_z = mask.nonzero()[2]
+
+                        volume = o3d.integration.UniformTSDFVolume(
+                            length=length,
+                            resolution=max_resolution,
+                            sdf_trunc=truncation,
+                            color_type=o3d.integration.TSDFVolumeColorType.RGB8,
                         )
 
-                    print("Extract a triangle mesh from the volume and visualize it.")
-                    mesh = volume.extract_triangle_mesh()
+                        for i in range(indices_x.shape[0]):
+                            volume.set_tsdf_at(
+                                tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
+                                indices_x[i],
+                                indices_y[i],
+                                indices_z[i],
+                            )
+                            volume.set_weight_at(
+                                1, indices_x[i], indices_y[i], indices_z[i]
+                            )
 
-                    del volume
-                    mesh.compute_vertex_normals()
-                    # o3d.visualization.draw_geometries([mesh])
-                    o3d.io.write_triangle_mesh(
-                        os.path.join(test_dir, model_test + ".ply"), mesh
-                    )
+                        print(
+                            "Extract a triangle mesh from the volume and visualize it."
+                        )
+                        mesh = volume.extract_triangle_mesh()
+
+                        del volume
+                        mesh.compute_vertex_normals()
+                        # o3d.visualization.draw_geometries([mesh])
+                        o3d.io.write_triangle_mesh(
+                            os.path.join(test_dir, model_test + ".ply"), mesh
+                        )
+                    elif config.TESTING.mc == "skimage":
+                        # Skimage marching cubes
+                        # ---------------------------------------------
+                        (
+                            verts,
+                            faces,
+                            normals,
+                            values,
+                        ) = skimage.measure.marching_cubes_lewiner(
+                            tsdf,
+                            level=0,
+                            spacing=(voxel_size, voxel_size, voxel_size),
+                            mask=preprocess_weight_grid(mask),
+                        )
+
+                        mesh = trimesh.Trimesh(
+                            vertices=verts, faces=faces, normals=normals
+                        )
+                        mesh.vertices = (
+                            mesh.vertices + 0.5 * voxel_size
+                        )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
+
+                        mesh.export(os.path.join(test_dir, model_test + ".ply"))
+                        # ---------------------------------------------
 
                     # Compute the F-score, precision and recall
                     ply_path = model_test + ".ply"
@@ -544,47 +576,75 @@ def evaluate(database, config, test_dir):
                         for key in eval_results_scene:
                             logger.info(key + ": " + str(eval_results_scene[key]))
 
-                        # Create the mesh using the given mask
-                        tsdf_cube = np.zeros(
-                            (max_resolution, max_resolution, max_resolution)
-                        )
-                        tsdf_cube[
-                            : resolution[0], : resolution[1], : resolution[2]
-                        ] = tsdf
-
-                        indices_x = mask.nonzero()[0]
-                        indices_y = mask.nonzero()[1]
-                        indices_z = mask.nonzero()[2]
-
-                        volume = o3d.integration.UniformTSDFVolume(
-                            length=length,
-                            resolution=max_resolution,
-                            sdf_trunc=truncation,
-                            color_type=o3d.integration.TSDFVolumeColorType.RGB8,
-                        )
-
-                        for i in range(indices_x.shape[0]):
-                            volume.set_tsdf_at(
-                                tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
-                                indices_x[i],
-                                indices_y[i],
-                                indices_z[i],
+                        if config.TESTING.mc == "Open3D":
+                            # OPEN3D MARCHING CUBES
+                            # ---------------------------------------------
+                            # Create the mesh using the given mask
+                            tsdf_cube = np.zeros(
+                                (max_resolution, max_resolution, max_resolution)
                             )
-                            volume.set_weight_at(
-                                1, indices_x[i], indices_y[i], indices_z[i]
+                            tsdf_cube[
+                                : resolution[0], : resolution[1], : resolution[2]
+                            ] = tsdf
+
+                            indices_x = mask.nonzero()[0]
+                            indices_y = mask.nonzero()[1]
+                            indices_z = mask.nonzero()[2]
+
+                            volume = o3d.integration.UniformTSDFVolume(
+                                length=length,
+                                resolution=max_resolution,
+                                sdf_trunc=truncation,
+                                color_type=o3d.integration.TSDFVolumeColorType.RGB8,
                             )
 
-                        print(
-                            "Extract a triangle mesh from the volume and visualize it."
-                        )
-                        mesh = volume.extract_triangle_mesh()
+                            for i in range(indices_x.shape[0]):
+                                volume.set_tsdf_at(
+                                    tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
+                                    indices_x[i],
+                                    indices_y[i],
+                                    indices_z[i],
+                                )
+                                volume.set_weight_at(
+                                    1, indices_x[i], indices_y[i], indices_z[i]
+                                )
 
-                        del volume
-                        mesh.compute_vertex_normals()
-                        # o3d.visualization.draw_geometries([mesh])
-                        o3d.io.write_triangle_mesh(
-                            os.path.join(test_dir, model_test + ".ply"), mesh
-                        )
+                            print(
+                                "Extract a triangle mesh from the volume and visualize it."
+                            )
+                            mesh = volume.extract_triangle_mesh()
+
+                            del volume
+                            mesh.compute_vertex_normals()
+                            # o3d.visualization.draw_geometries([mesh])
+                            o3d.io.write_triangle_mesh(
+                                os.path.join(test_dir, model_test + ".ply"), mesh
+                            )
+
+                        elif config.TESTING.mc == "skimage":
+                            # Skimage marching cubes
+                            # ---------------------------------------------
+                            (
+                                verts,
+                                faces,
+                                normals,
+                                values,
+                            ) = skimage.measure.marching_cubes_lewiner(
+                                tsdf,
+                                level=0,
+                                spacing=(voxel_size, voxel_size, voxel_size),
+                                mask=preprocess_weight_grid(mask),
+                            )
+
+                            mesh = trimesh.Trimesh(
+                                vertices=verts, faces=faces, normals=normals
+                            )
+                            mesh.vertices = (
+                                mesh.vertices + 0.5 * voxel_size
+                            )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
+
+                            mesh.export(os.path.join(test_dir, model_test + ".ply"))
+                            # ---------------------------------------------
 
                         # # Compute the F-score, precision and recall
                         ply_path = model_test + ".ply"
@@ -640,7 +700,14 @@ def evaluate(database, config, test_dir):
                         weights[sensor_] = np.array(f["weights"]).astype(np.float16)
 
                     proxy_sensor_weighting = compute_proxy_sensor_weighting_and_mesh(
-                        tsdfs, sdf_gt, test_dir, weights, voxel_size, truncation, scene
+                        tsdfs,
+                        sdf_gt,
+                        test_dir,
+                        weights,
+                        voxel_size,
+                        truncation,
+                        scene,
+                        config.TESTING.mc,
                     )
 
                     # load fused tsdf
@@ -670,6 +737,7 @@ def evaluate(database, config, test_dir):
                         voxel_size,
                         truncation,
                         scene,
+                        config.TESTING.mc,
                     )
 
 
@@ -764,39 +832,64 @@ def evaluate_routedfusion(database, config, test_dir, test_path):
             for key in eval_results_scene:
                 logger.info(key + ": " + str(eval_results_scene[key]))
 
-            # Create the mesh using the given mask
-            tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-            tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
+            if config.TESTING.mc == "Open3D":
+                # OPEN3D MARCHING CUBES
+                # ---------------------------------------------
+                # Create the mesh using the given mask
+                tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
+                tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
 
-            indices_x = mask.nonzero()[0]
-            indices_y = mask.nonzero()[1]
-            indices_z = mask.nonzero()[2]
+                indices_x = mask.nonzero()[0]
+                indices_y = mask.nonzero()[1]
+                indices_z = mask.nonzero()[2]
 
-            volume = o3d.integration.UniformTSDFVolume(
-                length=length,
-                resolution=max_resolution,
-                sdf_trunc=truncation,
-                color_type=o3d.integration.TSDFVolumeColorType.RGB8,
-            )
-
-            for i in range(indices_x.shape[0]):
-                volume.set_tsdf_at(
-                    tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
-                    indices_x[i],
-                    indices_y[i],
-                    indices_z[i],
+                volume = o3d.integration.UniformTSDFVolume(
+                    length=length,
+                    resolution=max_resolution,
+                    sdf_trunc=truncation,
+                    color_type=o3d.integration.TSDFVolumeColorType.RGB8,
                 )
-                volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
 
-            print("Extract a triangle mesh from the volume and visualize it.")
-            mesh = volume.extract_triangle_mesh()
+                for i in range(indices_x.shape[0]):
+                    volume.set_tsdf_at(
+                        tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
+                        indices_x[i],
+                        indices_y[i],
+                        indices_z[i],
+                    )
+                    volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
 
-            del volume
-            mesh.compute_vertex_normals()
-            # o3d.visualization.draw_geometries([mesh])
-            o3d.io.write_triangle_mesh(
-                os.path.join(test_dir, model_test + ".ply"), mesh
-            )
+                print("Extract a triangle mesh from the volume and visualize it.")
+                mesh = volume.extract_triangle_mesh()
+
+                del volume
+                mesh.compute_vertex_normals()
+                # o3d.visualization.draw_geometries([mesh])
+                o3d.io.write_triangle_mesh(
+                    os.path.join(test_dir, model_test + ".ply"), mesh
+                )
+            elif config.TESTING.mc == "skimage":
+                # Skimage marching cubes
+                # ---------------------------------------------
+                (
+                    verts,
+                    faces,
+                    normals,
+                    values,
+                ) = skimage.measure.marching_cubes_lewiner(
+                    tsdf,
+                    level=0,
+                    spacing=(voxel_size, voxel_size, voxel_size),
+                    mask=preprocess_weight_grid(mask),
+                )
+
+                mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
+                mesh.vertices = (
+                    mesh.vertices + 0.5 * voxel_size
+                )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
+
+                mesh.export(os.path.join(test_dir, model_test + ".ply"))
+                # ---------------------------------------------
 
             # Compute the F-score, precision and recall
             ply_path = model_test + ".ply"

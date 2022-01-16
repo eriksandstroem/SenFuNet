@@ -26,6 +26,7 @@ def visualize_features(
     voxel_size,
     truncation,
     scene,
+    mc,
 ):
 
     # since I am stuck with the cpu accelerated t-SNE version for now, I need to speed it up more, by
@@ -84,6 +85,7 @@ def visualize_features(
             ::downsampling_factor, ::downsampling_factor, ::downsampling_factor
         ]
         mask = weights[sensor_] > 0
+
         indices_x = mask.nonzero()[0]
         indices_y = mask.nonzero()[1]
         indices_z = mask.nonzero()[2]

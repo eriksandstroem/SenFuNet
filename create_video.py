@@ -248,6 +248,7 @@ def test_fusion(config, scene):
 
 
 def get_mesh(save_sensor, database, transform, voxel_size, scene, truncation):
+    # only implemented using Open3D marching cubes
     resolution = database[scene]["tsdf_" + save_sensor].shape
     max_resolution = np.array(resolution).max()
     length = (max_resolution) * voxel_size
@@ -292,6 +293,7 @@ def get_mesh(save_sensor, database, transform, voxel_size, scene, truncation):
 
 
 def get_mesh_weighting(database, transform, sensors, voxel_size, scene, truncation):
+    # only implemented using Open3D marching cubes
     resolution = database[scene]["filtered"].shape
     max_resolution = np.array(resolution).max()
     length = (max_resolution) * voxel_size
@@ -374,6 +376,7 @@ def get_mesh_weighting(database, transform, sensors, voxel_size, scene, truncati
 
 
 def get_mesh_fused(database, transform, sensors, voxel_size, scene, truncation):
+    # only implemented using Open3D marching cubes
     resolution = database[scene]["filtered"].shape
     max_resolution = np.array(resolution).max()
     length = (max_resolution) * voxel_size

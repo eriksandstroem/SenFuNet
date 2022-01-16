@@ -1,6 +1,4 @@
 # SenFuNet
-TODO: marching cubes issue! Check where the surface is drawn between open3d and skimage see comment on 1.5.
-
 This is the official source code of the research paper [**Learning Online Multi-Sensor Depth Fusion**](add_link_here).
 
 ![Architecture](https://github.com/tfy14esa/SenFuNet/blob/main/images/architecture.png)
@@ -115,7 +113,8 @@ The following paths need to be specified in the CONFIG.yaml file:
 The fusion models are located at ROOT_FOLDER/models/fusion.
 
 ### Configs to Reproduce Results in Paper
-
+Note: The F-scores reported in the paper are computed using meshes which are produced using the marching cubes implementation of Open3D. Gaining access to this required some changes of the C++ source code and to make installation simpler, we resort to the skimage implementation. Only minor numerical differences exist between the two implementations.
+ 
 **Replica**
 1. ToF+PSMNet without routing. Use the config file located at ROOT_FOLDER/configs/fusion/replica.yaml
 2. ToF+PSMNet with routing. Modify the config file ROOT_FOLDER/configs/fusion/replica.yaml as follows:
