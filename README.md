@@ -18,6 +18,7 @@ The code has been tested with Python 3.8.5
 2. Create a python virtual environment: <pre><code>python -m venv senfunet_env</code></pre>
 3. Activate the virtual environment: <pre><code>source senfunet_env/bin/activate</code></pre>
 4. Open the requirements.txt and change the path to the submodule evaluate-3d-reconstruction according to your file structure.
+5. Open the requirements.txt and replace the Open3D entry with a version of your choice. Install version 0.13.0 or newer (this has not been tested). Replace the entry with e.g. "open3d==0.13.0". A local version of the Open3D library was used when developing the project which is the reason why this entry needs to be replaced.
 5. Install the dependencies: <pre><code>pip install -r requirements.txt</code></pre>
 
 <!---

@@ -380,11 +380,11 @@ def evaluate(database, config, test_dir):
                 os.system(
                     "mv "
                     + test_dir
-                    + "/sensor_weighting_nn_no_outlier_filter.ply "
+                    + "/sensor_weighting_no_outlier_filter.ply "
                     + test_dir
                     + "/"
                     + model_test
-                    + "/sensor_weighting_nn.ply"
+                    + "/sensor_weighting.ply"
                 )
                 os.system(
                     "mv "
@@ -680,65 +680,63 @@ def evaluate(database, config, test_dir):
                             + ".ply"
                         )
 
-                if config.TESTING.visualize_features_and_proxy:
-                    features = dict()
-                    tsdfs = dict()
-                    weights = dict()
-                    for sensor_ in config.DATA.input:
-                        featurename = (
-                            tsdf_path + "/" + scene + "_" + sensor_ + ".features.hf5"
-                        )
-                        f = h5py.File(featurename, "r")
-                        features[sensor_] = np.array(f["features"]).astype(np.float16)
-                        tsdfname = tsdf_path + "/" + scene + "_" + sensor_ + ".tsdf.hf5"
-                        f = h5py.File(tsdfname, "r")
-                        tsdfs[sensor_] = np.array(f["TSDF"]).astype(np.float16)
-                        weightname = (
-                            tsdf_path + "/" + scene + "_" + sensor_ + ".weights.hf5"
-                        )
-                        f = h5py.File(weightname, "r")
-                        weights[sensor_] = np.array(f["weights"]).astype(np.float16)
-
-                    proxy_sensor_weighting = compute_proxy_sensor_weighting_and_mesh(
-                        tsdfs,
-                        sdf_gt,
-                        test_dir,
-                        weights,
-                        voxel_size,
-                        truncation,
-                        scene,
-                        config.TESTING.mc,
+            if config.TESTING.visualize_features_and_proxy:
+                features = dict()
+                tsdfs = dict()
+                weights = dict()
+                for sensor_ in config.DATA.input:
+                    featurename = (
+                        tsdf_path + "/" + scene + "_" + sensor_ + ".features.hf5"
                     )
-
-                    # load fused tsdf
-                    fused_tsdf = tsdf_path + "/" + scene + ".tsdf_filtered.hf5"
-                    # read tsdf
-                    f = h5py.File(fused_tsdf, "r")
-                    fused_tsdf = np.array(f["TSDF_filtered"]).astype(np.float16)
-
-                    sensor_weighting = tsdf_path + "/" + scene + ".sensor_weighting.hf5"
-                    f = h5py.File(sensor_weighting, "r")
-                    sensor_weighting = np.array(f["sensor_weighting"]).astype(
-                        np.float16
+                    f = h5py.File(featurename, "r")
+                    features[sensor_] = np.array(f["features"]).astype(np.float16)
+                    tsdfname = tsdf_path + "/" + scene + "_" + sensor_ + ".tsdf.hf5"
+                    f = h5py.File(tsdfname, "r")
+                    tsdfs[sensor_] = np.array(f["TSDF"]).astype(np.float16)
+                    weightname = (
+                        tsdf_path + "/" + scene + "_" + sensor_ + ".weights.hf5"
                     )
+                    f = h5py.File(weightname, "r")
+                    weights[sensor_] = np.array(f["weights"]).astype(np.float16)
 
-                    if config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
-                        sensor_weighting = sensor_weighting[0, :, :, :]
+                proxy_sensor_weighting = compute_proxy_sensor_weighting_and_mesh(
+                    tsdfs,
+                    sdf_gt,
+                    test_dir,
+                    weights,
+                    voxel_size,
+                    truncation,
+                    scene,
+                    config.TESTING.mc,
+                )
 
-                    visualize_features(
-                        proxy_sensor_weighting,
-                        sensor_weighting,
-                        fused_tsdf,
-                        sdf_gt,
-                        tsdfs,
-                        weights,
-                        features,
-                        test_dir,
-                        voxel_size,
-                        truncation,
-                        scene,
-                        config.TESTING.mc,
-                    )
+                # load fused tsdf
+                fused_tsdf = tsdf_path + "/" + scene + ".tsdf_filtered.hf5"
+                # read tsdf
+                f = h5py.File(fused_tsdf, "r")
+                fused_tsdf = np.array(f["TSDF_filtered"]).astype(np.float16)
+
+                sensor_weighting = tsdf_path + "/" + scene + ".sensor_weighting.hf5"
+                f = h5py.File(sensor_weighting, "r")
+                sensor_weighting = np.array(f["sensor_weighting"]).astype(np.float16)
+
+                if config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
+                    sensor_weighting = sensor_weighting[0, :, :, :]
+
+                visualize_features(
+                    proxy_sensor_weighting,
+                    sensor_weighting,
+                    fused_tsdf,
+                    sdf_gt,
+                    tsdfs,
+                    weights,
+                    features,
+                    test_dir,
+                    voxel_size,
+                    truncation,
+                    scene,
+                    config.TESTING.mc,
+                )
 
 
 def evaluate_routedfusion(database, config, test_dir, test_path):
@@ -927,6 +925,14 @@ def evaluate_routedfusion(database, config, test_dir, test_path):
 
 
 def preprocess_weight_grid(weights):
+    """Function to compute the weight mask for skimage marching cubes corresponding to how Open3D marching cubes deals with masking. Open3D requires that all 8 corners of the voxel are initialized in order to draw a surface while skimage only requires 1 of the voxels to be initialized e.g. the index (1,1,1) determines if the voxel at (0,0,0) is initialized etc.
+
+    Args:
+        weights: weight grid
+
+    Returns:
+        mask: boolean grid to be used as input to skimage marching cubes algorithm
+    """
     mask = np.zeros_like(weights)
     indices = np.array(weights.nonzero())
     indices = indices[:, ~np.any(indices == 0, axis=0)]

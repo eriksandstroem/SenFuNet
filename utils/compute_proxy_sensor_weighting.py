@@ -4,6 +4,8 @@ import numpy as np
 import open3d as o3d
 
 import matplotlib
+import trimesh
+import skimage.measure
 
 matplotlib.use("Agg")
 
@@ -80,22 +82,23 @@ def compute_proxy_sensor_weighting_and_mesh(
     # 	compression_opts=9)
 
     # plot tsdf fusion histogram
-    sensor_weighting_path = "/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211019-170325/test_no_carving/hotel_0.sensor_weighting.hf5"
-    import h5py
+    # sensor_weighting_path = "/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211019-170325/test_no_carving/hotel_0.sensor_weighting.hf5"
+    # import h5py
 
-    f = h5py.File(sensor_weighting_path, "r")
-    sensor_weighting_tsdf_middle_fusion = np.array(f["sensor_weighting"]).astype(
-        np.float16
-    )
-    hist = sensor_weighting_tsdf_middle_fusion[mask].flatten()
+    # f = h5py.File(sensor_weighting_path, "r")
+    # sensor_weighting_tsdf_middle_fusion = np.array(f["sensor_weighting"]).astype(
+    #     np.float16
+    # )
+    # hist = sensor_weighting_tsdf_middle_fusion[mask].flatten()
 
-    n, bins, patches = plt.hist(hist, bins=100)
-    for c, p in zip(bins, patches):
-        plt.setp(p, "facecolor", cmap(c))
-    plt.savefig(
-        test_dir + "/tsdf_fusion_sensor_weighting_grid_histogram" + scene + ".png"
-    )
-    plt.clf()
+    # n, bins, patches = plt.hist(hist, bins=100)
+    # for c, p in zip(bins, patches):
+    #     plt.setp(p, "facecolor", cmap(c))
+    # plt.savefig(
+    #     test_dir + "/tsdf_fusion_sensor_weighting_grid_histogram" + scene + ".png"
+    # )
+
+    plt.clf()  # clear plot (important)
 
     hist = sensor_weighting[mask].flatten()
 
@@ -214,11 +217,13 @@ def compute_proxy_sensor_weighting_and_mesh(
             spacing=(voxel_size, voxel_size, voxel_size),
             mask=preprocess_weight_grid(mask),
         )
-
-        mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
-        vertices = (
-            mesh.vertices + 0.5 * voxel_size
-        )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
+        # add 0.5 * voxel_size to vertices to match Open3D marching cubes output
+        vertices = verts + voxel_size / 2
+        mesh = o3d.geometry.TriangleMesh(
+            vertices=o3d.utility.Vector3dVector(vertices),
+            triangles=o3d.utility.Vector3iVector(faces),
+        )
+        mesh.compute_vertex_normals()
 
     voxel_points = np.round(
         np.asarray(vertices - voxel_size / 2) * 1 / voxel_size
@@ -255,7 +260,7 @@ def compute_proxy_sensor_weighting_and_mesh(
 
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
     o3d.io.write_triangle_mesh(
-        test_dir + "/proxy_sensor_weighting_nn" + scene + ".ply", mesh
+        test_dir + "/proxy_sensor_weighting_" + scene + ".ply", mesh
     )
 
     # compute surface histogram histogram of "averaged" alpha values.
@@ -270,7 +275,7 @@ def compute_proxy_sensor_weighting_and_mesh(
     os.chdir(test_dir)
     os.system(
         "evaluate_3d_reconstruction.py "
-        + "proxy_sensor_weighting_nn"
+        + "proxy_sensor_weighting_"
         + scene
         + ".ply"
         + " standard_trunc "

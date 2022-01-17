@@ -27,7 +27,7 @@ def visualize_sensor_weighting(
         sensor_weighting = sensor_weighting[0, :, :, :]
 
     hist = sensor_weighting[mask].flatten()
-
+    plt.clf()  # clear plot (important)
     cm = plt.get_cmap("inferno")
     n, bins, patches = plt.hist(hist, bins=100)
     for c, p in zip(bins, patches):
@@ -93,6 +93,7 @@ def visualize_sensor_weighting(
             vertices=o3d.utility.Vector3dVector(verts + voxel_size / 2),
             triangles=o3d.utility.Vector3iVector(faces),
         )
+        mesh.compute_vertex_normals()
 
     # remove voxels if they are outside of the voxelgrid - these are treated as uninitialized.
     # this step is not needed when we subtract half a voxel size - without this the transformation
@@ -122,7 +123,7 @@ def visualize_sensor_weighting(
     colors[vals == -1] = [0, 1, 0]  # make all uninitialized voxels green
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
     o3d.io.write_triangle_mesh(
-        test_dir + "/sensor_weighting_nn_no_outlier_filter.ply", mesh
+        test_dir + "/sensor_weighting_no_outlier_filter.ply", mesh
     )
 
     # compute surface histogram
