@@ -335,7 +335,7 @@ def get_mesh_weighting(database, transform, sensors, voxel_size, scene, truncati
     # add vertex coloring -
     cmap = plt.get_cmap("inferno")
     voxel_points = np.round(
-        np.asarray(sensor_weighting_mesh.vertices) * 1 / voxel_size - voxel_size / 2
+        np.asarray(sensor_weighting_mesh.vertices - voxel_size / 2) * 1 / voxel_size
     ).astype(int)
 
     sensor_weighting = database[scene]["sensor_weighting"]

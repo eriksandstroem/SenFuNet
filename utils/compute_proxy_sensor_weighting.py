@@ -221,7 +221,7 @@ def compute_proxy_sensor_weighting_and_mesh(
         )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
 
     voxel_points = np.round(
-        np.asarray(vertices) * 1 / voxel_size - voxel_size / 2
+        np.asarray(vertices - voxel_size / 2) * 1 / voxel_size
     ).astype(int)
 
     # remove voxels if they are outside of the voxelgrid - these are treated as uninitialized.
