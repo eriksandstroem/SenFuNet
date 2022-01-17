@@ -281,6 +281,14 @@ def compute_proxy_sensor_weighting_and_mesh(
 
 
 def preprocess_weight_grid(weights):
+    """Function to compute the weight mask for skimage marching cubes corresponding to how Open3D marching cubes deals with masking. Open3D requires that all 8 corners of the voxel are initialized in order to draw a surface while skimage only requires 1 of the voxels to be initialized e.g. the index (1,1,1) determines if the voxel at (0,0,0) is initialized etc.
+
+    Args:
+        weights: weight grid
+
+    Returns:
+        mask: boolean grid to be used as input to skimage marching cubes algorithm
+    """
     mask = np.zeros_like(weights)
     indices = np.array(weights.nonzero())
     indices = indices[:, ~np.any(indices == 0, axis=0)]
