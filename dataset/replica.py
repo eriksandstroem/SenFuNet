@@ -52,12 +52,7 @@ class Replica(Dataset):
         self.target = config_data.target
         self.mode = config_data.mode
 
-        try:
-            self.filtering_model = config_data.filtering_model
-        except AttributeError:
-            self.filtering_model = len(
-                config_data.input
-            )  # used when training routing network
+        self.filtering_model = config_data.filtering_model
 
         self._scenes = []
 

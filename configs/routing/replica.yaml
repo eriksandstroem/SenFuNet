@@ -13,8 +13,6 @@ LOSS:
   weight_scale: 10. # only relevant if the gradweighted term is used
   lmbda: 0.06
   completion: False # If completion is True, all pixels incur a loss, while, if it is false, on those with a valid input value incur a loss.
-FILTERING_MODEL:
-  model: "3dconv"
 TRAINING:
   train_batch_size: 2
   train_shuffle: True
