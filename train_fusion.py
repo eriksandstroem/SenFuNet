@@ -44,6 +44,7 @@ def train_fusion(args):
         random.seed(config.SETTINGS.seed)
         np.random.seed(config.SETTINGS.seed)
         torch.manual_seed(config.SETTINGS.seed)
+        torch.cuda.manual_seed_all(config.SETTINGS.seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 

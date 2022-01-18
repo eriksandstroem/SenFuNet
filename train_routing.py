@@ -56,6 +56,7 @@ def train(args, config):
         np.random.seed(config.SETTINGS.seed)
         torch.manual_seed(config.SETTINGS.seed)
         torch.backends.cudnn.deterministic = True
+        torch.cuda.manual_seed_all(config.SETTINGS.seed)
         torch.backends.cudnn.benchmark = False
 
     if config.SETTINGS.gpu:
