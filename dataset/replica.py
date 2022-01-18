@@ -423,10 +423,13 @@ class Replica(Dataset):
     def get_warped_image(self, right_rgb, left_depth):
         # Note: this function assumes an image input size of 256x256.
         # To make it image size adaptive, change the focal length accordingly (128)
-        disp = (
-            0.1 * 128 / left_depth
-        )  # compute disparity (unit pixels) from depth (unit m) using the fact that the baseline is 0.1 m and
-        # the focal length in pixels is 128 (since our image size is 256x256)
+        disp = np.divide(
+            0.1 * 128,
+            left_depth,
+            out=np.zeros_like(left_depth),
+            where=left_depth != 0.0,
+        )
+        # compute disparity (unit pixels) from depth (unit m) using the fact that the baseline is 0.1 m and the focal length in pixels is 128 (since our image size is 256x256)
         size = right_rgb.shape[0]  # assumes square input image
 
         idx_x_left = np.transpose(
