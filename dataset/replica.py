@@ -421,7 +421,8 @@ class Replica(Dataset):
         return sample
 
     def get_warped_image(self, right_rgb, left_depth):
-
+        # Note: this function assumes an image input size of 256x256.
+        # To make it image size adaptive, change the focal length accordingly (128)
         disp = (
             0.1 * 128 / left_depth
         )  # compute disparity (unit pixels) from depth (unit m) using the fact that the baseline is 0.1 m and
