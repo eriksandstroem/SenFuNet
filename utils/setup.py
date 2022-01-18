@@ -32,7 +32,12 @@ from utils.saving import *
 
 def get_data_config(config, mode):
     data_config = copy(config.DATA)
-    data_config.filtering_model = config.FILTERING_MODEL.model
+    try:
+        data_config.filtering_model = config.FILTERING_MODEL.model
+    except AttributeError:
+        data_config.filtering_model = len(
+            config.DATA.input
+        )  # used when training routing network
 
     if mode == "train":
         data_config.mode = "train"
