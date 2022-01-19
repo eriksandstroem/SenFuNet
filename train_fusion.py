@@ -3,6 +3,7 @@ import argparse
 import datetime
 import numpy as np
 import random
+import wandb
 
 from tqdm import tqdm
 import math
@@ -38,6 +39,18 @@ def train_fusion(args):
     config = load_config_from_yaml(args["config"])
 
     config.TIMESTAMP = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+
+    # initialize weights and biases logging
+    wandb.init(
+        config=config,
+        entity="esandstroem",
+        project="senfunet-fusion",
+        name=config.TIMESTAMP,
+        notes="put comment here",
+    )
+    # change run name of wandb
+    wandb.run.name = config.TIMESTAMP
+    wandb.run.save()
 
     # set seed for reproducibility
     if config.SETTINGS.seed:
@@ -208,6 +221,9 @@ def train_fusion(args):
             gamma=config.OPTIMIZATION.scheduler.gamma_fusion,
         )
 
+    # add weight and gradient tracking in wandb
+    wandb.watch(pipeline, criterion, log="all", log_freq=500)
+
     # define some parameters
     n_batches = float(len(train_dataset) / config.TRAINING.train_batch_size)
 
@@ -252,7 +268,7 @@ def train_fusion(args):
         train_loss = 0
         grad_norm_alpha_net = 0
         grad_norm_feature = dict()
-        grad_norm_outlier_net = dict()
+        grad_norm_refinement_net = dict()
         val_norm = 0
         l1_interm = 0
         l1_grid = 0
@@ -260,7 +276,7 @@ def train_fusion(args):
         for sensor_ in config.DATA.input:
             l1_grid_dict[sensor_] = 0
             grad_norm_feature[sensor_] = 0
-            grad_norm_outlier_net[sensor_] = 0
+            grad_norm_refinement_net[sensor_] = 0
 
         for i, batch in tqdm(enumerate(train_loader), total=len(train_dataset)):
 
@@ -408,6 +424,7 @@ def train_fusion(args):
 
             for name, param in pipeline.named_parameters():
                 if param.grad is not None:
+                    # accumulate gradient norms from feature and weighting net
                     if (
                         (i + 1) % config.OPTIMIZATION.accumulation_steps == 0
                         or i == n_batches - 1
@@ -419,16 +436,12 @@ def train_fusion(args):
                         elif name.startswith(
                             "filter_pipeline._filtering_network.encoder"
                         ) or name.startswith("filter_pipeline._filtering_network.sdf"):
-                            grad_norm_outlier_net[name.split(".")[3]] += torch.norm(
+                            grad_norm_refinement_net[name.split(".")[3]] += torch.norm(
                                 param.grad
                             )
                         else:
                             grad_norm_alpha_net += torch.norm(param.grad)
                     val_norm += torch.norm(param)
-
-                # Note, gradients that have been not None at one time, will never
-                # be none again since the zero_Grad option just makes them zero again.
-                # In pytorch 1.7.1 there is the option to set the gradients to none again
 
             if (i + 1) % config.SETTINGS.log_freq == 0:
 
@@ -442,52 +455,45 @@ def train_fusion(args):
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] /= divide
                     grad_norm_feature[sensor_] /= divide
-                    grad_norm_outlier_net[sensor_] /= divide
+                    grad_norm_refinement_net[sensor_] /= divide
 
-                workspace.writer.add_scalar(
-                    "Train/loss", train_loss, global_step=i + 1 + epoch * n_batches
-                )
-                workspace.writer.add_scalar(
-                    "Train/grad_norm_alpha_net",
-                    grad_norm_alpha_net,
-                    global_step=i + 1 + epoch * n_batches,
-                )
+                wandb.log({"Train/nbr frames": i + 1 + epoch * n_batches})
+                wandb.log({"Train/total loss": train_loss})
+                wandb.log({"Train/gradient norm alpha net": grad_norm_alpha_net})
+                wandb.log({"Train/parameter value norm": val_norm})
+                if config.FUSION_MODEL.use_fusion_net:
+                    wandb.log(
+                        {"Train/fusion network l1 loss": l1_interm}
+                    )  # concatenated norm from both sensors
+                wandb.log({"Train/l1 sensor fused loss": l1_grid})
 
-                workspace.writer.add_scalar(
-                    "Train/val_norm", val_norm, global_step=i + 1 + epoch * n_batches
-                )
-
-                workspace.writer.add_scalar(
-                    "Train/l1_interm", l1_interm, global_step=i + 1 + epoch * n_batches
-                )
-                workspace.writer.add_scalar(
-                    "Train/l1_translation",
-                    l1_grid,
-                    global_step=i + 1 + epoch * n_batches,
-                )
                 for sensor_ in config.DATA.input:
                     if config.FEATURE_MODEL.use_feature_net:
-                        workspace.writer.add_scalar(
-                            "Train/grad_norm_feature_" + sensor_,
-                            grad_norm_feature[sensor_],
-                            global_step=i + 1 + epoch * n_batches,
+                        wandb.log(
+                            {
+                                "Train/gradident norm feature net "
+                                + sensor_: grad_norm_feature[sensor_]
+                            }
                         )
-                    workspace.writer.add_scalar(
-                        "Train/grad_norm_outlier_net" + sensor_,
-                        grad_norm_outlier_net[sensor_],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
-                    workspace.writer.add_scalar(
-                        "Train/l1_" + sensor_,
-                        l1_grid_dict[sensor_],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
+                    if config.FILTERING_MODEL.CONV3D_MODEL.use_refinement:
+                        wandb.log(
+                            {
+                                "Train/gradient norm refinement net "
+                                + sensor_: grad_norm_refinement_net[sensor_]
+                            }
+                        )
+                        wandb.log(
+                            {
+                                "Train/l1 refinement loss "
+                                + sensor_: l1_grid_dict[sensor_]
+                            }
+                        )
 
                 divide = 0
                 train_loss = 0
                 grad_norm_alpha_net = 0
                 grad_norm_feature = dict()
-                grad_norm_outlier_net = dict()
+                grad_norm_refinement_net = dict()
                 val_norm = 0
                 l1_interm = 0
                 l1_grid = 0
@@ -495,7 +501,7 @@ def train_fusion(args):
                 for sensor_ in config.DATA.input:
                     l1_grid_dict[sensor_] = 0
                     grad_norm_feature[sensor_] = 0
-                    grad_norm_outlier_net[sensor_] = 0
+                    grad_norm_refinement_net[sensor_] = 0
 
             if config.TRAINING.gradient_clipping:
                 torch.nn.utils.clip_grad_norm_(
@@ -512,16 +518,7 @@ def train_fusion(args):
 
                 if not config.FILTERING_MODEL.CONV3D_MODEL.fixed:
                     # make the gradients belonging to layers with zero-norm gradient none instead of zero to avoid update
-                    # of weights - this is a debugging test to see if the system responds appropriately
-                    for name, param in pipeline.named_parameters():
-                        if param.grad is not None:
-                            if name.startswith(
-                                "filter_pipeline._filtering_network.weight_decoder"
-                            ):
-                                if torch.norm(param.grad) == 0:
-                                    print("gradient norm is zero for: ", name)
-                                    param.grad = None
-
+                    # of weights
                     optimizer_filt.step()
                     scheduler_filt.step()
                     optimizer_filt.zero_grad(set_to_none=True)
@@ -530,7 +527,7 @@ def train_fusion(args):
                     scheduler_fusion.step()
                     optimizer_fusion.zero_grad(set_to_none=True)
 
-            # if False:
+            # if False: # for debugging
             if (
                 (i + 1) % config.SETTINGS.eval_freq == 0
                 or i == n_batches - 1
@@ -559,48 +556,16 @@ def train_fusion(args):
                     mode="val", workspace=workspace
                 )
 
-                for sensor in config.DATA.input:
-                    workspace.writer.add_scalar(
-                        "Val/mse_" + sensor,
-                        val_eval[sensor]["mse"],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
-                    workspace.writer.add_scalar(
-                        "Val/acc_" + sensor,
-                        val_eval[sensor]["acc"],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
-                    workspace.writer.add_scalar(
-                        "Val/iou_" + sensor,
-                        val_eval[sensor]["iou"],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
-                    workspace.writer.add_scalar(
-                        "Val/mad_" + sensor,
-                        val_eval[sensor]["mad"],
-                        global_step=i + 1 + epoch * n_batches,
-                    )
+                for sensor_ in config.DATA.input:
+                    wandb.log({"Val/mse " + sensor_: val_eval[sensor]["mse"]})
+                    wandb.log({"Val/acc " + sensor_: val_eval[sensor]["acc"]})
+                    wandb.log({"Val/iou " + sensor_: val_eval[sensor]["iou"]})
+                    wandb.log({"Val/mad " + sensor_: val_eval[sensor]["mad"]})
 
-                workspace.writer.add_scalar(
-                    "Val/mse_fused",
-                    val_eval_fused["mse"],
-                    global_step=i + 1 + epoch * n_batches,
-                )
-                workspace.writer.add_scalar(
-                    "Val/acc_fused",
-                    val_eval_fused["acc"],
-                    global_step=i + 1 + epoch * n_batches,
-                )
-                workspace.writer.add_scalar(
-                    "Val/iou_fused",
-                    val_eval_fused["iou"],
-                    global_step=i + 1 + epoch * n_batches,
-                )
-                workspace.writer.add_scalar(
-                    "Val/mad_fused",
-                    val_eval_fused["mad"],
-                    global_step=i + 1 + epoch * n_batches,
-                )
+                wandb.log({"Val/mse fused": val_eval_fused["mse"]})
+                wandb.log({"Val/acc fused": val_eval_fused["acc"]})
+                wandb.log({"Val/iou fused": val_eval_fused["iou"]})
+                wandb.log({"Val/mad fused": val_eval_fused["mad"]})
 
                 # check if current checkpoint is best
                 if val_eval_fused["iou"] >= best_iou_filt:

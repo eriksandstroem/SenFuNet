@@ -256,13 +256,14 @@ class Fusion_TranslationLoss(torch.nn.Module):
             l1_interm = None
 
         output = dict()
-        output["loss"] = l
+        output["loss"] = l  # total loss
         output["l1_interm"] = l1_interm  # this mixes all sensors in one logging graph
-        output["l1_grid"] = l1_grid
+        output["l1_grid"] = l1_grid # sensor fused l1 loss
         for sensor_ in self.sensors:
-            output["l1_grid_" + sensor_] = l1_grid_dict[sensor_]
+            output["l1_grid_" + sensor_] = l1_grid_dict[sensor_] # refinement loss
 
         return output
+
 
 class RoutingLoss(torch.nn.Module):
     def __init__(self, config):

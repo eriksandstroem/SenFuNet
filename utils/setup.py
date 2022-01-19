@@ -17,7 +17,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-from torch.utils.tensorboard import SummaryWriter
 import trimesh
 import skimage.measure
 
@@ -126,8 +125,6 @@ class Workspace(object):
         os.makedirs(self.model_path)
         os.makedirs(self.log_path)
         os.makedirs(self.output_path)
-
-        self.writer = SummaryWriter(self.log_path)
 
         self._init_logger()
 
