@@ -222,7 +222,7 @@ def train_fusion(args):
         )
 
     # add weight and gradient tracking in wandb
-    wandb.watch(pipeline, criterion, log="all", log_freq=1)
+    wandb.watch(pipeline, criterion, log="all", log_freq=500)
 
     # define some parameters
     n_batches = float(len(train_dataset) / config.TRAINING.train_batch_size)
