@@ -1,16 +1,15 @@
-import torch
 import argparse
-import datetime
+import torch
 
+from skimage import io
+import numpy as np
 from tqdm import tqdm
 
 from utils.loading import load_config
 from utils.setup import *
-
 from modules.routing import ConfidenceRouting
 
-from skimage import io
-import numpy as np
+
 
 
 def arg_parser():
