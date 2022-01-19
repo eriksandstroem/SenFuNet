@@ -141,8 +141,8 @@ DATA:
   resy_tof: 256
   resx: 256 # default settings
   resy: 256
-  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/replica/train.txt
-  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/replica/val.txt
-  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/corbs/replica/test_office_4_hotel_0_office_0.txt
+  train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt #train.txt
+  val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt #val.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_4_hotel_0_office_0.txt
   init_value: 0.0 # init value of tsdf grids
   trunc_value: 0.05 # truncation distance
