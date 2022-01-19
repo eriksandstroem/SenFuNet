@@ -12,6 +12,7 @@ from utils.setup import *
 
 from utils.loss import RoutingLoss
 from modules.routing import ConfidenceRouting
+import wandb
 
 
 def arg_parser():
@@ -49,7 +50,6 @@ def prepare_input_data(batch, config, device):
 
 
 def train(args, config):
-
     # set seed for reproducibility
     if config.SETTINGS.seed:
         random.seed(config.SETTINGS.seed)
@@ -66,6 +66,18 @@ def train(args, config):
 
     config.TIMESTAMP = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
     print("model time stamp: ", config.TIMESTAMP)
+
+    # initialize weights and biases logging
+    wandb.init(
+        config=config,
+        entity="esandstroem",
+        project="senfunet-routing",
+        name=config.TIMESTAMP,
+        notes="put comment here",
+    )
+    # change run name of wandb
+    wandb.run.name = config.TIMESTAMP
+    wandb.run.save()
 
     workspace = get_workspace(config)
     workspace.save_config(config)
@@ -100,6 +112,9 @@ def train(args, config):
     criterion = RoutingLoss(config)
     criterion = criterion.to(device)
 
+    # add weight and gradient tracking in wandb
+    wandb.watch(model, criterion, log="all", log_freq=1)
+
     # define optimizer
     optimizer = torch.optim.RMSprop(
         model.parameters(),
@@ -116,7 +131,7 @@ def train(args, config):
     val_loss_best = np.infty
 
     # sample validation visualization frames
-    val_vis_ids = np.random.choice(np.arange(0, n_val_batches), 10, replace=False)
+    val_vis_ids = np.random.choice(np.arange(0, n_val_batches), 5, replace=False)
 
     # # define metrics
     l1_criterion = torch.nn.L1Loss()
@@ -133,6 +148,10 @@ def train(args, config):
         train_loss_l1 = 0.0
         train_loss_l2 = 0.0
 
+        train_epoch_loss_t = 0.0
+        train_epoch_loss_l1 = 0.0
+        train_epoch_loss_l2 = 0.0
+
         # make ready for training and clear optimizer
         model.train()
         optimizer.zero_grad()
@@ -140,7 +159,7 @@ def train(args, config):
         for i, batch in enumerate(tqdm(train_loader, total=n_train_batches)):
             inputs, target = prepare_input_data(batch, config, device)
 
-            output = model.forward(inputs)
+            output = model(inputs)
 
             est = output[:, 0, :, :].unsqueeze_(1)
             unc = output[:, 1, :, :].unsqueeze_(1)
@@ -166,62 +185,96 @@ def train(args, config):
             train_loss_l1 += loss_l1.item()
             train_loss_l2 += loss_l2.item()
 
+            train_epoch_loss_t += loss.item()
+            train_epoch_loss_l1 += loss_l1.item()
+            train_epoch_loss_l2 += loss_l2.item()
+
             if i % config.OPTIMIZATION.accumulation_steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-            # break
 
-        train_loss_t /= n_train_batches
-        train_loss_l1 /= n_train_batches
-        train_loss_l2 /= n_train_batches
+            if i % config.SETTINGS.log_freq == 0 and i > 0:
+                # compute avg. loss per frame
+                train_loss_t /= (
+                    config.SETTINGS.log_freq * config.TRAINING.train_batch_size
+                )
+                train_loss_l1 /= (
+                    config.SETTINGS.log_freq * config.TRAINING.train_batch_size
+                )
+                train_loss_l2 /= (
+                    config.SETTINGS.log_freq * config.TRAINING.train_batch_size
+                )
+                # logging not working properly since I log at i = 0 and then
+                # the train_loss parameters are divided with a large number causing weird oscillations. Also add wandb to gitignore. Also remove the lines which do the workspace.writer calls to tensorboard, but I still want to log per epoch to file to compare the training loss to the validation loss over the epochs. So I need a new parameter for this.
+                wandb.log(
+                    {
+                        "Train/total loss": train_loss_t,
+                        "Train/l1 loss": train_loss_l1,
+                        "Train/l2 loss": train_loss_l2,
+                        "Train/nbr_frames": (epoch * n_train_batches + i)
+                        * config.TRAINING.train_batch_size,
+                    }
+                )
+                train_loss_t = 0
+                train_loss_l1 = 0
+                train_loss_l2 = 0
+
+        train_epoch_loss_t /= n_train_batches * config.TRAINING.train_batch_size
+        train_epoch_loss_l1 /= n_train_batches * config.TRAINING.train_batch_size
+        train_epoch_loss_l2 /= n_train_batches * config.TRAINING.train_batch_size
 
         # log training metrics
-        workspace.log("Epoch {} Loss {}".format(epoch, train_loss_t))
-        workspace.log("Epoch {} L1 Loss {}".format(epoch, train_loss_l1))
-        workspace.log("Epoch {} L2 Loss {}".format(epoch, train_loss_l2))
-
-        workspace.writer.add_scalar("Train/loss_t", train_loss_t, global_step=epoch)
-        workspace.writer.add_scalar("Train/loss_l1", train_loss_l1, global_step=epoch)
-        workspace.writer.add_scalar("Train/loss_l2", train_loss_l2, global_step=epoch)
+        workspace.log("Epoch {} Loss {}".format(epoch, train_epoch_loss_t))
+        workspace.log("Epoch {} L1 Loss {}".format(epoch, train_epoch_loss_l1))
+        workspace.log("Epoch {} L2 Loss {}".format(epoch, train_epoch_loss_l2))
 
         model.eval()
 
         for i, batch in enumerate(tqdm(val_loader, total=n_val_batches)):
             inputs, target = prepare_input_data(batch, config, device)
 
-            output = model.forward(inputs)
+            output = model(inputs)
 
             est = output[:, 0, :, :].unsqueeze_(1)
             unc = output[:, 1, :, :].unsqueeze_(1)
-
             # visualize frames
             if i in val_vis_ids:
-                # parse frames
-                frame_est = est[0, :, :, :].cpu().detach().numpy()
-                # frame_inp = inputs[0, :, :, :].cpu().detach().numpy()
-                frame_gt = target[0, :, :, :].cpu().detach().numpy()
-                frame_unc = output[0, :, :, :].cpu().detach().numpy()
+                # parse frames and normalize to range 0-1
+                frame_est = est[0, :, :, :].cpu().detach().numpy().reshape(512, 512, 1)
+                frame_est /= np.amax(frame_est)
+                frame_gt = (
+                    target[0, :, :, :].cpu().detach().numpy().reshape(512, 512, 1)
+                )
+                frame_gt /= np.amax(frame_gt)
+                frame_unc = unc[0, :, :, :].cpu().detach().numpy().reshape(512, 512, 1)
                 frame_conf = np.exp(-1.0 * frame_unc)
-                frame_l1 = np.abs(frame_est - frame_gt)
-                # frame_inp_l1 = np.abs(frame_inp - frame_gt)
+                frame_unc /= np.amax(frame_unc)
+                frame_l1 = np.abs(frame_est - frame_gt).reshape(512, 512, 1)
+                frame_l1 /= np.amax(frame_l1)
 
-                # write to logger
-                workspace.writer.add_image(
-                    "Val/est_{}".format(i), frame_est, global_step=epoch
+                wandb.log(
+                    {
+                        "Val/images": [
+                            wandb.Image(
+                                frame_est,
+                                caption="depth estimate {}".format(i),
+                            ),
+                            wandb.Image(frame_gt, caption="gt depth {}".format(i)),
+                            wandb.Image(
+                                frame_unc,
+                                caption="uncertainty estimate {}".format(i),
+                            ),
+                            wandb.Image(
+                                frame_conf,
+                                caption="confidence estimate {}".format(i),
+                            ),
+                            wandb.Image(
+                                frame_l1,
+                                caption="l1 depth error {}".format(i),
+                            ),
+                        ]
+                    }
                 )
-                workspace.writer.add_image(
-                    "Val/gt_{}".format(i), frame_gt, global_step=epoch
-                )
-                workspace.writer.add_image(
-                    "Val/unc_{}".format(i), frame_unc, global_step=epoch
-                )
-                workspace.writer.add_image(
-                    "Val/conf_{}".format(i), frame_conf, global_step=epoch
-                )
-                workspace.writer.add_image(
-                    "Val/l1_{}".format(i), frame_l1, global_step=epoch
-                )
-                # workspace.writer.add_image('Val/l1_inp_{}'.format(i), frame_inp_l1, global_step=epoch)
 
             if not config.LOSS.completion:
                 if len(config.DATA.input) == 1:
@@ -240,9 +293,9 @@ def train(args, config):
             val_loss_l1 += loss_l1.item()
             val_loss_l2 += loss_l2.item()
 
-        val_loss_t /= n_val_batches
-        val_loss_l1 /= n_val_batches
-        val_loss_l2 /= n_val_batches
+        val_loss_t /= n_val_batches * config.TRAINING.train_batch_size
+        val_loss_l1 /= n_val_batches * config.TRAINING.train_batch_size
+        val_loss_l2 /= n_val_batches * config.TRAINING.train_batch_size
 
         # log validation metrics
         workspace.log(
@@ -255,9 +308,14 @@ def train(args, config):
             "Epoch {} Validation L2 Loss {}".format(epoch, val_loss_l2), mode="val"
         )
 
-        workspace.writer.add_scalar("Val/loss_t", val_loss_t, global_step=epoch)
-        workspace.writer.add_scalar("Val/loss_l1", val_loss_l1, global_step=epoch)
-        workspace.writer.add_scalar("Val/loss_l2", val_loss_l2, global_step=epoch)
+        wandb.log(
+            {
+                "Val/total loss": val_loss_t,
+                "Val/l1 loss": val_loss_l1,
+                "Val/l2 loss": val_loss_l2,
+                "Val/epoch": epoch,
+            }
+        )
 
         # define model state for storing
         model_state = {
