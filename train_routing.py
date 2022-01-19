@@ -113,7 +113,7 @@ def train(args, config):
     criterion = criterion.to(device)
 
     # add weight and gradient tracking in wandb
-    wandb.watch(model, criterion, log="all", log_freq=1)
+    wandb.watch(model, criterion, log="all", log_freq=1000)
 
     # define optimizer
     optimizer = torch.optim.RMSprop(
