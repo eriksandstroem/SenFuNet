@@ -1,2 +1,0 @@
-hotel_0/3/left_depth_gt hotel_0/3/left_depth_noise_5.0 hotel_0/3/left_bts_depth hotel_0/3/left_psmnet_depth hotel_0/3/left_sgm_depth hotel_0/3/left_rgb hotel_0/3/left_camera_matrix
-office_4/3/left_depth_gt office_4/3/left_depth_noise_5.0 office_4/3/left_bts_depth office_4/3/left_psmnet_depth office_4/3/left_sgm_depth office_4/3/left_rgb office_4/3/left_camera_matrix
