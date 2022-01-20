@@ -20,7 +20,7 @@ The code has been tested with Python 3.8.5
 4. Open the requirements.txt and change the path to the submodule evaluate-3d-reconstruction according to your file structure.
 5. Open the requirements.txt and replace the Open3D entry with a version of your choice. Install version 0.13.0 or newer (this has not been tested). Replace the entry with e.g. "open3d==0.13.0". A local version of the Open3D library was used when developing the project which is the reason why this entry needs to be replaced.
 5. Install the dependencies: <pre><code>pip install -r requirements.txt</code></pre>
-
+6. Note that the project uses "Weights and Biases" for logging during training. If you want to train your own models, therefore create your own account at [**Weights and Biases**](https://wandb.ai/site).
 <!---
 6. TODO: You may need to add the venv.patch file to include it and run bash venv.patch and place this file in the bin of the virtual environment. Ask Samuel if needed. Check riot how the file is executed.
 -->
