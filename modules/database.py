@@ -61,6 +61,7 @@ class Database(Dataset):
                 self.features[sensor][s] = FeatureGrid(
                     voxel_size, self.n_features, bbox
                 )
+            
 
                 self.tsdf[sensor][s] = VoxelGrid(
                     voxel_size,
@@ -68,6 +69,7 @@ class Database(Dataset):
                     bbox=bbox,
                     initial_value=self.initial_value,
                 )
+            
 
                 if self.refinement and config.test_mode:
                     self.tsdf_refined[sensor][s] = VoxelGrid(
@@ -76,7 +78,7 @@ class Database(Dataset):
                         bbox=bbox,
                         initial_value=self.initial_value,
                     )
-
+     
             self.filtered[s] = VoxelGrid(
                 voxel_size,
                 volume=None,

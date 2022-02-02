@@ -195,6 +195,7 @@ class Integrator(torch.nn.Module):
             .repeat(1, f4)
             .float()
         )
+
         features_old = features_volume.view(xs * ys * zs, f4)[feature_indices]
 
         # here we should not multiply the update_feat with weights_feat in the nominator since we already have that baked in

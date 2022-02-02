@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 # TODO: The numpy grids can be replaced with torch grids directly for a computational speed up during training and testing
 
@@ -15,6 +16,9 @@ class FeatureGrid(object):
             self._origin = bbox[:, 0]
 
             volume_shape = np.diff(self._bbox, axis=1).ravel() / self.resolution
+            # float16 conversion critical - otherwise, numerical
+            # instabilies will cause wrong voxel grid size
+            volume_shape = volume_shape.astype(np.float16)
             self._shape = (
                 np.ceil([volume_shape[0], volume_shape[1], volume_shape[2], n_features])
                 .astype(np.int32)
@@ -68,6 +72,10 @@ class VoxelGrid(object):
 
         if volume is None and bbox is not None:
             volume_shape = np.diff(self._bbox, axis=1).ravel() / self.resolution
+            # float16 conversion critical - otherwise, numerical
+            # instabilies will cause wrong voxel grid size
+            volume_shape = volume_shape.astype(np.float16)
+
             volume_shape = np.ceil(volume_shape).astype(np.int32).tolist()  # round up
             # float 16 conversion is critical
             self._volume = initial_value * np.ones(volume_shape).astype("float16")
