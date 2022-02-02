@@ -14,22 +14,22 @@ retrieve_scenes() {
 	
 
 # extract scenes
-# scene_string=$(retrieve_scenes $CONFIG_FILE 'train')
-# echo $scene_string
+scene_string=$(retrieve_scenes $CONFIG_FILE 'train')
+echo $scene_string
 
-# for SCENE in $scene_string
-# do
-# 	echo $SCENE
-# 	tar -I pigz -xf /cluster/work/cvl/$USER/data/replica/manual/$SCENE.tar -C ${TMPDIR}/
-# done
+for SCENE in $scene_string
+do
+	echo $SCENE
+	tar -I pigz -xf /cluster/work/cvl/$USER/data/replica/manual/$SCENE.tar -C ${TMPDIR}/
+done
 
-# scene_string=$(retrieve_scenes $CONFIG_FILE 'val')
+scene_string=$(retrieve_scenes $CONFIG_FILE 'val')
 
-# for SCENE in $scene_string
-# do
-# 	echo $SCENE
-# 	tar -I pigz -xf /cluster/work/cvl/$USER/data/replica/manual/$SCENE.tar -C ${TMPDIR}/
-# done
+for SCENE in $scene_string
+do
+	echo $SCENE
+	tar -I pigz -xf /cluster/work/cvl/$USER/data/replica/manual/$SCENE.tar -C ${TMPDIR}/
+done
 
 
 python -u /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/train_fusion.py --config /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/configs/fusion/replica.yaml
