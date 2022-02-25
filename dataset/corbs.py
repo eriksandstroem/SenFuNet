@@ -125,7 +125,7 @@ class CoRBS(Dataset):
         # build mapping databases to get matches from pose timestamp to frame timestamp
         self.pose_to_rgb = {t_p: t_r for (t_p, t_r) in rgb_matches}
 
-        # match pose that are matched with rgb to depth timestamp
+        # match poses that are matched with rgb to a corresponding depth timestamp
         depth_matches = associate(
             self.pose_to_rgb, self.depth_frames, offset=0.0, max_difference=0.02
         )

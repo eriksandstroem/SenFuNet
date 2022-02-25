@@ -42,7 +42,7 @@ def count_parameters(model):
 
 def test_fusion(config):
     # define output dir
-    test_path = "/test_no_carving_debug_skimage_mc"
+    test_path = "/test"
     if config.FILTERING_MODEL.model != "3dconv":
         time = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
         print(time)

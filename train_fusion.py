@@ -527,7 +527,7 @@ def train_fusion(args):
                     scheduler_fusion.step()
                     optimizer_fusion.zero_grad(set_to_none=True)
 
-            # if False: # for debugging
+            # for debugging
             if (
                 (i + 1) % config.SETTINGS.eval_freq == 0
                 or i == n_batches - 1

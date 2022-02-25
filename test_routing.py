@@ -10,8 +10,6 @@ from utils.setup import *
 from modules.routing import ConfidenceRouting
 
 
-
-
 def arg_parser():
 
     parser = argparse.ArgumentParser()
@@ -107,7 +105,7 @@ def test(config):
             + "/"
             + batch["frame_id"][0].split("/")[1]
             + "/left_routing_refined_"
-            + config.TESTING.model_path.split("/")[10]
+            + config.TESTING.model_path.split("/")[-3]
         )
         output_dir_confidence = (
             config.DATA.root_dir
@@ -116,7 +114,7 @@ def test(config):
             + "/"
             + batch["frame_id"][0].split("/")[1]
             + "/left_routing_confidence_"
-            + config.TESTING.model_path.split("/")[10]
+            + config.TESTING.model_path.split("/")[-3]
         )
 
         if not os.path.exists(output_dir_refined):
