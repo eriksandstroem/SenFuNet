@@ -39,6 +39,7 @@ ROUTING_MODEL:
   contraction: 64 # hidden dimension of routing network
   normalization: False # apply batch normalization
 FILTERING_MODEL:
+  do: True  # whether to do sensor fusion or not
   model: '3dconv' # 3dconv, tsdf_early_fusion, tsdf_middle_fusion, routedfusion
   CONV3D_MODEL:
     fixed: False # fix network weights
@@ -128,7 +129,7 @@ DATA:
   max_depth: 12.3 # general sensor (in meters)
   root_dir: /cluster/work/cvl/esandstroem/data/scene3d # Path to data folder
   dataset: Scene3D # dataset
-  input: [tof, stereo] # list of sensors to fuse
+  input: [tof, stereo] # list of sensors to fuse. When FILTERING_MODEL.do: False, this list can consist of only one sensor
   target: gt # ground truth depth label
   resx_stereo: 256 # I assume square input images
   resy_stereo: 256

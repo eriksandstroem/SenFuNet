@@ -160,7 +160,7 @@ def train_fusion(args):
     if config.TRAINING.pretrain_fusion_net and config.FUSION_MODEL.use_fusion_net:
         raise NotImplementedError
 
-    if config.FEATURE_MODEL.use_feature_net:
+    if config.FEATURE_MODEL.use_feature_net and config.FILTERING_MODEL.do:
         feature_params = []
         for sensor in config.DATA.input:
             feature_params += list(
@@ -443,7 +443,7 @@ def train_fusion(args):
                             grad_norm_alpha_net += torch.norm(param.grad)
                     val_norm += torch.norm(param)
 
-            if (i + 1) % config.SETTINGS.log_freq == 0:
+            if (i + 1) % config.SETTINGS.log_freq == 0 and divide > 0:
 
                 train_loss /= divide
                 grad_norm_alpha_net /= divide
@@ -468,7 +468,10 @@ def train_fusion(args):
                 wandb.log({"Train/l1 sensor fused loss": l1_grid})
 
                 for sensor_ in config.DATA.input:
-                    if config.FEATURE_MODEL.use_feature_net:
+                    if (
+                        config.FEATURE_MODEL.use_feature_net
+                        and config.FILTERING_MODEL.do
+                    ):
                         wandb.log(
                             {
                                 "Train/gradident norm feature net "
@@ -511,12 +514,15 @@ def train_fusion(args):
             if (
                 i + 1
             ) % config.OPTIMIZATION.accumulation_steps == 0 or i == n_batches - 1:
-                if config.FEATURE_MODEL.use_feature_net:
+                if config.FEATURE_MODEL.use_feature_net and config.FILTERING_MODEL.do:
                     optimizer_feature.step()
                     scheduler_feature.step()
                     optimizer_feature.zero_grad(set_to_none=True)
 
-                if not config.FILTERING_MODEL.CONV3D_MODEL.fixed:
+                if (
+                    not config.FILTERING_MODEL.CONV3D_MODEL.fixed
+                    and pipeline.filter_pipeline is not None
+                ):
                     # make the gradients belonging to layers with zero-norm gradient none instead of zero to avoid update
                     # of weights
                     optimizer_filt.step()
@@ -535,9 +541,12 @@ def train_fusion(args):
             ):
                 val_database.reset()
                 # zero out all grads
-                if config.FEATURE_MODEL.use_feature_net:
+                if config.FEATURE_MODEL.use_feature_net and config.FILTERING_MODEL.do:
                     optimizer_feature.zero_grad(set_to_none=True)
-                if not config.FILTERING_MODEL.CONV3D_MODEL.fixed:
+                if (
+                    not config.FILTERING_MODEL.CONV3D_MODEL.fixed
+                    and pipeline.filter_pipeline is not None
+                ):
                     optimizer_filt.zero_grad(set_to_none=True)
                 if not config.FUSION_MODEL.fixed and config.FUSION_MODEL.use_fusion_net:
                     optimizer_fusion.zero_grad(set_to_none=True)

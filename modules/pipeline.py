@@ -17,12 +17,15 @@ class Pipeline(torch.nn.Module):
 
         # setup pipeline
         self.fuse_pipeline = Fuse_Pipeline(config)
-        if config.FILTERING_MODEL.model == "3dconv":
-            self.filter_pipeline = Filter_Pipeline(config)
+        if config.FILTERING_MODEL.do:
+            if config.FILTERING_MODEL.model == "3dconv":
+                self.filter_pipeline = Filter_Pipeline(config)
+            else:
+                self.filter_pipeline = (
+                    None  # used when we run the tsdf fusion or routedfusion
+                )
         else:
-            self.filter_pipeline = (
-                None  # used when we run the tsdf fusion or routedfusion
-            )
+            self.filter_pipeline = None
 
     def forward(self, batch, database, epoch, device):  # train step
         scene_id = batch["frame_id"][0].split("/")[0]
@@ -31,21 +34,28 @@ class Pipeline(torch.nn.Module):
 
         fused_output = self.fuse_pipeline.fuse_training(batch, database, device)
 
-        if self.filter_pipeline is not None:
-            filtered_output = self.filter_pipeline.filter_training(
-                fused_output, database, epoch, frame, scene_id, batch["sensor"], device
-            )
-        else:
-            filtered_output = None
+        if self.config.FILTERING_MODEL.do:
+            if self.filter_pipeline is not None:
+                filtered_output = self.filter_pipeline.filter_training(
+                    fused_output,
+                    database,
+                    epoch,
+                    frame,
+                    scene_id,
+                    batch["sensor"],
+                    device,
+                )
+            else:
+                filtered_output = None
 
-        if filtered_output == "save_and_exit":
-            return "save_and_exit"
+            if filtered_output == "save_and_exit":
+                return "save_and_exit"
 
-        if filtered_output is not None:
-            fused_output["filtered_output"] = filtered_output
-        else:
-            if not self.config.FILTERING_MODEL.model == "routedfusion":
-                return None
+            if filtered_output is not None:
+                fused_output["filtered_output"] = filtered_output
+            else:
+                if not self.config.FILTERING_MODEL.model == "routedfusion":
+                    return None
 
         return fused_output
 
@@ -136,37 +146,38 @@ class Pipeline(torch.nn.Module):
             # if k == 10:
             #     break # debug
 
-        # perform the fusion of the grids
-        if self.config.FILTERING_MODEL.model == "tsdf_early_fusion":
-            for scene in val_database.filtered.keys():
-                val_database.filtered[scene].volume = val_database.tsdf[
-                    self.config.DATA.input[0]
-                ][scene].volume
+        if self.config.FILTERING_MODEL.do:
+            # perform the fusion of the grids
+            if self.config.FILTERING_MODEL.model == "tsdf_early_fusion":
+                for scene in val_database.filtered.keys():
+                    val_database.filtered[scene].volume = val_database.tsdf[
+                        self.config.DATA.input[0]
+                    ][scene].volume
 
-        elif (
-            self.config.FILTERING_MODEL.model == "tsdf_middle_fusion"
-        ):  # this is weighted average fusion
-            for scene in val_database.filtered.keys():
-                weight_sum = np.zeros_like(val_database.filtered[scene].volume)
-                for sensor_ in sensors:
-                    weight_sum += val_database.fusion_weights[sensor_][scene]
-                    val_database.filtered[scene].volume += (
-                        val_database.tsdf[sensor_][scene].volume
-                        * val_database.fusion_weights[sensor_][scene]
+            elif (
+                self.config.FILTERING_MODEL.model == "tsdf_middle_fusion"
+            ):  # this is weighted average fusion
+                for scene in val_database.filtered.keys():
+                    weight_sum = np.zeros_like(val_database.filtered[scene].volume)
+                    for sensor_ in sensors:
+                        weight_sum += val_database.fusion_weights[sensor_][scene]
+                        val_database.filtered[scene].volume += (
+                            val_database.tsdf[sensor_][scene].volume
+                            * val_database.fusion_weights[sensor_][scene]
+                        )
+                    val_database.filtered[scene].volume = np.divide(
+                        val_database.filtered[scene].volume,
+                        weight_sum,
+                        out=np.zeros_like(weight_sum),
+                        where=weight_sum != 0.0,
                     )
-                val_database.filtered[scene].volume = np.divide(
-                    val_database.filtered[scene].volume,
-                    weight_sum,
-                    out=np.zeros_like(weight_sum),
-                    where=weight_sum != 0.0,
-                )
 
-                val_database.sensor_weighting[scene] = np.divide(
-                    val_database.fusion_weights[sensors[0]][scene],
-                    weight_sum,
-                    out=np.zeros_like(weight_sum),
-                    where=weight_sum != 0.0,
-                )
+                    val_database.sensor_weighting[scene] = np.divide(
+                        val_database.fusion_weights[sensors[0]][scene],
+                        weight_sum,
+                        out=np.zeros_like(weight_sum),
+                        where=weight_sum != 0.0,
+                    )
 
     def test_step(
         self, batch, database, sensors, device

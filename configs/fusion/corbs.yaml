@@ -39,6 +39,7 @@ ROUTING_MODEL:
   contraction: 64 # hidden dimension of routing network
   normalization: False # apply batch normalization
 FILTERING_MODEL:
+  do: True  # whether to do sensor fusion or not
   model: '3dconv' # 3dconv, tsdf_early_fusion, tsdf_middle_fusion, routedfusion
   CONV3D_MODEL:
     fixed: False # fix network weights
@@ -85,7 +86,7 @@ TESTING:
   routedfusion_nn: True # using nearest neighbor mask or trilinear interpolation mask. When true, requires specifying the path to the model containing the nearest neighbor weight grid in the variable routedfusion_nn_model.
   routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the nearest neighbor weight grids
   use_outlier_filter: True # only true when FILTERING_MODEL.model: '3dconv'
-  eval_single_sensors: False # not applicable when evaluating routedfusion
+  eval_single_sensors: True # not applicable when evaluating routedfusion
   visualize_sensor_weighting: False
   test_batch_size: 1
   test_shuffle: False
@@ -128,7 +129,7 @@ DATA:
   max_depth: 12.3 # general sensor (in meters)
   root_dir: /cluster/work/cvl/esandstroem/data/corbs # training on data from work folder or on local scratch of compute node
   dataset: CoRBS # dataset
-  input: [tof, stereo] # list of sensors to fuse
+  input: [tof, stereo] # list of sensors to fuse. When FILTERING_MODEL.do: False, this list can consist of only one sensor
   target: gt # ground truth depth label
   resx_stereo: 256 # I assume square input images
   resy_stereo: 256

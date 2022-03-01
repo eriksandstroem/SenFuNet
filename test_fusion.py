@@ -193,217 +193,231 @@ def evaluate(database, config, test_dir):
 
         # evaluate each weight counter threshold
         for weight_threshold in weight_thresholds:
-            model_test = scene + "_weight_threshold_" + str(weight_threshold)
-            model_test = model_test + "_filtered"
+            if config.FILTERING_MODEL.do:
+                model_test = scene + "_weight_threshold_" + str(weight_threshold)
+                model_test = model_test + "_filtered"
 
-            # define logger to print voxel grid scores
-            logger = setup.get_logger(test_dir, name=model_test)
+                # define logger to print voxel grid scores
+                logger = setup.get_logger(test_dir, name=model_test)
 
-            # read predicted fused tsdf and weight grids
-            tsdf = tsdf_path + "/" + scene + ".tsdf_filtered.hf5"
-            f = h5py.File(tsdf, "r")
-            tsdf = np.array(f["TSDF_filtered"]).astype(np.float16)
+                # read predicted fused tsdf and weight grids
+                tsdf = tsdf_path + "/" + scene + ".tsdf_filtered.hf5"
+                f = h5py.File(tsdf, "r")
+                tsdf = np.array(f["TSDF_filtered"]).astype(np.float16)
 
-            # declare masks used for outlier filter
-            mask = np.zeros_like(tsdf)
-            and_mask = np.ones_like(tsdf)
-            sensor_mask = dict()
+                # declare masks used for outlier filter
+                mask = np.zeros_like(tsdf)
+                and_mask = np.ones_like(tsdf)
+                sensor_mask = dict()
 
-            # compute masks used for outlier filter
-            for sensor_ in config.DATA.input:
-                weights = tsdf_path + "/" + scene + "_" + sensor_ + ".weights.hf5"
-                f = h5py.File(weights, "r")
-                weights = np.array(f["weights"]).astype(np.float16)
-                mask = np.logical_or(mask, weights > 0)
-                and_mask = np.logical_and(and_mask, weights > 0)
-                sensor_mask[sensor_] = weights > 0
-
-            if config.TESTING.use_outlier_filter:
-                # copy the original mask before outlier filtering since we want to visualize
-                # the unfiltered mesh
-                sensor_weighting_mask = mask.copy()
-
-                # apply outlier filter
-                sensor_weighting = tsdf_path + "/" + scene + ".sensor_weighting.hf5"
-                f = h5py.File(sensor_weighting, "r")
-                sensor_weighting = np.array(f["sensor_weighting"]).astype(np.float16)
-
-                if config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
-                    sensor_weighting = sensor_weighting[1, :, :, :]
-
-                only_one_sensor_mask = np.logical_xor(mask, and_mask)
+                # compute masks used for outlier filter
                 for sensor_ in config.DATA.input:
-                    only_sensor_mask = np.logical_and(
-                        only_one_sensor_mask, sensor_mask[sensor_]
+                    weights = tsdf_path + "/" + scene + "_" + sensor_ + ".weights.hf5"
+                    f = h5py.File(weights, "r")
+                    weights = np.array(f["weights"]).astype(np.float16)
+                    mask = np.logical_or(mask, weights > 0)
+                    and_mask = np.logical_and(and_mask, weights > 0)
+                    sensor_mask[sensor_] = weights > 0
+
+                if config.TESTING.use_outlier_filter:
+                    # copy the original mask before outlier filtering since we want to visualize
+                    # the unfiltered mesh
+                    sensor_weighting_mask = mask.copy()
+
+                    # apply outlier filter
+                    sensor_weighting = tsdf_path + "/" + scene + ".sensor_weighting.hf5"
+                    f = h5py.File(sensor_weighting, "r")
+                    sensor_weighting = np.array(f["sensor_weighting"]).astype(
+                        np.float16
                     )
-                    if sensor_ == config.DATA.input[0]:
-                        rem_indices = np.logical_and(
-                            only_sensor_mask, sensor_weighting < 0.5
+
+                    if config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
+                        sensor_weighting = sensor_weighting[1, :, :, :]
+
+                    only_one_sensor_mask = np.logical_xor(mask, and_mask)
+                    for sensor_ in config.DATA.input:
+                        only_sensor_mask = np.logical_and(
+                            only_one_sensor_mask, sensor_mask[sensor_]
                         )
-                    else:
-                        rem_indices = np.logical_and(
-                            only_sensor_mask, sensor_weighting > 0.5
-                        )
+                        if sensor_ == config.DATA.input[0]:
+                            rem_indices = np.logical_and(
+                                only_sensor_mask, sensor_weighting < 0.5
+                            )
+                        else:
+                            rem_indices = np.logical_and(
+                                only_sensor_mask, sensor_weighting > 0.5
+                            )
 
-                    mask[rem_indices] = 0
+                        mask[rem_indices] = 0
 
-            # apply masking of voxels if weight_treshold > 0
-            weight_mask = np.zeros_like(tsdf)
-            for sensor_ in config.DATA.input:
-                weights = tsdf_path + "/" + scene + "_" + sensor_ + ".weights.hf5"
-                f = h5py.File(weights, "r")
-                weights = np.array(f["weights"]).astype(np.float16)
-                weight_mask = np.logical_or(weight_mask, weights > weight_threshold)
+                # apply masking of voxels if weight_treshold > 0
+                weight_mask = np.zeros_like(tsdf)
+                for sensor_ in config.DATA.input:
+                    weights = tsdf_path + "/" + scene + "_" + sensor_ + ".weights.hf5"
+                    f = h5py.File(weights, "r")
+                    weights = np.array(f["weights"]).astype(np.float16)
+                    weight_mask = np.logical_or(weight_mask, weights > weight_threshold)
 
-            # filter away outliers using the weight mask when weight_threshold > 0
-            mask = np.logical_and(mask, weight_mask)
+                # filter away outliers using the weight mask when weight_threshold > 0
+                mask = np.logical_and(mask, weight_mask)
 
-            # get voxel grid scores
-            eval_results_scene = evaluation(tsdf, sdf_gt, mask)
+                # get voxel grid scores
+                eval_results_scene = evaluation(tsdf, sdf_gt, mask)
 
-            # log voxel grid scores
-            logger.info("Test Scores for scene: " + scene)
-            for key in eval_results_scene:
-                logger.info(key + ": " + str(eval_results_scene[key]))
+                # log voxel grid scores
+                logger.info("Test Scores for scene: " + scene)
+                for key in eval_results_scene:
+                    logger.info(key + ": " + str(eval_results_scene[key]))
 
-            if config.TESTING.mc == "Open3D":
-                # OPEN3D MARCHING CUBES
-                # ---------------------------------------------
-                # Create the mesh using the given mask
-                tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-                tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
-
-                indices_x = mask.nonzero()[0]
-                indices_y = mask.nonzero()[1]
-                indices_z = mask.nonzero()[2]
-
-                volume = o3d.integration.UniformTSDFVolume(
-                    length=length,
-                    resolution=max_resolution,
-                    sdf_trunc=truncation,
-                    color_type=o3d.integration.TSDFVolumeColorType.RGB8,
-                )
-
-                for i in range(indices_x.shape[0]):
-                    volume.set_tsdf_at(
-                        tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
-                        indices_x[i],
-                        indices_y[i],
-                        indices_z[i],
+                if config.TESTING.mc == "Open3D":
+                    # OPEN3D MARCHING CUBES
+                    # ---------------------------------------------
+                    # Create the mesh using the given mask
+                    tsdf_cube = np.zeros(
+                        (max_resolution, max_resolution, max_resolution)
                     )
-                    volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
+                    tsdf_cube[: resolution[0], : resolution[1], : resolution[2]] = tsdf
 
-                print("Extract a triangle mesh from the volume and visualize it.")
-                mesh = volume.extract_triangle_mesh()
+                    indices_x = mask.nonzero()[0]
+                    indices_y = mask.nonzero()[1]
+                    indices_z = mask.nonzero()[2]
 
-                del volume
-                mesh.compute_vertex_normals()
-                # o3d.visualization.draw_geometries([mesh])
-                o3d.io.write_triangle_mesh(
-                    os.path.join(test_dir, model_test + ".ply"), mesh
-                )
-                # ---------------------------------------------
-            elif config.TESTING.mc == "skimage":
-                # Skimage marching cubes
-                # ---------------------------------------------
-                verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(
-                    tsdf,
-                    level=0,
-                    spacing=(voxel_size, voxel_size, voxel_size),
-                    mask=preprocess_weight_grid(mask),
-                )
+                    volume = o3d.integration.UniformTSDFVolume(
+                        length=length,
+                        resolution=max_resolution,
+                        sdf_trunc=truncation,
+                        color_type=o3d.integration.TSDFVolumeColorType.RGB8,
+                    )
 
-                mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
-                mesh.vertices = (
-                    mesh.vertices + 0.5 * voxel_size
-                )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
+                    for i in range(indices_x.shape[0]):
+                        volume.set_tsdf_at(
+                            tsdf_cube[indices_x[i], indices_y[i], indices_z[i]],
+                            indices_x[i],
+                            indices_y[i],
+                            indices_z[i],
+                        )
+                        volume.set_weight_at(
+                            1, indices_x[i], indices_y[i], indices_z[i]
+                        )
 
-                mesh.export(os.path.join(test_dir, model_test + ".ply"))
-                # ---------------------------------------------
+                    print("Extract a triangle mesh from the volume and visualize it.")
+                    mesh = volume.extract_triangle_mesh()
 
-            # Compute the F-score, precision and recall
-            ply_path = model_test + ".ply"
+                    del volume
+                    mesh.compute_vertex_normals()
+                    # o3d.visualization.draw_geometries([mesh])
+                    o3d.io.write_triangle_mesh(
+                        os.path.join(test_dir, model_test + ".ply"), mesh
+                    )
+                    # ---------------------------------------------
+                elif config.TESTING.mc == "skimage":
+                    # Skimage marching cubes
+                    # ---------------------------------------------
+                    (
+                        verts,
+                        faces,
+                        normals,
+                        values,
+                    ) = skimage.measure.marching_cubes_lewiner(
+                        tsdf,
+                        level=0,
+                        spacing=(voxel_size, voxel_size, voxel_size),
+                        mask=preprocess_weight_grid(mask),
+                    )
 
-            # evaluate F-score
-            run_evaluation(ply_path, test_dir, scene)
+                    mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
+                    mesh.vertices = (
+                        mesh.vertices + 0.5 * voxel_size
+                    )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
 
-            # move the logs and plys to the evaluation dir created by the run_evaluation script
-            os.system(
-                "mv "
-                + test_dir
-                + "/"
-                + model_test
-                + ".logs "
-                + test_dir
-                + "/"
-                + model_test
-                + "/"
-                + model_test
-                + ".logs"
-            )
-            os.system(
-                "mv "
-                + test_dir
-                + "/"
-                + model_test
-                + ".ply "
-                + test_dir
-                + "/"
-                + model_test
-                + "/"
-                + model_test
-                + ".ply"
-            )
+                    mesh.export(os.path.join(test_dir, model_test + ".ply"))
+                    # ---------------------------------------------
 
-            if config.TESTING.visualize_sensor_weighting:
-                # Generate visualization of the sensor weighting
-                # load weighting sensor grid
-                sensor_weighting = tsdf_path + "/" + scene + ".sensor_weighting.hf5"
-                f = h5py.File(sensor_weighting, "r")
-                sensor_weighting = np.array(f["sensor_weighting"]).astype(np.float16)
+                # Compute the F-score, precision and recall
+                ply_path = model_test + ".ply"
 
-                # compute sensor weighting histogram and mesh visualization
-                visualize_sensor_weighting(
-                    tsdf,
-                    sensor_weighting,
-                    test_dir,
-                    sensor_weighting_mask,
-                    truncation,
-                    length,
-                    max_resolution,
-                    resolution,
-                    voxel_size,
-                    config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel,
-                    config.TESTING.mc,
-                )
+                # evaluate F-score
+                run_evaluation(ply_path, test_dir, scene)
 
+                # move the logs and plys to the evaluation dir created by the run_evaluation script
                 os.system(
                     "mv "
                     + test_dir
-                    + "/sensor_weighting_no_outlier_filter.ply "
+                    + "/"
+                    + model_test
+                    + ".logs "
                     + test_dir
                     + "/"
                     + model_test
-                    + "/sensor_weighting.ply"
+                    + "/"
+                    + model_test
+                    + ".logs"
                 )
                 os.system(
                     "mv "
                     + test_dir
-                    + "/sensor_weighting_grid_histogram_no_outlier_filter.png "
+                    + "/"
+                    + model_test
+                    + ".ply "
                     + test_dir
                     + "/"
                     + model_test
-                    + "/sensor_weighting_grid_histogram.png"
-                )
-                os.system(
-                    "mv "
-                    + test_dir
-                    + "/sensor_weighting_surface_histogram_no_outlier_filter.png "
-                    + test_dir
                     + "/"
                     + model_test
-                    + "/sensor_weighting_surface_histogram.png"
+                    + ".ply"
                 )
+
+                if config.TESTING.visualize_sensor_weighting:
+                    # Generate visualization of the sensor weighting
+                    # load weighting sensor grid
+                    sensor_weighting = tsdf_path + "/" + scene + ".sensor_weighting.hf5"
+                    f = h5py.File(sensor_weighting, "r")
+                    sensor_weighting = np.array(f["sensor_weighting"]).astype(
+                        np.float16
+                    )
+
+                    # compute sensor weighting histogram and mesh visualization
+                    visualize_sensor_weighting(
+                        tsdf,
+                        sensor_weighting,
+                        test_dir,
+                        sensor_weighting_mask,
+                        truncation,
+                        length,
+                        max_resolution,
+                        resolution,
+                        voxel_size,
+                        config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel,
+                        config.TESTING.mc,
+                    )
+
+                    os.system(
+                        "mv "
+                        + test_dir
+                        + "/sensor_weighting_no_outlier_filter.ply "
+                        + test_dir
+                        + "/"
+                        + model_test
+                        + "/sensor_weighting.ply"
+                    )
+                    os.system(
+                        "mv "
+                        + test_dir
+                        + "/sensor_weighting_grid_histogram_no_outlier_filter.png "
+                        + test_dir
+                        + "/"
+                        + model_test
+                        + "/sensor_weighting_grid_histogram.png"
+                    )
+                    os.system(
+                        "mv "
+                        + test_dir
+                        + "/sensor_weighting_surface_histogram_no_outlier_filter.png "
+                        + test_dir
+                        + "/"
+                        + model_test
+                        + "/sensor_weighting_surface_histogram.png"
+                    )
 
             # evaluate single sensor reconstructions
             if config.TESTING.eval_single_sensors:
