@@ -87,24 +87,26 @@ class Pipeline(torch.nn.Module):
                 self.fuse_pipeline.fuse(batch, database, device)
             else:
                 for sensor_ in sensors:
+                    if (
+                        sensor_ + "_depth"
+                    ) in batch:  # None on the Replica dataset when simulating sensors of different frame rates
+                        batch["depth"] = batch[sensor_ + "_depth"]
+                        batch["routing_net"] = "self._routing_network_" + sensor_
+                        batch["mask"] = batch[sensor_ + "_mask"]
+                        if self.config.FILTERING_MODEL.model == "routedfusion":
+                            batch["sensor"] = self.config.DATA.input[0]
+                        else:
+                            batch["sensor"] = sensor_
 
-                    batch["depth"] = batch[sensor_ + "_depth"]
-                    batch["routing_net"] = "self._routing_network_" + sensor_
-                    batch["mask"] = batch[sensor_ + "_mask"]
-                    if self.config.FILTERING_MODEL.model == "routedfusion":
-                        batch["sensor"] = self.config.DATA.input[0]
-                    else:
-                        batch["sensor"] = sensor_
+                        batch[
+                            "routingNet"
+                        ] = sensor_  # used to be able to train routedfusion
+                        batch[
+                            "fusionNet"
+                        ] = sensor_  # used to be able to train routedfusion
+                        self.fuse_pipeline.fuse(batch, database, device)
 
-                    batch[
-                        "routingNet"
-                    ] = sensor_  # used to be able to train routedfusion
-                    batch[
-                        "fusionNet"
-                    ] = sensor_  # used to be able to train routedfusion
-                    self.fuse_pipeline.fuse(batch, database, device)
-
-                    # return
+                # return
 
             # if k == 5:
             #     break # debug
@@ -127,6 +129,8 @@ class Pipeline(torch.nn.Module):
                 batch[
                     "fusionNet"
                 ] = None  # We don't use a fusion net during early fusion
+                # print("item rgb: ", batch["item"])
+                # print("item tof: ", batch["item_tof"])
                 self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 for sensor_ in sensors:
@@ -144,7 +148,7 @@ class Pipeline(torch.nn.Module):
                     self.fuse_pipeline.fuse(batch, val_database, device)
 
             # if k == 10:
-            #     break # debug
+            #     break  # debug
 
         if self.config.FILTERING_MODEL.do:
             # perform the fusion of the grids

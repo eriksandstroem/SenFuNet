@@ -42,7 +42,7 @@ def count_parameters(model):
 
 def test_fusion(config):
     # define output dir
-    test_path = "/test"
+    test_path = "/test_debug"
     if config.FILTERING_MODEL.model != "3dconv":
         time = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
         print(time)
@@ -74,7 +74,7 @@ def test_fusion(config):
         batch_size=config.TESTING.test_batch_size,
         shuffle=config.TESTING.test_shuffle,
         pin_memory=True,
-        num_workers=16,
+        num_workers=0,  # use 0 only for the early fusion asynchronous experiment
     )
 
     # specify number of features to be stored in feature grid at each voxel location

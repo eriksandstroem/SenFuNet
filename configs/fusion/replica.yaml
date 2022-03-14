@@ -85,7 +85,7 @@ TRAINING:
   n_epochs: 1000
   gradient_clipping: True
 TESTING:
-  mc: 'skimage' # 'skimage' or 'Open3D' (requires local library installation)
+  mc: 'Open3D' # 'skimage' or 'Open3D' (requires local library installation)
   visualize_features_and_proxy: False
   routedfusion_nn: True # using nearest neighbor mask or trilinear interpolation mask. When true, requires specifying the path to the model containing the nearest neighbor weight grid in the variable routedfusion_nn_model.
   routedfusion_nn_model: 210929-165610 # specify from what tsdf fusion model (or SenFuNet model) to use the nearest neighbor weight grids
@@ -98,7 +98,7 @@ TESTING:
   fusion_model_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion/tof_psmnet/model/best.pth.tar # used for conv3d, routedfusion as filtering models. OLD: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211014-204024/model/best.pth.tar
   weight_thresholds: [0.0]
 ROUTING:
-  do: False # use routing network
+  do: True # use routing network
   dont_smooth_where_uncertain: False # if True, replaces the routing output with the input depth if the confidence is below the threshold
   threshold: 0.15 
   intensity_grad: False # feed grayscale image and its gradient to routing network
@@ -116,8 +116,11 @@ OPTIMIZATION:
   weight_decay: 0.00 # rmsprop fusion net
   accumulation_steps: 20
 DATA:
+  early_fusion_asynch: False # asynchronous early fusion experiment
   collaborative_reconstruction: False # multi-agent reconstruction
   frames_per_chunk: 100 # used when colaborative_reconstruction: true
+  downsampling: [1, 1] # first entry is the downsampling rate of the 1st sensor
+  # 2nd entry is the downsampling rate of the 2nd sensor
   mask_stereo_height: 10 # 35 # in pixels (achieves fov 71.11). Together with the width mask this gives the same relationship between the height and width fov
   # compared to the color camera of the azure kinect
   mask_stereo_width: 10 # in pixels (achieves fov 84.32)
@@ -125,7 +128,7 @@ DATA:
   mask_tof_width: 10 #35 # 35 # in pixels. With resolution 256 this would be 35
   mask_width: 10 # general sensor
   mask_height: 10 # general sensor
-  pad: 2 # pad ground truth grid (not needed, but all results are using it)
+  pad: 2 # pad grid (not needed, but all results are using it)
   min_depth_stereo: 0.0 # 0.5 (in meters)
   max_depth_stereo: 12.3 # 2.5 (in meters)
   min_depth_tof: 0.0 # 0.5 (in meters)
@@ -144,6 +147,6 @@ DATA:
   resy: 256
   train_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/train.txt
   val_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/val.txt
-  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_4_hotel_0_office_0.txt
+  test_scene_list: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/lists/replica/test_office_0.txt #4_hotel_0_office_0.txt
   init_value: 0.0 # init value of tsdf grids
   trunc_value: 0.05 # truncation distance
