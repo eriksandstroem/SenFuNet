@@ -84,7 +84,7 @@ The following paths need to be specified in the CONFIG.yaml file:
 4. DATA.val_scene_list -> specifies data used during validation
 5. DATA.test_scene_list -> specifies data used during testing
 
-For the Replica dataset, in addition, specify the following paths. Note: only the Replica dataset can be trained and tested with routing.
+For the Replica dataset, in addition, specify the following paths. Note: only the Replica dataset can be trained and tested with depth denoising. For the remainder of this guide, we refer to the denoising network as the routing network which is the term used in the original paper [**RoutedFusion**](https://www.microsoft.com/en-us/research/uploads/prod/2020/06/RoutedFusion.pdf).
 
 6. TRAINING.routing_stereo_model_path -> path to psmnet stereo routing model (only used when training with a routing network)
 7. TRAINING.routing_tof_model_path -> path to tof routing model (only used when training with a routing network)
