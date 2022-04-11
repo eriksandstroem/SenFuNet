@@ -17,7 +17,7 @@ The code has been tested with Python 3.8.5
 1. Clone the repository and submodules to your local directory: <pre><code>git clone --recursive https://github.com/tfy14esa/SenFuNet.git</code></pre> In the following, we denote the local path to the SenFuNet codebase as "ROOT_FOLDER".
 2. Create a python virtual environment: <pre><code>python -m venv senfunet_env</code></pre>
 3. Activate the virtual environment: <pre><code>source senfunet_env/bin/activate</code></pre>
-4. Open the requirements.txt and change the path to the submodule evaluate-3d-reconstruction according to your file structure.
+4. Open the requirements.txt and change the path to the submodule evaluate-3d-reconstruction according to your file structure. Set the variable "ground_truth_data_base" to the directory where you store the ground truth .ply meshes. This variable is located in the config.py file of the evaluate_3d_reconstruction library located in the "deps" folder.
 5. Open the requirements.txt and replace the Open3D entry with a version of your choice. Install version 0.13.0 or newer (this has not been tested). Replace the entry with e.g. "open3d==0.13.0". A local version of the Open3D library was used when developing the project which is the reason why this entry needs to be replaced.
 5. Install the dependencies: <pre><code>pip install -r requirements.txt</code></pre>
 6. Note that the project uses "Weights and Biases" for logging during training. If you want to train your own models, therefore create your own account at [**Weights and Biases**](https://wandb.ai/site).
@@ -27,6 +27,17 @@ The code has been tested with Python 3.8.5
  
 ## Data Preparation
 We provide three separate datasets that can be used with SenFuNet. The download links and instructions are provided below. 
+
+### Ground Truth Meshes
+Download the ground truth meshes used for F-score evaluation [**here**](https://data.vision.ee.ethz.ch/esandstroem/gt_meshes.tar).
+
+Note: be sure to set the variable "ground_truth_data_base" to the directory where you store the ground truth .ply meshes.
+This variable is located in the config.py file of the evaluate_3d_reconstruction library located in the "deps" folder. This step has to be performed before installing the module via pip.
+
+While not needed for 
+this codebase, there is also the option to set the path to the tranformation folder where transformation matrices 
+are stored which aligns the ground truth mesh and the predicted mesh before F-score evaluation.
+
 ### Replica
 Train Dataset: [**room 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/room_0.tar), 
 [**room 2**](https://data.vision.ee.ethz.ch/esandstroem/replica/room_2.tar), [**office 3**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_3.tar), [**office 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_1.tar), [**apartment 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/apartment_1.tar), [**frl apartment 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/frl_apartment_0.tar)
@@ -57,14 +68,6 @@ Arrange the data such that the paths listed in the corresponding <pre><code>ROOT
 
 ### Generate Multi-View Stereo Depth
 In the event that you want to reproduce or generate your own MVS depth sensors, we provide the scripts for this. These are available in the folder <pre><code>ROOT_FOLDER/data/mvs_depth_estimation</code></pre>. First use the script <pre><code>setup_colmap.py</code></pre> and then the script <pre><code>reconstruct_colmap_slurm_SCENE.sh</code></pre> to use to generate the MVS depth maps. For information, we refer to the [**colmap**](https://colmap.github.io/faq.html) documentation.
-
-### Ground Truth Meshes
-Download the ground truth meshes used for F-score evaluation [**here**](https://data.vision.ee.ethz.ch/esandstroem/gt_meshes.tar).
-
-Note: be sure to set the variable "ground_truth_data_base" to the directory where you store the ground truth .ply meshes.
-This variable is located in the config.py file of the evaluate_3d_reconstruction library located in the "deps" folder. While not needed for 
-this codebase, there is also the option to set the path to the tranformation folder where transformation matrices 
-are stored which aligns the ground truth mesh and the predicted mesh before F-score evaluation.
 
 ## Training
 To train SenFuNet, execute the script:

@@ -1,6 +1,6 @@
 SETTINGS:
   gpu: True # run on cpu or gpu
-  experiment_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion # path where the logging is done and the models are saved. OLD:/cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion
+  experiment_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion # path where the logging is done and the models are saved.
   eval_freq: 442 # how many global steps before evaluation and saving the model
   log_freq: 442 #957 383 # how many global steps before logging the training loss
   seed: 52 # seed for shuffling operations
@@ -90,7 +90,7 @@ TESTING:
   visualize_sensor_weighting: False
   test_batch_size: 1
   test_shuffle: False
-  fusion_model_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion/tof_mvs_scene3d/model/best.pth.tar # used for conv3d, routedfusion as filtering models. OLD: /cluster/work/cvl/esandstroem/src/late_fusion_3dconvnet/workspace/fusion/211018-111054/model/best.pth.tar
+  fusion_model_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion/tof_mvs_scene3d/model/best.pth.tar # used for conv3d, routedfusion as filtering models.
   weight_thresholds: [0.0]
 ROUTING:
   do: False # needs to be false at all times

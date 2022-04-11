@@ -253,14 +253,18 @@ class Replica(Dataset):
             if int(frame) % self.downsampling[sensor_] == 0:
                 if (
                     self.filtering_model == "tsdf_early_fusion"
+                    or self.filtering_model
+                    == 2  # when training the routing network for the asynchronous experiment
                     and self.asynch
                     and sensor_.endswith("tof")
-                ):  # for tsdf_early_fusion asynchronous experiment - only implemented for single scene evaluation
+                ):  # for tsdf_early_fusion asynchronous experiment
                     assert self.downsampling[sensor_] == 1
-                    item_tof = (
-                        item - item % 2
+                    frame_tof = (
+                        int(frame) - int(frame) % 3
                     )  # two is the downsampling of the ToF sensor
-                    file = self.depth_images[sensor_][item_tof]
+                    file = self.depth_images[sensor_][item]
+                    file = "/".join(file.split("/")[:-1])
+                    file = file + "/" + str(frame_tof) + ".png"
                 else:
                     file = self.depth_images[sensor_][item]
                 depth = io.imread(file).astype(np.float32)
@@ -286,12 +290,14 @@ class Replica(Dataset):
 
                 if (
                     self.filtering_model == "tsdf_early_fusion"
+                    or self.filtering_model
+                    == 2  # when training the routing network for the asynchronous experiment
                     and self.asynch
                     and sensor_.endswith("tof")
                 ):  # for tsdf_early_fusion asynchronous experiment - only implemented for single scene evaluation
-                    if item % 2 != 0:
+                    if int(frame) % 3 != 0:
                         sample[sensor_ + "_depth"] = self.project_depth(
-                            depth, item, item_tof
+                            depth, item, frame_tof
                         )
                     else:
                         sample[sensor_ + "_depth"] = np.asarray(depth)
@@ -459,13 +465,13 @@ class Replica(Dataset):
 
         return sample
 
-    def project_depth(self, depth, item_rgb, item_tof):
-        """Projects the tof depth in the variable "depth" from index item_tof into the view from the rgb stereo depth map from index item_rgb. Returns the projected depth map as a numpy array. Only implemented for tof psmnet stereo fusion.
+    def project_depth(self, depth, item_rgb, frame_tof):
+        """Projects the tof depth in the variable "depth" from index frame_tof into the view from the rgb stereo depth map from index item_rgb. Returns the projected depth map as a numpy array. Only implemented for tof psmnet stereo fusion.
 
         Args:
-            depth: tof depth map from item_tof
+            depth: tof depth map from frame_tof
             item_rgb: index of rgb stereo depth map
-            item_tof: index of tof depth map
+            frame_tof: index of tof depth map
         """
         # load rgb extrinsics
         file = self.cameras[item_rgb]
@@ -490,7 +496,7 @@ class Replica(Dataset):
         extrinsics_rgb = np.matmul(rot_90_around_x, extrinsics_rgb[0:3, 0:4])
 
         # load tof extrinsics
-        file = self.cameras[item_tof]
+        file = "/".join(file.split("/")[:-1]) + "/" + str(frame_tof) + ".txt"
         extrinsics_tof = np.loadtxt(file)
         extrinsics_tof = np.linalg.inv(extrinsics_tof).astype(np.float32)
         # the fusion code expects that the camera coordinate system is such that z is in the
@@ -597,9 +603,9 @@ class Replica(Dataset):
 
         # remove projections which fall outside of image plane
         validx1 = (
-            pixels_c_rgb[0, :] <= 255.49
+            pixels_c_rgb[0, :] <= self.resolution_stereo[0] - 0.51  # 255.49
         )  # .49 because these are floating point precision which will be rounded down when max 0.49 (reality 0.499999)
-        validx2 = pixels_c_rgb[1, :] <= 255.49
+        validx2 = pixels_c_rgb[1, :] <= self.resolution_stereo[0] - 0.51  # 255.49
         validx1 = torch.logical_and(validx1, pixels_c_rgb[0, :] >= 0)
         validx2 = torch.logical_and(validx2, pixels_c_rgb[1, :] >= 0)
         valid = torch.logical_and(validx1, validx2)
@@ -628,7 +634,10 @@ class Replica(Dataset):
         projected_depth[pixels_c_rgb[1, :], pixels_c_rgb[0, :]] = depth_c_rgb.cpu()
 
         projected_depth = projected_depth.numpy()
-        # plt.imsave("item_" + str(item_rgb) + ".png", projected_depth)
+        # plt.imsave(
+        #     "item_" + str(item_rgb) + "from_tof_frame_" + str(frame_tof) + ".png",
+        #     projected_depth,
+        # )
         return projected_depth
 
     def get_warped_image(self, right_rgb, left_depth):
