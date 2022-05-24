@@ -155,7 +155,12 @@ class Fuse_Pipeline(torch.nn.Module):
             temp = temp.unsqueeze_(0)
             temp = temp.unsqueeze_(-1)
             temp = temp.unsqueeze_(-1)
-            tsdf_pred[:, :, :, :] = temp.expand(-1, -1, 256, 256)
+            try:
+                resolution = eval("self.config.DATA.resx_" + sensor)
+            except AttributeError:
+                resolution = self.config.DATA.resx
+
+            tsdf_pred[:, :, :, :] = temp.expand(-1, -1, resolution, resolution)
 
         if self.config.FEATURE_MODEL.use_feature_net:
             feat_pred = self._feature_network[sensor].forward(input_features[sensor])
