@@ -76,10 +76,6 @@ To train SenFuNet, execute the script:
 
 where CONFIG is a config file.
 
-To train using the LSF job scheduler, use one of the submission scripts located in the "scripts" folder. To submit a job, run:
-<pre><code>bsub > SUBMISSION_SCRIPT.sh</code></pre>
-where SUBMISSION_SCRIPT is the appropriate submission script. Note that you need to specify the appropriate paths on your system in the submission scripts.
-
 The following paths need to be specified in the CONFIG.yaml file:
 1. SETTINGS.experiment_path -> path where the logging is done and the models are saved
 2. DATA.root_dir -> Path to data folder
@@ -101,10 +97,6 @@ To test SenFuNet, execute the script:
 <pre><code>python test_fusion.py --ROOT_FOLDER/configs/fusion/CONFIG.yaml</code></pre>
 
 where CONFIG is a config file.
-
-To test using the LSF job scheduler, use one of the submission scripts located in the "scripts" folder. To submit a job, run:
-<pre><code>bsub > SUBMISSION_SCRIPT.sh</code></pre>
-where SUBMISSION_SCRIPT is the appropriate submission script. Note that you need to specify the appropriate paths on your system in the submission scripts.
 
 The following paths need to be specified in the CONFIG.yaml file:
 1. SETTINGS.experiment_path -> path where the logging is done and the models are saved.
@@ -151,10 +143,6 @@ Execute the following command to train a routing network:
 <pre><code>python train_routing.py --ROOT_FOLDER/configs/routing/replica.yaml</code></pre>
 
 where ROOT_FOLDER is the path to the SenFuNet folder.
-
-To train using the LSF job scheduler, use one of the submission scripts located in the "scripts" folder. To submit a job, run:
-<pre><code>bsub > SUBMISSION_SCRIPT.sh</code></pre>
-where SUBMISSION_SCRIPT is the appropriate submission script. Note that you need to specify the appropriate paths on your system in the submission scripts.
 
 The following paths need to be specified in the replica.yaml file:
 1. SETTINGS.experiment_path -> path where the logging is done and the models are saved.
