@@ -19,7 +19,6 @@ class Database(Dataset):
         self.trunc_value = config.trunc_value
         self.n_features = config.n_features  # this includes the append_depth option
         self.sensors = config.input
-        self.save_features = config.visualize_features_and_proxy
         self.test_mode = config.test_mode
         self.refinement = config.refinement
         self.alpha_supervision = config.alpha_supervision
@@ -61,7 +60,6 @@ class Database(Dataset):
                 self.features[sensor][s] = FeatureGrid(
                     voxel_size, self.n_features, bbox
                 )
-            
 
                 self.tsdf[sensor][s] = VoxelGrid(
                     voxel_size,
@@ -69,7 +67,6 @@ class Database(Dataset):
                     bbox=bbox,
                     initial_value=self.initial_value,
                 )
-            
 
                 if self.refinement and config.test_mode:
                     self.tsdf_refined[sensor][s] = VoxelGrid(
@@ -78,7 +75,7 @@ class Database(Dataset):
                         bbox=bbox,
                         initial_value=self.initial_value,
                     )
-     
+
             self.filtered[s] = VoxelGrid(
                 voxel_size,
                 volume=None,
@@ -158,15 +155,6 @@ class Database(Dataset):
                     compression="gzip",
                     compression_opts=9,
                 )
-            if self.save_features:
-                with h5py.File(os.path.join(path, featurename), "w") as hf:
-                    hf.create_dataset(
-                        "features",
-                        shape=self.features[sensor][scene_id].shape,
-                        data=self.features[sensor][scene_id].volume,
-                        compression="gzip",
-                        compression_opts=9,
-                    )
 
             if self.refinement and self.test_mode:
                 refinedname = scene_id + "_" + sensor + ".tsdf_refined.hf5"

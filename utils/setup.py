@@ -70,9 +70,6 @@ def get_database(dataset, config, mode="train"):
     database_config.refinement = config.FILTERING_MODEL.CONV3D_MODEL.use_refinement
     database_config.test_mode = mode == "val" or mode == "test"
     database_config.alpha_supervision = config.LOSS.alpha_supervision
-    database_config.visualize_features_and_proxy = (
-        config.TESTING.visualize_features_and_proxy
-    )
     database_config.outlier_channel = (
         config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel
     )
