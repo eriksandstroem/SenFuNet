@@ -100,7 +100,6 @@ class Scene3D(Dataset):
                         for file in files:
                             self.depth_images[sensor_].append(file)
 
-        # perhaps it will be important to order the frames for testing and training the fusion network.
         for sensor_ in self.depth_images.keys():
             self.depth_images[sensor_] = sorted(
                 self.depth_images[sensor_],
