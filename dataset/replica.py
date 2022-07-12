@@ -65,13 +65,12 @@ class Replica(Dataset):
 
         self.sensor_line_mapping = {
             "left_depth_gt": 0,
-            "left_rgb_aug": -3,
             "left_rgb": -2,
             "left_camera_matrix": -1,
             "tof": 1,
             "tof_2": 1,
-            "stereo": 3,
-            "sgm_stereo": 4,
+            "stereo": 2,
+            "sgm_stereo": 3,
         }
 
         self._load_color()
