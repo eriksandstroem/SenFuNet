@@ -14,8 +14,6 @@ from utils import setup
 from utils.metrics import evaluation
 
 from utils.visualize_sensor_weighting import visualize_sensor_weighting
-from utils.visualize_features import visualize_features
-from utils.compute_proxy_sensor_weighting import compute_proxy_sensor_weighting_and_mesh
 
 import h5py
 import open3d as o3d
