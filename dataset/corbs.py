@@ -9,12 +9,6 @@ from torch.utils.data import Dataset
 import h5py
 import matplotlib.pyplot as plt
 
-# uncomment to run python dataset/corbs.py main
-# path_to_dataset_module =  '/home/esandstroem/scratch-second/euler_project/src/late_fusion/dataset/' #'/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
-# sys.path.append(path_to_dataset_module) # needed in order to load read_array and associate
-# from associate import associate
-# from colmap import read_array
-
 # uncomment to run train_fusion and test_fusion
 from dataset.associate import associate
 from dataset.colmap import read_array
