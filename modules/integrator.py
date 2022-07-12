@@ -38,9 +38,7 @@ class Integrator(torch.nn.Module):
             n2,
             n3,
             f4,
-        ) = (
-            features.shape
-        )  # f1 = 1, f2= 65536 (when no filtering), f3= tail_points, f4 = nbr_features
+        ) = features.shape
 
         # reshape tensors
         features = features.contiguous().view(-1, f4).float()
@@ -66,9 +64,7 @@ class Integrator(torch.nn.Module):
         indices = indices.contiguous().view(-1, 3).long()
 
         if self.n_empty_space_voting > 0:
-            indices_empty = (
-                indices_empty.contiguous().view(-1, 3).long()
-            )  # (65536*7*8, 3)
+            indices_empty = indices_empty.contiguous().view(-1, 3).long()
             weights_empty = weights_empty.contiguous().view(-1, 1).float()
 
         weights = weights.contiguous().view(-1, 1).float()
@@ -84,12 +80,8 @@ class Integrator(torch.nn.Module):
 
         # remove the invalid entries from the values, features and weights
         valid_features = valid.clone().unsqueeze_(-1)
-        features = torch.masked_select(
-            features, valid_features.repeat(1, f4)
-        )  # (65536*7*8*6) if all indices are valid, otherwise less
-        features = features.view(
-            int(features.shape[0] / f4), f4
-        )  # (65536*7*8, 6) if all indices are valid, otherwise less
+        features = torch.masked_select(features, valid_features.repeat(1, f4))
+        features = features.view(int(features.shape[0] / f4), f4)
 
         values = torch.masked_select(values[:, 0], valid)
         weights = torch.masked_select(weights[:, 0], valid)
@@ -109,7 +101,7 @@ class Integrator(torch.nn.Module):
         indices_insert = torch.unique_consecutive(indices[index.sort()[1]], dim=0)
         vcache = torch.sparse.FloatTensor(
             index.unsqueeze_(0), update, torch.Size([xs * ys * zs])
-        ).coalesce()  # the coalesce() operation on the sparse tensors sorts the tensor
+        ).coalesce()
         update = vcache.values()
 
         if indices_insert.shape[0] != update.shape[0]:
@@ -269,11 +261,7 @@ def insert_values(values, indices, volume):
     # print(values.dtype)
     if volume.dim() == 3:
         volume = volume.half()
-        # indices = indices[~torch.isnan(values)] # remove those indices where values = nan (due to round off error when confidence is too low)
-        # values = values[~torch.isnan(values)] # remove those values where values = nan (due to round off error when confidence is too low)
         volume[indices[:, 0], indices[:, 1], indices[:, 2]] = values.half()
     else:
         volume = volume.half()
-        # indices = indices[~torch.isnan(values)] # remove those indices where values = nan (due to round off error when confidence is too low)
-        # values = values[~torch.isnan(values)] # remove those values where values = nan (due to round off error when confidence is too low)
         volume[indices[:, 0], indices[:, 1], indices[:, 2], :] = values.half()

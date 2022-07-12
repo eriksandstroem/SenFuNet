@@ -5,9 +5,7 @@ from torch.nn.functional import normalize
 
 class Extractor(nn.Module):
     """
-    This module extracts voxel rays or blocks around voxels that are given by the
-    2D depth map as well as the given groundtruth volume and the
-    current state of the reconstruction volume.
+    This module extracts the necessary information from the grids within the viewing frustum of the current frame.
     """
 
     def __init__(self, config, sensor):
@@ -81,7 +79,7 @@ class Extractor(nn.Module):
             resolution,
             n_points=int((self.n_points - 1) / 2),
             n_empty_space_voting=self.n_empty_space_voting,
-        )  # ray_pts are the extracted points in floating point voxel space
+        )
 
         if self.extraction_strategy == "trilinear_interpolation":
             output = self.trilinear_interpolation(
@@ -125,7 +123,7 @@ class Extractor(nn.Module):
 
         homogenuous = torch.ones((b, 1, n_points))
 
-        if torch.cuda.is_available() and gpu:  # putting extractor on gpu
+        if torch.cuda.is_available() and gpu:
             homogenuous = homogenuous.cuda()
 
         # transform points from pixel space to camera space to world space (p->c->w)
@@ -181,9 +179,7 @@ class Extractor(nn.Module):
                 point = center_v - (8 * i + n_points) * bin_size * direction
                 empty_points.insert(0, point.clone())
 
-            empty_points = torch.stack(
-                empty_points, dim=2
-            )  # (1, 65536, n_empty_pints, 3)
+            empty_points = torch.stack(empty_points, dim=2)
             output["empty_points"] = empty_points
 
         return output
@@ -291,11 +287,7 @@ class Extractor(nn.Module):
             output["indices_empty"] = indices_empty
 
         n1, n2, n3 = indices.shape
-        # nbr_features = feature_volume.shape[-1]
         indices = indices.contiguous().view(n1 * n2, n3).long()
-
-        # TODO: change to replication padding instead of zero padding
-        # TODO: double check indices
 
         # get valid indices
         valid = get_index_mask(indices, tsdf_volume.shape)
@@ -303,32 +295,23 @@ class Extractor(nn.Module):
 
         tsdf_values = extract_values(indices, tsdf_volume, valid)
         tsdf_weights = extract_values(indices, weights_volume, valid)
-        # features = extract_values(indices, feature_volume, valid)
 
         value_container = self.init_val * torch.ones_like(valid).float()
         weight_container = torch.zeros_like(valid).float()
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features), device='cuda:0').float() # here we should extract the initial value of the confidence grid
-        # feature_container = 0 * torch.ones((valid.shape[0], nbr_features)).float()
 
         value_container[valid_idx] = tsdf_values.float()
         weight_container[valid_idx] = tsdf_weights.float()
-        # I forgot to put the variable features into the container here before. FAIL!
-        # feature_container[valid_idx, :] = features.float()
 
         value_container = value_container.view(weights.shape)
         weight_container = weight_container.view(weights.shape)
-        # feature_container = feature_container.view(weights.shape[0], weights.shape[1], nbr_features)
 
         # trilinear interpolation
         fusion_values = torch.sum(value_container * weights, dim=1)
         fusion_weights = torch.sum(weight_container * weights, dim=1)
         weights = weights.unsqueeze_(-1)
-        # feature_weights = weights.repeat(1, 1, nbr_features)
-        # fusion_features = torch.sum(feature_container * feature_weights, dim=1)
 
         fusion_values = fusion_values.view(b, h, n)
         fusion_weights = fusion_weights.view(b, h, n)
-        # fusion_features = fusion_features.view(b, h, n, nbr_features)
 
         indices = indices.view(n1, n2, n3)
 
