@@ -335,7 +335,3 @@ class Scene3D(Dataset):
         bbox[:, 1] = bbox[:, 0] + f.attrs["voxel_size"] * np.array(voxels.shape)
 
         return voxels, bbox, f.attrs["voxel_size"]
-
-
-if __name__ == "__main__":
-    raise NotImplementedError

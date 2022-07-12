@@ -149,8 +149,6 @@ class CoRBS(Dataset):
         )
         rgb_image = io.imread(rgb_file).astype(np.float32)
 
-        # plt.imsave('imagef.png', np.asarray(rgb_image)/255)
-
         step_x = rgb_image.shape[0] / self.resolution_tof[0]
         step_y = rgb_image.shape[1] / self.resolution_tof[1]
 
@@ -160,8 +158,6 @@ class CoRBS(Dataset):
         rgb_image = rgb_image[:, index_y]
         rgb_image = rgb_image[index_x, :]
         sample["image"] = np.asarray(rgb_image) / 255
-
-        # plt.imsave("image.png", np.asarray(rgb_image) / 255)
 
         frame_id = "{}/{}".format(self._scenes[0], str(timestamp_pose))
         sample["frame_id"] = frame_id
@@ -173,8 +169,6 @@ class CoRBS(Dataset):
         depth_tof = io.imread(depth_file).astype(np.float32)
         depth_tof /= 5000.0
 
-        # plt.imsave('toff.png', np.asarray(depth_tof)/255)
-
         step_x = depth_tof.shape[0] / self.resolution_tof[0]
         step_y = depth_tof.shape[1] / self.resolution_tof[1]
 
@@ -184,7 +178,6 @@ class CoRBS(Dataset):
         depth_tof = depth_tof[:, index_y]
         depth_tof = depth_tof[index_x, :]
         sample["tof_depth"] = np.asarray(depth_tof)
-        # plt.imsave('tof.png', sample['tof_depth'])
 
         # read colmap stereo depth file
         try:
@@ -197,7 +190,6 @@ class CoRBS(Dataset):
             print("stereo frame not found")
             return None
 
-        # plt.imsave('stereof.png', np.asarray(depth_stereo)/255)
         step_x = depth_stereo.shape[0] / self.resolution_stereo[0]
         step_y = depth_stereo.shape[1] / self.resolution_stereo[1]
 
@@ -211,7 +203,6 @@ class CoRBS(Dataset):
         depth_stereo = depth_stereo[:, index_y]
         depth_stereo = depth_stereo[index_x, :]
         sample["stereo_depth"] = np.asarray(depth_stereo)
-        # plt.imsave('stereo.png', sample['stereo_depth'])
 
         # define mask
         mask = depth_stereo > self.min_depth_stereo
@@ -308,300 +299,3 @@ class CoRBS(Dataset):
         bbox[:, 1] = bbox[:, 0] + f.attrs["voxel_size"] * np.array(voxels.shape)
 
         return voxels, bbox, f.attrs["voxel_size"]
-
-
-if __name__ == "__main__":
-
-    from tqdm import tqdm
-
-    path_to_utils_module = "/home/esandstroem/scratch-second/euler_project/src/late_fusion/utils/"  # '/cluster/project/cvl/esandstroem/src/late_fusion/utils/'
-    sys.path.append(
-        path_to_utils_module
-    )  # needed in order to load read_array and associate
-
-    from loading import load_config_from_yaml
-    import open3d as o3d
-
-    from easydict import EasyDict
-
-    # to run the open3d integration scheem you need to use the open3d_env but this does not have the tsdf library installed so
-    # the below line needs to be commented out.
-    # from tsdf import TSDFHandle
-    import skimage
-    import trimesh
-
-    # get config
-    path_to_config = "/home/esandstroem/scratch-second/euler_project/src/late_fusion/configs/fusion/corbs_euler.yaml"
-    config = load_config_from_yaml(path_to_config)
-    # dataset_config = get_data_config(config, mode='train')
-    config.DATA.scene_list = config.DATA.test_scene_list
-    # config.DATA.transform = dataset_config.transform
-    config.DATA.mode = "test"
-    dataset = CoRBS(config.DATA)  # get_data(config.DATA.dataset, config.DATA)
-    # loader = torch.utils.data.DataLoader(dataset, batch_size=config.TRAINING.train_batch_size, shuffle=False)
-
-    truncation = 0.1
-    pad = 0
-
-    # load gt grid to get volume shape
-    gt_path = (
-        "/home/esandstroem/scratch-second/euler_work/data/corbs/human/sdf_human.hdf"
-    )
-    # read from hdf file!
-    f = h5py.File(gt_path, "r")
-
-    gt = np.array(f["sdf"]).astype(np.float16)
-    gt[gt >= truncation] = truncation
-    gt[gt <= -truncation] = -truncation
-    if pad > 0:
-        gt = np.pad(gt, pad, "constant", constant_values=truncation)
-
-    bbox = np.zeros((3, 2))
-    bbox[:, 0] = f.attrs["bbox"][:, 0] - pad * f.attrs["voxel_size"] * np.ones(
-        (1, 1, 1)
-    )
-    # bbox[1, 0] = bbox[1, 0]
-    bbox[:, 1] = bbox[:, 0] + f.attrs["voxel_size"] * np.array(gt.shape)
-
-    # in order to avoid the blobs under the feet we crop the gt grid from below
-
-    volume_shape = gt.shape
-    voxel_size = f.attrs["voxel_size"]
-
-    # BELOW IS SILVANS TSDF FUSION
-
-    # box = np.array([bbox[0,:],bbox[1,:],bbox[2,:]])  # each cell depicts the interval where we will reconstruct the shape i.e.
-    # # [[-xmin,xmax],[-ymin,ymax],[-zmin,zmax]]
-    # # the resolution factor determines the truncation distance. The truncation distance is the resolution times
-    # # the resolution factor
-    # print(volume_shape)
-    # print(box)
-    # # box = np.array([[-8, 8], [-8, 8], [-8, 8]])
-    # # volume_shape = (200, 200, 200)
-    # tsdf = TSDFHandle.TSDF(bbox=box, resolution=0.01, resolution_factor=10, volume_shape=list(volume_shape))
-
-    # for i, frame in tqdm(enumerate(dataset), total=len(dataset)):
-    #     # if i % 4 == 0:
-    #     #     if frame is None:
-    #     #         print('None frame')
-    #     #         continue
-
-    #     #     extrinsics = np.linalg.inv(frame['extrinsics'].astype(np.float32))
-    #     #     # extrinsics = frame['extrinsics'].astype(np.float32)
-    #     #     # print('translation: ', extrinsics[:, -1])
-    #     #     # print(frame['intrinsics_stereo'])
-
-    #     #     campose = np.matmul(frame['intrinsics_stereo'], extrinsics[0:3, 0:4]).astype(np.float32)
-
-    #     #     depth = frame['stereo_depth']
-    #     #     # depth = depth * frame['stereo_mask']
-    #     #     # depth = depth * frame['stereo_mask']
-    #     #     # depth = depth.astype(np.uint16)
-    #     #     weight_map = np.ones(depth.shape)
-    #     #     tsdf.fuse(campose, depth.astype(np.float32), weight_map.astype(np.float32))
-    #     #     # if i > 300:
-    #     #     #     break
-    #     if frame is None:
-    #         print('None frame')
-    #         continue
-
-    #     extrinsics = np.linalg.inv(frame['extrinsics'].astype(np.float32))
-    #         # extrinsics = frame['extrinsics'].astype(np.float32)
-    #         # print('translation: ', extrinsics[:, -1])
-    #         # print(frame['intrinsics_stereo'])
-
-    #     campose = np.matmul(frame['intrinsics_stereo'], extrinsics[0:3, 0:4]).astype(np.float32)
-
-    #     depth = frame['stereo_depth']
-    #     depth = depth * frame['stereo_mask']
-    #         # depth = depth * frame['stereo_mask']
-    #         # depth = depth * frame['stereo_mask']
-    #         # depth = depth.astype(np.uint16)
-    #     weight_map = np.ones(depth.shape)
-    #     tsdf.fuse(campose, depth.astype(np.float32), weight_map.astype(np.float32))
-    #     # if i > 300:
-    #     #     break
-
-    # # save visualization of sdf
-    # # vertices, faces, normals, _ = skimage.measure.marching_cubes_lewiner(tsdf.get_volume()[:, :, :, 0], level=0, spacing=(voxel_size, voxel_size, voxel_size))
-    # # mesh = trimesh.Trimesh(vertices=vertices, faces=faces, vertex_normals=normals)
-    # # # mesh.show()
-    # # mesh.export('tof_tsdf_lewiner_full_mask.ply')
-
-    # weights = np.asarray(tsdf.get_mask())
-    # mask = (weights > 0) # I think we need to think more about this. The masks are not the same between routedfusion and tsdf fusion. True but this
-    #     # is the correct mask
-
-    # indices_x = mask.nonzero()[0]
-    # indices_y = mask.nonzero()[1]
-    # indices_z = mask.nonzero()[2]
-
-    # max_resolution = np.array(volume_shape).max()
-
-    # length = max_resolution*0.01
-
-    # volume = o3d.integration.UniformTSDFVolume(
-    #             length=length,
-    #             resolution=max_resolution,
-    #             sdf_trunc=0.1,
-    #             color_type=o3d.integration.TSDFVolumeColorType.RGB8)
-
-    # tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
-    # tsdf_cube[:volume_shape[0], :volume_shape[1], :volume_shape[2]] = tsdf.get_volume()[:, :, :, 0]
-
-    # for i in range(indices_x.shape[0]):
-    #     volume.set_tsdf_at(tsdf_cube[indices_x[i], indices_y[i], indices_z[i]], indices_x[i] , indices_y[i], indices_z[i])
-    #     volume.set_weight_at(1, indices_x[i], indices_y[i], indices_z[i])
-
-    # print("Extract a filtered triangle mesh from the volume and visualize it.")
-    # mesh = volume.extract_triangle_mesh()
-    # del volume
-    # mesh.compute_vertex_normals()
-    # # o3d.visualization.draw_geometries([mesh])
-    # o3d.io.write_triangle_mesh('stereo_human.ply', mesh)
-    # BELOW IS OPEN3D TSDF FUSION
-    color = o3d.integration.TSDFVolumeColorType.NoColor
-    # stereo_volume = o3d.integration.ScalableTSDFVolume(voxel_length=1./64.,
-    #                                                              sdf_trunc=0.06,
-    #                                                              color_type=color)
-
-    resolution = volume_shape
-    max_resolution = np.array(resolution).max()
-    length = max_resolution * voxel_size
-
-    stereo_volume = o3d.integration.UniformTSDFVolume(
-        length=length, resolution=max_resolution, sdf_trunc=truncation, color_type=color
-    )
-
-    stereo_volume.origin = f.attrs["bbox"][:, 0] - [
-        pad * voxel_size,
-        pad * voxel_size,
-        pad * voxel_size,
-    ]
-
-    # kinect_volume = o3d.integration.ScalableTSDFVolume(voxel_length=1./64.,
-    #                                                              sdf_trunc=0.06,
-    #                                                              color_type=color)
-
-    kinect_volume = o3d.integration.UniformTSDFVolume(
-        length=length, resolution=max_resolution, sdf_trunc=truncation, color_type=color
-    )
-
-    kinect_volume.origin = f.attrs["bbox"][:, 0] - [
-        pad * voxel_size,
-        pad * voxel_size,
-        pad * voxel_size,
-    ]
-
-    # grid = dataset.get_grid(config.scene)
-
-    def draw_camera(pose):
-        center = pose[:3, 3]
-        z_direction = pose[:3, 2]
-        y_direction = pose[:3, 1]
-        x_direction = pose[:3, 0]
-
-        top_left = center + 0.05 * z_direction - 0.05 * x_direction + 0.05 * y_direction
-        top_right = (
-            center + 0.05 * z_direction + 0.05 * x_direction + 0.05 * y_direction
-        )
-        bottom_left = (
-            center + 0.05 * z_direction - 0.05 * x_direction - 0.05 * y_direction
-        )
-        bottom_right = (
-            center + 0.05 * z_direction + 0.05 * x_direction - 0.05 * y_direction
-        )
-
-        points = [center, top_left, top_right, bottom_left, bottom_right]
-        lines = [[0, 1], [0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [3, 4], [2, 4]]
-
-        colors = [[1, 0, 0] for i in range(len(lines))]
-        camera = o3d.geometry.LineSet(
-            points=o3d.utility.Vector3dVector(points),
-            lines=o3d.utility.Vector2iVector(lines),
-        )
-        camera.colors = o3d.utility.Vector3dVector(colors)
-        return camera
-
-    cameras = []
-    images = []
-
-    for i, frame in tqdm(enumerate(dataset), total=len(dataset)):
-        if frame is None:
-            print("None frame")
-            continue
-        intrinsics = o3d.camera.PinholeCameraIntrinsic(
-            width=frame["stereo_depth"].shape[1],
-            height=frame["stereo_depth"].shape[0],
-            fx=frame["intrinsics_stereo"][0, 0],
-            fy=frame["intrinsics_stereo"][1, 1],
-            cx=frame["intrinsics_stereo"][0, 2],
-            cy=frame["intrinsics_stereo"][1, 2],
-        )
-
-        rgb = o3d.geometry.Image(np.ones_like(frame["stereo_depth"]))
-
-        depth = frame["stereo_depth"].astype(np.float) * 1000.0
-        depth = depth.astype(np.uint16)
-        depth = o3d.geometry.Image(depth)
-
-        image = o3d.geometry.RGBDImage.create_from_color_and_depth(
-            rgb,
-            depth,
-            depth_scale=1000,
-            depth_trunc=4.0,
-            convert_rgb_to_intensity=False,
-        )
-
-        extrinsics = np.linalg.inv(frame["extrinsics"].astype(np.float32))
-
-        stereo_volume.integrate(image, intrinsics, extrinsics)
-
-        depth = frame["tof_depth"].astype(np.float) * 1000.0
-        depth = depth.astype(np.uint16)
-        depth = o3d.geometry.Image(depth)
-
-        image = o3d.geometry.RGBDImage.create_from_color_and_depth(
-            rgb,
-            depth,
-            depth_scale=1000,
-            depth_trunc=4.0,
-            convert_rgb_to_intensity=False,
-        )
-
-        kinect_volume.integrate(image, intrinsics, extrinsics)
-
-        cameras.append(draw_camera(np.linalg.inv(extrinsics)))
-
-        # if i > 300:
-        #     break
-
-    stereo_mesh = stereo_volume.extract_triangle_mesh()
-    stereo_mesh.compute_vertex_normals()
-
-    stereo_colors = np.zeros_like(stereo_mesh.vertex_colors)
-    stereo_colors[:, 0] = 1
-    stereo_mesh.vertex_colors = o3d.utility.Vector3dVector(stereo_colors)
-
-    kinect_mesh = kinect_volume.extract_triangle_mesh()
-    kinect_mesh.compute_vertex_normals()
-
-    kinect_colors = np.zeros_like(kinect_mesh.vertex_colors)
-    kinect_colors[:, 1] = 1
-    kinect_mesh.vertex_colors = o3d.utility.Vector3dVector(kinect_colors)
-
-    # vertices, faces, normals, _ = marching_cubes(grid['sdf'], level=0)
-    # gt_mesh = o3d.geometry.TriangleMesh()
-    # gt_mesh.vertices = o3d.utility.Vector3dVector(vertices)
-    # gt_mesh.triangles = o3d.utility.Vector3iVector(faces)
-    # gt_mesh.compute_vertex_normals()
-
-    geometries = [kinect_mesh] + [stereo_mesh] + cameras
-    o3d.visualization.draw_geometries(geometries)
-    geometries = [kinect_mesh] + cameras
-    o3d.visualization.draw_geometries(geometries)
-    geometries = [stereo_mesh] + cameras
-    o3d.visualization.draw_geometries(geometries)
-
-    o3d.io.write_triangle_mesh("open3d_tsdf_fusion_stereo_desk.ply", stereo_mesh)
-    o3d.io.write_triangle_mesh("open3d_tsdf_fusion_tof_desk.ply", kinect_mesh)
