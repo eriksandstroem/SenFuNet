@@ -42,7 +42,7 @@ def count_parameters(model):
 
 def test_fusion(config):
     # define output dir
-    test_path = "/test"
+    test_path = "/test_debug"
     if config.FILTERING_MODEL.model != "3dconv":
         time = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
         print(time)
@@ -74,7 +74,7 @@ def test_fusion(config):
         batch_size=config.TESTING.test_batch_size,
         shuffle=config.TESTING.test_shuffle,
         pin_memory=True,
-        num_workers=0,  # use 0 only for the early fusion asynchronous experiment
+        num_workers=0,  # 0 required for the early fusion asynchronous experiment
     )
 
     # specify number of features to be stored in feature grid at each voxel location
@@ -85,7 +85,7 @@ def test_fusion(config):
     else:
         config.FEATURE_MODEL.n_features = (
             config.FEATURE_MODEL.append_depth + 3 * config.FEATURE_MODEL.w_rgb
-        )  # 1 for label encoding of noise in gaussian threshold data
+        )
 
     # get test database
     database = setup.get_database(dataset, config, mode="test")
@@ -129,7 +129,7 @@ def test_fusion(config):
     elif config.FILTERING_MODEL.model != "tsdf_middle_fusion":
         load_pipeline(config.TESTING.fusion_model_path, pipeline)
 
-    # put pipelien in evaluation mode
+    # put pipeline in evaluation mode
     pipeline.eval()
 
     sensors = config.DATA.input
@@ -154,9 +154,9 @@ def test_fusion(config):
 def evaluate(database, config, test_dir):
 
     # when testing on data located at local scratch of gpu node
-    sdf_gt_path = os.getenv(config.DATA.root_dir)
     # os.getenv returns none when the input does not exist. When
     # it returns none, we want to train on the work folder
+    sdf_gt_path = os.getenv(config.DATA.root_dir)
 
     if not sdf_gt_path:
         sdf_gt_path = config.DATA.root_dir
@@ -220,8 +220,7 @@ def evaluate(database, config, test_dir):
                     sensor_mask[sensor_] = weights > 0
 
                 if config.TESTING.use_outlier_filter:
-                    # copy the original mask before outlier filtering since we want to visualize
-                    # the unfiltered mesh
+                    # copy the original mask before outlier filtering since we want to visualize the unfiltered mesh
                     sensor_weighting_mask = mask.copy()
 
                     # apply outlier filter
@@ -270,7 +269,7 @@ def evaluate(database, config, test_dir):
                     logger.info(key + ": " + str(eval_results_scene[key]))
 
                 if config.TESTING.mc == "Open3D":
-                    # OPEN3D MARCHING CUBES
+                    # OPEN3D MARCHING CUBES - DO NOT USE
                     # ---------------------------------------------
                     # Create the mesh using the given mask
                     tsdf_cube = np.zeros(
@@ -305,7 +304,6 @@ def evaluate(database, config, test_dir):
 
                     del volume
                     mesh.compute_vertex_normals()
-                    # o3d.visualization.draw_geometries([mesh])
                     o3d.io.write_triangle_mesh(
                         os.path.join(test_dir, model_test + ".ply"), mesh
                     )
@@ -328,7 +326,7 @@ def evaluate(database, config, test_dir):
                     mesh = trimesh.Trimesh(vertices=verts, faces=faces, normals=normals)
                     mesh.vertices = (
                         mesh.vertices + 0.5 * voxel_size
-                    )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measure in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measure in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
+                    )  # compensate for the fact that the GT mesh was produced with Open3D marching cubes and that Open3D marching cubes assumes that the coordinate grid (measured in metres) is shifted with 0.5 voxel side length compared to the voxel grid (measured in voxels) i.e. if there is a surface between index 0 and 1, skimage will produce a surface at 0.5 m (voxel size = 1 m), while Open3D produces the surface at 1.0 m.
 
                     mesh.export(os.path.join(test_dir, model_test + ".ply"))
                     # ---------------------------------------------
@@ -450,7 +448,7 @@ def evaluate(database, config, test_dir):
                         logger.info(key + ": " + str(eval_results_scene[key]))
 
                     if config.TESTING.mc == "Open3D":
-                        # OPEN3D MARCHING CUBES
+                        # OPEN3D MARCHING CUBES - DO NOT USE
                         # ---------------------------------------------
                         # Create the mesh using the given mask
                         tsdf_cube = np.zeros(
@@ -489,7 +487,6 @@ def evaluate(database, config, test_dir):
 
                         del volume
                         mesh.compute_vertex_normals()
-                        # o3d.visualization.draw_geometries([mesh])
                         o3d.io.write_triangle_mesh(
                             os.path.join(test_dir, model_test + ".ply"), mesh
                         )
@@ -591,7 +588,7 @@ def evaluate(database, config, test_dir):
                             logger.info(key + ": " + str(eval_results_scene[key]))
 
                         if config.TESTING.mc == "Open3D":
-                            # OPEN3D MARCHING CUBES
+                            # OPEN3D MARCHING CUBES - DO NOT USE
                             # ---------------------------------------------
                             # Create the mesh using the given mask
                             tsdf_cube = np.zeros(
@@ -630,7 +627,6 @@ def evaluate(database, config, test_dir):
 
                             del volume
                             mesh.compute_vertex_normals()
-                            # o3d.visualization.draw_geometries([mesh])
                             o3d.io.write_triangle_mesh(
                                 os.path.join(test_dir, model_test + ".ply"), mesh
                             )
@@ -845,7 +841,7 @@ def evaluate_routedfusion(database, config, test_dir, test_path):
                 logger.info(key + ": " + str(eval_results_scene[key]))
 
             if config.TESTING.mc == "Open3D":
-                # OPEN3D MARCHING CUBES
+                # OPEN3D MARCHING CUBES - DO NOT USE
                 # ---------------------------------------------
                 # Create the mesh using the given mask
                 tsdf_cube = np.zeros((max_resolution, max_resolution, max_resolution))
@@ -876,7 +872,6 @@ def evaluate_routedfusion(database, config, test_dir, test_path):
 
                 del volume
                 mesh.compute_vertex_normals()
-                # o3d.visualization.draw_geometries([mesh])
                 o3d.io.write_triangle_mesh(
                     os.path.join(test_dir, model_test + ".ply"), mesh
                 )

@@ -1,5 +1,5 @@
 # SenFuNet
-This is the official source code of the research paper [**Learning Online Multi-Sensor Depth Fusion**](add_link_here).
+This is the official source code of the research paper [**Learning Online Multi-Sensor Depth Fusion**](https://arxiv.org/abs/2204.03353).
 
 ![Architecture](https://github.com/tfy14esa/SenFuNet/blob/main/images/architecture.png)
 

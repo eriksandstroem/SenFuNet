@@ -195,7 +195,7 @@ class Extractor(nn.Module):
         x, y, z = tsdf_volume.shape
         b, h, n, dim = points_dict["points"].shape
 
-        # convert from floating point coordinate points to discrete indices
+        # convert from floating point voxel coordinate points to discrete indices
         points = points_dict["points"].contiguous().view(b * h * n, dim)
         indices = torch.cat(
             (
@@ -206,12 +206,13 @@ class Extractor(nn.Module):
             dim=-1,
         ).long()
 
-        # get valid indices
+        # get valid indices as a boolean grid
         valid = get_index_mask(indices, (x, y, z))
 
+        # valid indices
         valid_idx = torch.nonzero(valid)[:, 0]
 
-        # extract valid indices
+        # extract valid tsdf values and weights
         tsdf = extract_values(indices, tsdf_volume, valid)
         weights = extract_values(indices, weights_volume, valid)
 
@@ -225,6 +226,7 @@ class Extractor(nn.Module):
         # the update weights are always one with nn extraction
         weights = torch.ones_like(valid).float()
 
+        # if the fusion net from routedfusion is used, pack the input to the fusion network
         fusion_values = tsdf_container.view(b, h, n)
         fusion_weights = weight_container.view(b, h, n)
 

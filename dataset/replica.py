@@ -294,7 +294,7 @@ class Replica(Dataset):
                     == 2  # when training the routing network for the asynchronous experiment
                     and self.asynch
                     and sensor_.endswith("tof")
-                ):  # for tsdf_early_fusion asynchronous experiment - only implemented for single scene evaluation
+                ):  # for tsdf_early_fusion asynchronous experiment
                     if int(frame) % 3 != 0:
                         sample[sensor_ + "_depth"] = self.project_depth(
                             depth, item, frame_tof
