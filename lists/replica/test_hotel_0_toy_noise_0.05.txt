@@ -1,1 +1,0 @@
-hotel_0/4/left_depth_gt hotel_0/4/left_depth_noise_5.0 hotel_0/4/left_bts_depth hotel_0/4/left_psmnet_depth hotel_0/4/left_threshold_1.75_gaussian_close_0.05 hotel_0/4/left_threshold_1.75_gaussian_far_0.05 hotel_0/4/left_continuous_1.75_gaussian_close_0.05 hotel_0/4/left_continuous_1.75_gaussian_far_0.05 hotel_0/4/left_rgb hotel_0/4/left_camera_matrix
