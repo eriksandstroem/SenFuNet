@@ -34,7 +34,6 @@ class Database(Dataset):
         for sensor_ in config.input:
             self.tsdf[sensor_] = {}
             self.fusion_weights[sensor_] = {}
-            # if config.w_features:# TODO: adapt to when not using features
             self.features[sensor_] = {}
             if self.refinement and config.test_mode:
                 self.tsdf_refined[sensor_] = {}
@@ -99,8 +98,6 @@ class Database(Dataset):
                         self.scenes_gt[s].shape, dtype=np.float16
                     )
 
-        # self.reset()
-
     def __getitem__(self, item):
 
         sample = dict()
@@ -116,7 +113,6 @@ class Database(Dataset):
         for sensor_ in self.sensors:
             sample["tsdf_" + sensor_] = self.tsdf[sensor_][item].volume
             sample["weights_" + sensor_] = self.fusion_weights[sensor_][item]
-            # if self.w_features:# TODO: adapt to when not using features
             sample["features_" + sensor_] = self.features[sensor_][item].volume
 
             if self.refinement and self.test_mode:
@@ -156,17 +152,6 @@ class Database(Dataset):
                     compression_opts=9,
                 )
 
-            if self.refinement and self.test_mode:
-                refinedname = scene_id + "_" + sensor + ".tsdf_refined.hf5"
-                with h5py.File(os.path.join(path, refinedname), "w") as hf:
-                    hf.create_dataset(
-                        "TSDF",
-                        shape=self.tsdf_refined[sensor][scene_id].volume.shape,
-                        data=self.tsdf_refined[sensor][scene_id].volume,
-                        compression="gzip",
-                        compression_opts=9,
-                    )
-
         sdfname = scene_id + ".tsdf_filtered.hf5"
         with h5py.File(os.path.join(path, sdfname), "w") as hf:
             hf.create_dataset(
@@ -188,9 +173,7 @@ class Database(Dataset):
                     compression_opts=9,
                 )
 
-    def evaluate(
-        self, mode="train", workspace=None
-    ):  # TODO: add evaluation of refined grid
+    def evaluate(self, mode="train", workspace=None):
 
         eval_results = {}
         eval_results_scene_save = {}
@@ -280,7 +263,6 @@ class Database(Dataset):
                 self.fusion_weights[sensor][scene_id] = np.zeros(
                     self.scenes_gt[scene_id].shape, dtype=np.float16
                 )
-                # if self.w_features:# TODO: adapt to when not using features
                 self.features[sensor][scene_id].volume = np.zeros(
                     self.features[sensor][scene_id].shape, dtype=np.float16
                 )
@@ -293,7 +275,6 @@ class Database(Dataset):
                     self.fusion_weights[sensor][scene_id] = np.zeros(
                         self.scenes_gt[scene_id].shape, dtype=np.float16
                     )
-                    # if self.w_features: # TODO: adapt to when not using features
                     self.features[sensor][scene_id].volume = np.zeros(
                         self.features[sensor][scene_id].shape, dtype=np.float16
                     )
@@ -306,12 +287,10 @@ class Database(Dataset):
         sensor_mask_filtering = {}
 
         for sensor_ in self.sensors:
-            # print(sensor_)
             weights = self.fusion_weights[sensor_][scene]
             mask = np.logical_or(mask, weights > 0)
             and_mask = np.logical_and(and_mask, weights > 0)
             sensor_mask[sensor_] = weights > 0
-            # break
 
         # load weighting sensor grid
         if self.outlier_channel:
@@ -330,7 +309,6 @@ class Database(Dataset):
             else:
                 rem_indices = np.logical_and(only_sensor_mask, sensor_weighting > 0.5)
 
-            # rem_indices = rem_indices.astype(dtype=bool)
             sensor_mask_filtering[sensor_] = sensor_mask[sensor_].copy()
             sensor_mask_filtering[sensor_][rem_indices] = 0
 

@@ -41,11 +41,9 @@ def prepare_input_data(batch, config, device):
         inputs = torch.cat((intensity, grad, inputs), 1)
     inputs = inputs.to(device)
 
-    target = batch[config.DATA.target]  # 2, 512, 512 (batch size, height, width)
+    target = batch[config.DATA.target]  # (batch size, height, width)
     target = target.to(device)
-    target = target.unsqueeze_(
-        1
-    )  # 2, 1, 512, 512 (batch size, channels, height, width)
+    target = target.unsqueeze_(1)  # (batch size, channels, height, width)
     return inputs, target
 
 
@@ -205,8 +203,7 @@ def train(args, config):
                 train_loss_l2 /= (
                     config.SETTINGS.log_freq * config.TRAINING.train_batch_size
                 )
-                # logging not working properly since I log at i = 0 and then
-                # the train_loss parameters are divided with a large number causing weird oscillations. Also add wandb to gitignore. Also remove the lines which do the workspace.writer calls to tensorboard, but I still want to log per epoch to file to compare the training loss to the validation loss over the epochs. So I need a new parameter for this.
+
                 wandb.log(
                     {
                         "Train/total loss": train_loss_t,

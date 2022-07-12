@@ -106,11 +106,6 @@ class Pipeline(torch.nn.Module):
                         ] = sensor_  # used to be able to train routedfusion
                         self.fuse_pipeline.fuse(batch, database, device)
 
-                # return
-
-            # if k == 5:
-            #     break # debug
-
         if self.filter_pipeline is not None:
             # run filtering network on all voxels which have a non-zero weight
             for scene in database.filtered.keys():
@@ -129,12 +124,9 @@ class Pipeline(torch.nn.Module):
                 batch[
                     "fusionNet"
                 ] = None  # We don't use a fusion net during early fusion
-                # print("item rgb: ", batch["item"])
-                # print("item tof: ", batch["item_tof"])
                 self.fuse_pipeline.fuse(batch, val_database, device)
             else:
                 for sensor_ in sensors:
-                    # print(sensor_)
                     batch["depth"] = batch[sensor_ + "_depth"]
                     batch["routing_net"] = "self._routing_network_" + sensor_
                     batch["mask"] = batch[sensor_ + "_mask"]
@@ -146,9 +138,6 @@ class Pipeline(torch.nn.Module):
                         "fusionNet"
                     ] = sensor_  # used to be able to train routedfusion
                     self.fuse_pipeline.fuse(batch, val_database, device)
-
-            # if k == 10:
-            #     break  # debug
 
         if self.config.FILTERING_MODEL.do:
             # perform the fusion of the grids
@@ -182,181 +171,3 @@ class Pipeline(torch.nn.Module):
                         out=np.zeros_like(weight_sum),
                         where=weight_sum != 0.0,
                     )
-
-    def test_step(
-        self, batch, database, sensors, device
-    ):  # used for trajectory performance plot
-
-        for sensor_ in sensors:
-
-            batch["depth"] = batch[sensor_ + "_depth"]
-            batch["routing_net"] = "self._routing_network_" + sensor_
-            batch["mask"] = batch[sensor_ + "_mask"]
-            batch["sensor"] = sensor_
-            batch["routingNet"] = sensor_  # used to be able to train routedfusion
-            batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-            self.fuse_pipeline.fuse(batch, database, device)
-
-        # run filtering network on all voxels which have a non-zero weight
-        scene = batch["frame_id"][0].split("/")[0]
-        self.filter_pipeline.filter(scene, database, device)
-
-        # apply outlier filter i.e. make the weights of the outlier voxels zero so
-        # that they are not used in the evaluation of the IoU
-        mask = np.zeros_like(database[scene]["gt"])
-        and_mask = np.ones_like(database[scene]["gt"])
-        sensor_mask = dict()
-
-        for sensor_ in sensors:
-            # print(sensor_)
-            weights = database.fusion_weights[sensor_][scene]
-            mask = np.logical_or(mask, weights > 0)
-            and_mask = np.logical_and(and_mask, weights > 0)
-            sensor_mask[sensor_] = weights > 0
-            # break
-
-        # load weighting sensor grid
-        if self.config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
-            sensor_weighting = database[scene]["sensor_weighting"][1, :, :, :]
-        else:
-            sensor_weighting = database[scene]["sensor_weighting"]
-
-        only_one_sensor_mask = np.logical_xor(mask, and_mask)
-        for sensor_ in sensors:
-            only_sensor_mask = np.logical_and(
-                only_one_sensor_mask, sensor_mask[sensor_]
-            )
-            if sensor_ == sensors[0]:
-                rem_indices = np.logical_and(only_sensor_mask, sensor_weighting < 0.5)
-            else:
-                rem_indices = np.logical_and(only_sensor_mask, sensor_weighting > 0.5)
-
-            database[scene]["weights_" + sensor_][rem_indices] = 0
-
-    def test_speed(
-        self, val_loader, val_dataset, val_database, sensors, device
-    ):  # used to evaluate speed of algorithm
-
-        for k, batch in tqdm(enumerate(val_loader), total=len(val_dataset)):
-
-            if self.config.DATA.collaborative_reconstruction:
-                if (
-                    math.ceil(
-                        int(batch["frame_id"][0].split("/")[-1])
-                        / self.config.DATA.frames_per_chunk
-                    )
-                    % 2
-                    == 0
-                ):
-                    sensor_ = sensors[0]
-                else:
-                    sensor_ = sensors[1]
-
-                batch["depth"] = batch[sensor_ + "_depth"]
-                batch["routing_net"] = "self._routing_network_" + sensor_
-                batch["mask"] = batch[sensor_ + "_mask"]
-                if self.config.FILTERING_MODEL.model == "routedfusion":
-                    batch["sensor"] = self.config.DATA.input[0]
-                else:
-                    batch["sensor"] = sensor_
-
-                batch["routingNet"] = sensor_  # used to be able to train routedfusion
-                batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-                self.fuse_pipeline.fuse(batch, val_database, device)
-            else:
-                for sensor_ in sensors:
-
-                    batch["depth"] = batch[sensor_ + "_depth"]
-                    batch["routing_net"] = "self._routing_network_" + sensor_
-                    batch["mask"] = batch[sensor_ + "_mask"]
-                    if self.config.FILTERING_MODEL.model == "routedfusion":
-                        batch["sensor"] = self.config.DATA.input[0]
-                    else:
-                        batch["sensor"] = sensor_
-
-                    batch[
-                        "routingNet"
-                    ] = sensor_  # used to be able to train routedfusion
-                    batch[
-                        "fusionNet"
-                    ] = sensor_  # used to be able to train routedfusion
-                    self.fuse_pipeline.fuse(batch, val_database, device)
-
-                    # return
-
-            # if k == 5:
-            #     break # debug
-
-            if self.filter_pipeline is not None:
-                # run filtering network on all voxels which have a non-zero weight
-                for scene in val_database.filtered.keys():
-                    self.filter_pipeline.filter(
-                        scene, val_database, device
-                    )  # it would be good
-                    # to implement a function filter_speed which takes an additional bbox as input
-                    # from the min bbox of the updated indices and runs only over those indices.
-                    # this requires outputting this bbox from the for loop of fusion steps
-
-                # apply outlier filter i.e. make the weights of the outlier voxels zero so
-                # that they are not used in the evaluation of the IoU
-                for scene in val_database.filtered.keys():
-                    mask = np.zeros_like(val_database[scene]["gt"])
-                    and_mask = np.ones_like(val_database[scene]["gt"])
-                    sensor_mask = dict()
-
-                    for sensor_ in self.config.DATA.input:
-                        weights = val_database.fusion_weights[sensor_][scene]
-                        mask = np.logical_or(mask, weights > 0)
-                        and_mask = np.logical_and(and_mask, weights > 0)
-                        sensor_mask[sensor_] = weights > 0
-
-                    # load weighting sensor grid
-                    if self.config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel:
-                        sensor_weighting = val_database[scene]["sensor_weighting"][
-                            1, :, :, :
-                        ]
-                    else:
-                        sensor_weighting = val_database[scene]["sensor_weighting"]
-
-                    only_one_sensor_mask = np.logical_xor(mask, and_mask)
-                    for sensor_ in self.config.DATA.input:
-                        only_sensor_mask = np.logical_and(
-                            only_one_sensor_mask, sensor_mask[sensor_]
-                        )
-                        if sensor_ == self.config.DATA.input[0]:
-                            rem_indices = np.logical_and(
-                                only_sensor_mask, sensor_weighting < 0.5
-                            )
-                        else:
-                            rem_indices = np.logical_and(
-                                only_sensor_mask, sensor_weighting > 0.5
-                            )
-
-                        val_database[scene]["weights_" + sensor_][rem_indices] = 0
-
-    def test_step_video(
-        self, batch, database, sensor, sensors, device
-    ):  # used for video creation
-
-        if sensor == "fused" or sensor == "weighting":
-            for sensor_ in sensors:
-                batch["depth"] = batch[sensor_ + "_depth"]
-                batch["routing_net"] = "self._routing_network_" + sensor_
-                batch["mask"] = batch[sensor_ + "_mask"]
-                batch["sensor"] = sensor_
-                batch["routingNet"] = sensor_  # used to be able to train routedfusion
-                batch["fusionNet"] = sensor_  # used to be able to train routedfusion
-                self.fuse_pipeline.fuse(batch, database, device)
-
-            # run filtering network on all voxels which have a non-zero weight
-            scene = batch["frame_id"][0].split("/")[0]
-            self.filter_pipeline.filter(scene, database, device)
-
-        else:
-            batch["depth"] = batch[sensor + "_depth"]
-            batch["routing_net"] = "self._routing_network_" + sensor
-            batch["mask"] = batch[sensor + "_mask"]
-            batch["sensor"] = sensor
-            batch["routingNet"] = sensor  # used to be able to train routedfusion
-            batch["fusionNet"] = sensor  # used to be able to train routedfusion
-            self.fuse_pipeline.fuse(batch, database, device)

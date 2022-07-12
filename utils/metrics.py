@@ -4,9 +4,6 @@ import torch
 
 def evaluation(est, target, mask=None):
 
-    # est = np.clip(est, -0.04, 0.04)
-    # target = np.clip(target, -0.04, 0.04)
-
     mse = mse_fn(est, target, mask)
     mad = mad_fn(est, target, mask)
     iou = iou_fn(est, target, mask)

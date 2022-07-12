@@ -89,8 +89,4 @@ def load_pipeline(
             if key not in model.state_dict().keys():
                 print(key)
 
-        # USE THESE TWO LINES
-        # model.state_dict().update(pretrained_dict)
-        # model.load_state_dict(model.state_dict())
-        # OR THESE TWO LINES TO LOAD (UNCLEAR WHICH IS BEST, sometimes one works, but the other does not)
         model.load_state_dict(pretrained_dict, False)

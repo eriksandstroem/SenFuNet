@@ -1,8 +1,5 @@
 import torch
 
-# needed when plotting interactively
-# import matplotlib.pyplot as plt
-
 from modules.routing import ConfidenceRouting
 from modules.extractor import Extractor
 from modules.model import FusionNet
@@ -132,15 +129,13 @@ class Fuse_Pipeline(torch.nn.Module):
         fusionNet,
         gt_depth=None,
         extraction_band=11,
-    ):  # TODO: adapt to when not using features
+    ):
         output = dict()
         b, c, h, w = input_.shape
         if self.config.FUSION_MODEL.use_fusion_net:
             if self.config.FUSION_MODEL.fixed:
                 with torch.no_grad():
-                    # print('in: ', input_.sum())
                     tsdf_pred = self._fusion_network[fusionNet].forward(input_)
-                    # print('out: ', tsdf_pred.sum())
             else:
                 tsdf_pred = self._fusion_network[fusionNet].forward(input_)
         else:  # TSDF Fusion
@@ -171,20 +166,6 @@ class Fuse_Pipeline(torch.nn.Module):
         tsdf_pred = tsdf_pred.permute(0, 2, 3, 1)
 
         feat_pred = feat_pred["feature"].permute(0, 2, 3, 1)
-
-        # # save feature maps
-        # for i in range(feat_pred.shape[-1]):
-        #     plt.imsave('/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/' + sensor + '/' + str(i)+ '_'+ sensor+   '.jpeg', feat_pred[0, :, :, i].cpu().detach().numpy())
-
-        # save confidence prediction
-        # using exp(-relu(x)) activation
-        # plt.imsave(sensor + '/' + sensor+   '_confidence.jpeg', torch.exp(-output['confidence_2d'][0, 0, :, :]).cpu().detach().numpy())
-        # using sigmoid activation
-        # plt.imsave(sensor + '/' + sensor+   '_confidence.jpeg', output['confidence_2d'][0, 0, :, :].cpu().detach().numpy())
-
-        # for i in range(input_features[sensor].shape[1]):
-        #     m = input_features[sensor][:, i, :, :].squeeze()
-        #     plt.imsave('/cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/' + sensor + '/input_' + str(i)+ '_'+ sensor+   '.jpeg', m.cpu().detach().numpy())
 
         try:
             n_points = eval("self.config.FUSION_MODEL.n_points_" + sensor)
@@ -234,7 +215,7 @@ class Fuse_Pipeline(torch.nn.Module):
         n_points=None,
         rgb=None,
         rgb_warp=None,
-    ):  # TODO: adapt to when not using features
+    ):
 
         # get frame shape
         b, h, w = frame.shape
@@ -300,9 +281,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         return tsdf_input, feature_input
 
-    def _prepare_volume_update(
-        self, values, est, features, inputs, sensor
-    ) -> dict:  # TODO: adapt to when not using features
+    def _prepare_volume_update(self, values, est, features, inputs, sensor) -> dict:
 
         output = dict()
 
@@ -354,7 +333,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         return output
 
-    def fuse(self, batch, database, device):  # TODO: adapt to when not using features
+    def fuse(self, batch, database, device):
 
         self.device = device
         # routing
@@ -363,12 +342,8 @@ class Fuse_Pipeline(torch.nn.Module):
                 depth, conf = self._routing(batch)
 
                 frame = depth.squeeze_(1)
-                confidence = None  # Need to implement this if I want to use it again
+                confidence = None
             else:
-                # if batch['sensor'] == 'tof': # ONLY FOR A FUN TEST
-                #     frame = batch[batch['sensor'] + '_depth'].squeeze_(1).to(device)
-                #     confidence = None
-                # else:
                 depth, conf = self._routing(batch)
                 frame = depth.squeeze_(1)
                 confidence = conf.squeeze_(1)
@@ -475,9 +450,7 @@ class Fuse_Pipeline(torch.nn.Module):
 
         return
 
-    def fuse_training(
-        self, batch, database, device
-    ):  # TODO: adapt to when not using features
+    def fuse_training(self, batch, database, device):
 
         """
         Learned real-time depth map fusion pipeline
@@ -492,15 +465,11 @@ class Fuse_Pipeline(torch.nn.Module):
                 depth, conf = self._routing(batch)
 
                 frame = depth.squeeze_(1)
-                confidence = None  # Need to implement this if I want to use it again
+                confidence = None
             else:
-                # if batch['sensor'] == 'tof': # ONLY FOR A FUN TEST
-                #     frame = batch[batch['sensor'] + '_depth'].squeeze_(1).to(device)
-                #     confidence = None
-                # else:
                 depth, conf = self._routing(batch)
                 frame = depth.squeeze_(1)
-                confidence = conf  # Need to implement this if I want to use it again
+                confidence = conf
 
         else:
             frame = batch["depth"].squeeze_(1)
@@ -549,7 +518,6 @@ class Fuse_Pipeline(torch.nn.Module):
             database[scene_id]["weights" + "_" + batch["sensor"]],
         )
 
-        # TODO: make function that extracts only the gt values for speed up during training
         extracted_values_gt = self._extractor[batch["sensor"]].forward(
             frame,
             batch["extrinsics"],

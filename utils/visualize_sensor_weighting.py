@@ -96,8 +96,6 @@ def visualize_sensor_weighting(
         mesh.compute_vertex_normals()
 
     # remove voxels if they are outside of the voxelgrid - these are treated as uninitialized.
-    # this step is not needed when we subtract half a voxel size - without this the transformation
-    # is wrong.
     valid_points = (
         (voxel_points[:, 0] >= 0)
         * (voxel_points[:, 0] < sensor_weighting.shape[0])
@@ -118,8 +116,7 @@ def visualize_sensor_weighting(
 
     if (vals == -1).sum() > 0:
         print("Invalid index or indices found among voxel points!")
-    # print((vals == -1).sum()) # this sum should always be zero when we subtract half a voxel size to get to the voxel
-    # coordinate space.
+
     colors[vals == -1] = [0, 1, 0]  # make all uninitialized voxels green
     mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
     o3d.io.write_triangle_mesh(

@@ -2,12 +2,6 @@ import os
 import logging
 
 from dataset import Replica
-
-# the above import works because the __init__.py file
-# in the dataset folder imports the Replica class from the module replica.
-# we can import dataset in the package utils because the setup.py
-# module is only called from the train or test scripts i.e. from a higher
-# level.
 from dataset import CoRBS
 from dataset import Scene3D
 

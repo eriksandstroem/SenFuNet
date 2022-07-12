@@ -11,11 +11,6 @@ class Filter_Pipeline(torch.nn.Module):
         super(Filter_Pipeline, self).__init__()
 
         self.config = config
-        self.defined_bboxes = dict()
-        for sensor_ in config.DATA.input:
-            self.defined_bboxes[sensor_] = dict()
-            self.defined_bboxes[sensor_]["bbox"] = dict()
-            self.defined_bboxes[sensor_]["valid_indices"] = dict()
 
         self._filtering_network = FilteringNet(config)
 
@@ -61,9 +56,7 @@ class Filter_Pipeline(torch.nn.Module):
 
         return output
 
-    def _prepare_local_grids(
-        self, bbox, database, scene
-    ):  # TODO: adapt to when not using features
+    def _prepare_local_grids(self, bbox, database, scene):
         output = dict()
         # pad the local grids so that the dimension is divisible by half the chunk size and then ad
         # the chunk size divided by 4 so that we can update only the central region
@@ -113,10 +106,7 @@ class Filter_Pipeline(torch.nn.Module):
                 :,
             ]
 
-            feat = feat.permute(
-                3, 0, 1, 2
-            )  # (-1, feat.shape[0], feat.shape[1], feat.shape[2]) # DO NOT USE VIEW HERE!
-
+            feat = feat.permute(3, 0, 1, 2)
             # concatenate the two grids and make them on the form N, C, D, H, W
             local_grid = torch.cat(
                 (tsdf.unsqueeze(0), weights.unsqueeze(0), feat), dim=0
@@ -401,9 +391,6 @@ class Filter_Pipeline(torch.nn.Module):
         indices = input_dir["indices"].cpu()
         del input_dir["indices"]
 
-        # debugging
-        # output = self.request_defined_bbox(sensor, frame)
-
         output = self.request_random_bbox(indices, epoch, sensor, frame)
 
         if output is None:
@@ -473,7 +460,7 @@ class Filter_Pipeline(torch.nn.Module):
 
         # compute a mask determining the valid indices in the tsdf_filtered variable
         # There is only a translation shift between the origin of the gt_vol and the
-        # tsdf_filtered variable. Thus, I should be able to take the valid_indices minus
+        # tsdf_filtered variable. Thus, we are able to take the valid_indices minus
         # bbox[:, 0] in order to get the correct valid indices for tsdf_filtered
         valid_indices = valid_indices - bbox[:, 0]
 
@@ -492,18 +479,12 @@ class Filter_Pipeline(torch.nn.Module):
 
         return output
 
-    def request_random_bbox(self, indices, epoch, sensor, frame):  # CHANGE
+    def request_random_bbox(self, indices, epoch, sensor, frame):
 
         # get minimum box size
-        x_size = (
-            indices[:, 0].max() - indices[:, 0].min()
-        )  # + 64 - (indices[:, 0].max() - indices[:, 0].min()) % 64
-        y_size = (
-            indices[:, 1].max() - indices[:, 1].min()
-        )  # + 64 - (indices[:, 1].max() - indices[:, 1].min()) % 64
-        z_size = (
-            indices[:, 2].max() - indices[:, 2].min()
-        )  # + 64 - (indices[:, 2].max() - indices[:, 2].min()) % 64
+        x_size = indices[:, 0].max() - indices[:, 0].min()
+        y_size = indices[:, 1].max() - indices[:, 1].min()
+        z_size = indices[:, 2].max() - indices[:, 2].min()
 
         bbox_input = np.array(
             [
@@ -598,11 +579,6 @@ class Filter_Pipeline(torch.nn.Module):
                 valid_indices, :
             ]  # extract the indices in the global grid for the valid indices
 
-            if epoch == 0:
-                # save fixed bboxes for each frame for debugging
-                self.defined_bboxes[sensor]["bbox"][frame] = bbox
-                self.defined_bboxes[sensor]["valid_indices"][frame] = valid_indices
-
             if valid_indices.shape[0] > idx_threshold:
                 return bbox, valid_indices
 
@@ -610,18 +586,3 @@ class Filter_Pipeline(torch.nn.Module):
             "The desired amount of valid indices were not met or no valid indices were found"
         )
         return None
-
-    def request_defined_bbox(self, sensor, frame):
-        """Debugging Function. Not used in final model.
-
-        Args:
-            sensor (string): sensor name
-            frame (int): frame
-
-        Returns:
-            ndarray, ndarray: fixed defined bbox with valid indixes
-        """
-        return (
-            self.defined_bboxes[sensor]["bbox"][frame],
-            self.defined_bboxes[sensor]["valid_indices"][frame],
-        )

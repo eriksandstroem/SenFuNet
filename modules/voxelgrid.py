@@ -1,8 +1,6 @@
 import numpy as np
 import math
 
-# TODO: The numpy grids can be replaced with torch grids directly for a computational speed up during training and testing
-
 
 class FeatureGrid(object):
     def __init__(self, voxel_size, n_features, bbox=None):

@@ -36,11 +36,9 @@ def prepare_input_data(batch, config, device):
         inputs = torch.cat((intensity, grad, inputs), 1)
     inputs = inputs.to(device)
 
-    target = batch[config.DATA.target]  # 2, 512, 512 (batch size, height, width)
+    target = batch[config.DATA.target]  # (batch size, height, width)
     target = target.to(device)
-    target = target.unsqueeze_(
-        1
-    )  # 2, 1, 512, 512 (batch size, channels, height, width)
+    target = target.unsqueeze_(1)  # (batch size, channels, height, width)
     return inputs, target
 
 
@@ -130,21 +128,6 @@ def test(config):
             output_dir_confidence + "/" + batch["frame_id"][0].split("/")[-1] + ".png",
             confidence,
         )
-
-        # input_ = input_.detach().numpy()
-        # input_ = input_.squeeze()
-
-        # target = target.detach().numpy()
-        # target = target.squeeze()
-
-        # final = np.concatenate((input_, target),axis=1)
-        # final = np.concatenate((final, estplot), axis=1)
-        # final = np.concatenate((final, unc), axis=1)
-
-        # io.imshow(final, vmin=0, vmax=7.5)
-        # io.show()
-
-        # break
 
 
 if __name__ == "__main__":

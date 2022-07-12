@@ -73,8 +73,6 @@ def train_fusion(args):
         device = torch.device("cpu")
     config.FUSION_MODEL.device = device
 
-    # torch.autograd.set_detect_anomaly(True) # slows down training. Use for debugging
-
     # get datasets
     # get train dataset
     train_data_config = get_data_config(config, mode="train")
@@ -153,9 +151,7 @@ def train_fusion(args):
                 )
 
     if config.TRAINING.pretrain_filtering_net:
-        load_pipeline(
-            config.TESTING.fusion_model_path, pipeline
-        )  # TODO: load optimizer if available. See save_checkpoint function in old commit
+        load_pipeline(config.TESTING.fusion_model_path, pipeline)
 
     if config.TRAINING.pretrain_fusion_net and config.FUSION_MODEL.use_fusion_net:
         raise NotImplementedError
@@ -263,20 +259,15 @@ def train_fusion(args):
         train_database.reset()
         val_database.reset()
 
-        # TODO: include logging variables in workspace
         divide = 0
         train_loss = 0
         grad_norm_alpha_net = 0
         grad_norm_feature = dict()
-        grad_norm_refinement_net = dict()
         val_norm = 0
         l1_interm = 0
         l1_grid = 0
-        l1_grid_dict = dict()
         for sensor_ in config.DATA.input:
-            l1_grid_dict[sensor_] = 0
             grad_norm_feature[sensor_] = 0
-            grad_norm_refinement_net[sensor_] = 0
 
         for i, batch in tqdm(enumerate(train_loader), total=len(train_dataset)):
 
@@ -323,8 +314,7 @@ def train_fusion(args):
                 # optimization
                 if (
                     output is None
-                ):  # output is None when no valid indices were found for the filtering net within the random
-                    # bbox within the bounding volume of the integrated indices
+                ):  # output is None when no valid indices were found for the filtering net within the random bbox within the bounding volume of the integrated indices
                     print("output None from pipeline")
                     continue
 
@@ -351,10 +341,6 @@ def train_fusion(args):
                 if output["l1_grid"] is not None:
                     l1_grid += output["l1_grid"].item()
 
-                for sensor_ in config.DATA.input:
-                    if output["l1_grid_" + sensor_] is not None:
-                        l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
-
                 if output["loss"] is not None:
                     output["loss"].backward()
                 # break
@@ -380,8 +366,7 @@ def train_fusion(args):
                     # optimization
                     if (
                         output is None
-                    ):  # output is None when no valid indices were found for the filtering net within the random
-                        # bbox within the bounding volume of the integrated indices
+                    ):  # output is None when no valid indices were found for the filtering net within the random bbox within the bounding volume of the integrated indices
                         print("output None from pipeline")
                         # break
                         continue
@@ -412,10 +397,6 @@ def train_fusion(args):
                     if output["l1_grid"] is not None:
                         l1_grid += output["l1_grid"].item()
 
-                    for sensor_ in config.DATA.input:
-                        if output["l1_grid_" + sensor_] is not None:
-                            l1_grid_dict[sensor_] += output["l1_grid_" + sensor_].item()
-
                     if output["loss"] is not None:
                         output["loss"].backward()
                     # break
@@ -433,12 +414,6 @@ def train_fusion(args):
                             grad_norm_feature[name.split(".")[2]] += torch.norm(
                                 param.grad
                             )
-                        elif name.startswith(
-                            "filter_pipeline._filtering_network.encoder"
-                        ) or name.startswith("filter_pipeline._filtering_network.sdf"):
-                            grad_norm_refinement_net[name.split(".")[3]] += torch.norm(
-                                param.grad
-                            )
                         else:
                             grad_norm_alpha_net += torch.norm(param.grad)
                     val_norm += torch.norm(param)
@@ -453,9 +428,7 @@ def train_fusion(args):
                 l1_interm /= divide
                 l1_grid /= divide
                 for sensor_ in config.DATA.input:
-                    l1_grid_dict[sensor_] /= divide
                     grad_norm_feature[sensor_] /= divide
-                    grad_norm_refinement_net[sensor_] /= divide
 
                 wandb.log({"Train/nbr frames": i + 1 + epoch * n_batches})
                 wandb.log({"Train/total loss": train_loss})
@@ -478,33 +451,16 @@ def train_fusion(args):
                                 + sensor_: grad_norm_feature[sensor_]
                             }
                         )
-                    if config.FILTERING_MODEL.CONV3D_MODEL.use_refinement:
-                        wandb.log(
-                            {
-                                "Train/gradient norm refinement net "
-                                + sensor_: grad_norm_refinement_net[sensor_]
-                            }
-                        )
-                        wandb.log(
-                            {
-                                "Train/l1 refinement loss "
-                                + sensor_: l1_grid_dict[sensor_]
-                            }
-                        )
 
                 divide = 0
                 train_loss = 0
                 grad_norm_alpha_net = 0
                 grad_norm_feature = dict()
-                grad_norm_refinement_net = dict()
                 val_norm = 0
                 l1_interm = 0
                 l1_grid = 0
-                l1_grid_dict = dict()
                 for sensor_ in config.DATA.input:
-                    l1_grid_dict[sensor_] = 0
                     grad_norm_feature[sensor_] = 0
-                    grad_norm_refinement_net[sensor_] = 0
 
             if config.TRAINING.gradient_clipping:
                 torch.nn.utils.clip_grad_norm_(
@@ -626,9 +582,6 @@ def train_fusion(args):
                     and pipeline.filter_pipeline is not None
                 ):
                     pipeline.filter_pipeline._filtering_network.eval()
-
-            # if i == 6: # for debugging
-            # break
 
 
 if __name__ == "__main__":
