@@ -2,7 +2,7 @@ SETTINGS:
   gpu: True # run on cpu or gpu
   experiment_path: /cluster/project/cvl/esandstroem/src/late_fusion_3dconvnet/models/fusion # path where the logging is done and the models are saved.
   eval_freq: 442 # how many global steps before evaluation and saving the model
-  log_freq: 442 #957 383 # how many global steps before logging the training loss
+  log_freq: 442 # how many global steps before logging the training loss
   seed: 52 # seed for shuffling operations
 FUSION_MODEL:
   use_fusion_net: False # use learned fusion net as done by RoutedFusion
