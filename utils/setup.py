@@ -61,7 +61,6 @@ def get_database(dataset, config, mode="train"):
     database_config.transform = transform.ToTensor()
     database_config.n_features = config.FEATURE_MODEL.n_features
 
-    database_config.refinement = config.FILTERING_MODEL.CONV3D_MODEL.use_refinement
     database_config.test_mode = mode == "val" or mode == "test"
     database_config.alpha_supervision = config.LOSS.alpha_supervision
     database_config.outlier_channel = (

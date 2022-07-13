@@ -9,14 +9,10 @@ class FilteringNet(nn.Module):
         super(FilteringNet, self).__init__()
 
         self.config = config
-        self.output_scale = config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.output_scale
         self.trunc_value = config.DATA.trunc_value
         self.sensors = config.DATA.input
         self.feature_to_weight_head = (
             config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
-        )
-        self.sdf_enc_to_weight_head = (
-            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.sdf_enc_to_weight_head
         )
         self.weight_to_weight_head = (
             config.FILTERING_MODEL.CONV3D_MODEL.weights_to_weight_head
@@ -27,26 +23,17 @@ class FilteringNet(nn.Module):
         )
         self.activation = eval(config.FILTERING_MODEL.CONV3D_MODEL.activation)
         self.n_features = config.FEATURE_MODEL.n_features
-        self.residual_learning = (
-            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.residual_learning
-        )
-        self.use_refinement = config.FILTERING_MODEL.CONV3D_MODEL.use_refinement
         self.alpha_supervision = config.LOSS.alpha_supervision
         self.alpha_single_sensor_supervision = (
             config.LOSS.alpha_single_sensor_supervision
         )
-        bias = config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.bias
         bias_wn = config.FILTERING_MODEL.CONV3D_MODEL.bias
-        self.refinement_model = (
-            config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.refinement_model
-        )
         self.outlier_channel = config.FILTERING_MODEL.CONV3D_MODEL.outlier_channel
 
         # alpha layer
         if self.weighting_complexity == "1layer":
             self.weight_decoder = nn.Conv3d(
-                16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                + len(self.sensors)
+                len(self.sensors)
                 * (
                     self.sdf_to_weight_head
                     + self.n_features * self.feature_to_weight_head
@@ -60,8 +47,7 @@ class FilteringNet(nn.Module):
         elif self.weighting_complexity == "2layer":
             self.weight_decoder = nn.Sequential(
                 nn.Conv3d(
-                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                    + len(self.sensors)
+                    len(self.sensors)
                     * (
                         self.sdf_to_weight_head
                         + self.n_features * self.feature_to_weight_head
@@ -79,8 +65,7 @@ class FilteringNet(nn.Module):
         elif self.weighting_complexity == "3layer":
             self.weight_decoder = nn.Sequential(
                 nn.Conv3d(
-                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                    + len(self.sensors)
+                    len(self.sensors)
                     * (
                         self.sdf_to_weight_head
                         + self.n_features * self.feature_to_weight_head
@@ -101,8 +86,7 @@ class FilteringNet(nn.Module):
         elif self.weighting_complexity == "4layer":
             self.weight_decoder = nn.Sequential(
                 nn.Conv3d(
-                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                    + len(self.sensors)
+                    len(self.sensors)
                     * (
                         self.sdf_to_weight_head
                         + self.n_features * self.feature_to_weight_head
@@ -124,8 +108,7 @@ class FilteringNet(nn.Module):
         elif self.weighting_complexity == "5layer":
             self.weight_decoder = nn.Sequential(
                 nn.Conv3d(
-                    16 * len(self.sensors) * self.sdf_enc_to_weight_head
-                    + len(self.sensors)
+                    len(self.sensors)
                     * (
                         self.sdf_to_weight_head
                         + self.n_features * self.feature_to_weight_head
@@ -171,8 +154,6 @@ class FilteringNet(nn.Module):
 
         for k, sensor_ in enumerate(self.config.DATA.input):
             inp = None
-            if self.sdf_enc_to_weight_head:
-                inp = enc[sensor_]
             if self.sdf_to_weight_head:
                 if inp is None:
                     inp = neighborhood[sensor_][:, 0, :, :, :].unsqueeze(1)

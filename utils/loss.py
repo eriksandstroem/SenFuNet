@@ -27,17 +27,6 @@ class Fusion_TranslationLoss(torch.nn.Module):
 
         l = None
 
-        if self.refinement_loss:
-            est_grid_dict = dict()
-            init = dict()
-            for sensor_ in self.sensors:
-                est_grid_dict[sensor_] = output["filtered_output"][
-                    "tsdf_filtered_grid"
-                ]["tsdf_" + sensor_]
-                init[sensor_] = output["filtered_output"]["tsdf_filtered_grid"][
-                    sensor_ + "_init"
-                ]
-
         if "filtered_output" in output:
             target_grid = output["filtered_output"]["tsdf_target_grid"]
             est_grid = output["filtered_output"]["tsdf_filtered_grid"]["tsdf"]

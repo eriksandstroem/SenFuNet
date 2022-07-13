@@ -170,10 +170,6 @@ class Filter_Pipeline(torch.nn.Module):
             sensor_weighting_local_grid = torch.cat(
                 (sensor_weighting_local_grid, sensor_weighting_local_grid), dim=0
             )
-        if self.config.FILTERING_MODEL.CONV3D_MODEL.use_refinement:
-            tsdf_refined_local_grid = dict()
-            for sensor_ in self.config.DATA.input:
-                tsdf_refined_local_grid[sensor_] = torch.zeros_like(filtered_local_grid)
 
         # traverse the local grid, extracting chunks from the local grid to feed to the
         # filtering network one at a time.
@@ -253,27 +249,6 @@ class Filter_Pipeline(torch.nn.Module):
                             int(chunk_size / 4) : -int(chunk_size / 4),
                         ]
 
-                    if self.config.FILTERING_MODEL.CONV3D_MODEL.use_refinement:
-                        for sensor_ in self.config.DATA.input:
-                            tsdf_refined = (
-                                sub_filter_dict["tsdf_" + sensor_].cpu().detach()
-                            )
-                            tsdf_refined_local_grid[sensor_][
-                                moving_bbox[0, 0]
-                                + int(chunk_size / 4) : moving_bbox[0, 1]
-                                - int(chunk_size / 4),
-                                moving_bbox[1, 0]
-                                + int(chunk_size / 4) : moving_bbox[1, 1]
-                                - int(chunk_size / 4),
-                                moving_bbox[2, 0]
-                                + int(chunk_size / 4) : moving_bbox[2, 1]
-                                - int(chunk_size / 4),
-                            ] = tsdf_refined[
-                                int(chunk_size / 4) : -int(chunk_size / 4),
-                                int(chunk_size / 4) : -int(chunk_size / 4),
-                                int(chunk_size / 4) : -int(chunk_size / 4),
-                            ]
-
                     sub_tsdf = sub_filter_dict["tsdf"].cpu().detach()
 
                     del sub_filter_dict
@@ -337,34 +312,6 @@ class Filter_Pipeline(torch.nn.Module):
             ] = -1
         del sensor_weighting_local_grid
 
-        if self.config.FILTERING_MODEL.CONV3D_MODEL.use_refinement:
-            for sensor_ in self.config.DATA.input:
-                refined_local_grid = tsdf_refined_local_grid[sensor_][
-                    int(chunk_size / 4) : -int(chunk_size / 4) - pad_x,
-                    int(chunk_size / 4) : -int(chunk_size / 4) - pad_y,
-                    int(chunk_size / 4) : -int(chunk_size / 4) - pad_z,
-                ]
-
-                database.tsdf_refined[sensor_][scene].volume[
-                    bbox[0, 0] : bbox[0, 1],
-                    bbox[1, 0] : bbox[1, 1],
-                    bbox[2, 0] : bbox[2, 1],
-                ] = refined_local_grid.numpy().squeeze()
-
-                # I write to all voxels in the local grid, even the uninitialized, but here I replace the uninitialized.
-                uninit_sensor_indices = database.fusion_weights[sensor_][scene] == 0
-                uninit_sensor_indices = np.transpose(
-                    uninit_sensor_indices.nonzero()
-                ).astype(np.int16)
-
-                database.tsdf_refined[sensor_][scene].volume[
-                    uninit_sensor_indices[:, 0],
-                    uninit_sensor_indices[:, 1],
-                    uninit_sensor_indices[:, 2],
-                ] = self.config.DATA.init_value
-
-            del tsdf_refined_local_grid
-
         filtered_local_grid = filtered_local_grid[
             int(chunk_size / 4) : -int(chunk_size / 4) - pad_x,
             int(chunk_size / 4) : -int(chunk_size / 4) - pad_y,
@@ -405,8 +352,7 @@ class Filter_Pipeline(torch.nn.Module):
             if sensor_ == sensor:
                 in_dir = {"tsdf": input_dir["tsdf"], "weights": input_dir["weights"]}
                 if (
-                    self.config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
-                    or self.config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
+                    self.config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
                 ):
                     in_dir["features"] = input_dir["features"]
             else:
@@ -415,8 +361,7 @@ class Filter_Pipeline(torch.nn.Module):
                     "weights": database[scene_id]["weights_" + sensor_],
                 }
                 if (
-                    self.config.FILTERING_MODEL.CONV3D_MODEL.REFINEMENT.features_to_sdf_enc
-                    or self.config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
+                    self.config.FILTERING_MODEL.CONV3D_MODEL.features_to_weight_head
                 ):
                     in_dir["features"] = database[scene_id]["features_" + sensor_]
 

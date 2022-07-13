@@ -20,7 +20,6 @@ class Database(Dataset):
         self.n_features = config.n_features  # this includes the append_depth option
         self.sensors = config.input
         self.test_mode = config.test_mode
-        self.refinement = config.refinement
         self.alpha_supervision = config.alpha_supervision
         self.outlier_channel = config.outlier_channel
 
@@ -28,15 +27,11 @@ class Database(Dataset):
         self.tsdf = {}
         self.fusion_weights = {}
         self.features = {}
-        if self.refinement and config.test_mode:
-            self.tsdf_refined = {}
 
         for sensor_ in config.input:
             self.tsdf[sensor_] = {}
             self.fusion_weights[sensor_] = {}
             self.features[sensor_] = {}
-            if self.refinement and config.test_mode:
-                self.tsdf_refined[sensor_] = {}
 
         self.filtered = {}  # grid to store the fused sdf prediction
         if config.test_mode:
@@ -66,14 +61,6 @@ class Database(Dataset):
                     bbox=bbox,
                     initial_value=self.initial_value,
                 )
-
-                if self.refinement and config.test_mode:
-                    self.tsdf_refined[sensor][s] = VoxelGrid(
-                        voxel_size,
-                        volume=None,
-                        bbox=bbox,
-                        initial_value=self.initial_value,
-                    )
 
             self.filtered[s] = VoxelGrid(
                 voxel_size,
@@ -114,11 +101,6 @@ class Database(Dataset):
             sample["tsdf_" + sensor_] = self.tsdf[sensor_][item].volume
             sample["weights_" + sensor_] = self.fusion_weights[sensor_][item]
             sample["features_" + sensor_] = self.features[sensor_][item].volume
-
-            if self.refinement and self.test_mode:
-                sample["tsdf_refined_" + sensor_] = self.tsdf_refined[sensor_][
-                    item
-                ].volume
 
         if self.transform is not None:
             sample = self.transform(sample)
