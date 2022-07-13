@@ -257,8 +257,7 @@ def extract_indices(indices, mask):
 
 def insert_values(values, indices, volume):
     """Method to insert values back into volume."""
-    # print(volume.dtype)
-    # print(values.dtype)
+
     if volume.dim() == 3:
         volume = volume.half()
         volume[indices[:, 0], indices[:, 1], indices[:, 2]] = values.half()
