@@ -191,3 +191,20 @@ TESTING.use_outlier_filter: False
 FILTERING_MODEL.model: 'routedfusion'</code></pre>
 4. Note that to avoid excessive outliers from the RoutedFusion model, to produce the mesh from the predicted TSDF grid, we apply the nearest neighbor mask from the nearest neighbor extraction strategy and not the trilinear interpolation strategy. This requires loading a separate weight grid from a model of the same sensor suite but using nearest neighbor extraction. Set the name of the config variable <pre><code>TESTING.routedfusion_nn_model:</code></pre> Note that this requires testing and saving the grid of this model first.
 5. Test using the test_fusion.py script with the config as input.
+
+## Acknowledgement
+We adapted some code from [routedfusion](https://github.com/weders/RoutedFusion). Thanks for making this code publicly available.
+
+## Citation
+If you find our code or paper useful, please cite
+```bibtex
+@inproceedings{sandstrom2022learning,
+  title={Learning Online Multi-Sensor Depth Fusion},
+  author={Sandstr{\"o}m, Erik and Oswald, Martin R and Kumar, Suryansh and Weder, Silvan and Yu, Fisher and Sminchisescu, Cristian and Van Gool, Luc},
+  booktitle = {Proceedings of the European Conference on Computer Vision (ECCV)},
+  year={2022}
+}
+
+```
+## Contact
+Contact [Erik Sandström](mailto:erik.sandstrm@gmail.com) for questions, comments and reporting bugs.
