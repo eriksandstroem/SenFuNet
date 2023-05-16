@@ -482,27 +482,6 @@ class Filter_Pipeline(torch.nn.Module):
                 bbox[2, 0] = bbox_input[2, 0]
                 bbox[2, 1] = bbox_input[2, 1]
 
-            # make sure that each dimension of the bounding box is divisible by 2
-            # this was only necessary when I used the Unet 3D nets as weighting networks.
-            if (
-                bbox[0, 1] - bbox[0, 0]
-            ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth != 0:
-                bbox[0, 1] -= (
-                    bbox[0, 1] - bbox[0, 0]
-                ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth
-            if (
-                bbox[1, 1] - bbox[1, 0]
-            ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth != 0:
-                bbox[1, 1] -= (
-                    bbox[1, 1] - bbox[1, 0]
-                ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth
-            if (
-                bbox[2, 1] - bbox[2, 0]
-            ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth != 0:
-                bbox[2, 1] -= (
-                    bbox[2, 1] - bbox[2, 0]
-                ) % 2 ** self.config.FILTERING_MODEL.CONV3D_MODEL.network_depth
-
             # compute a mask determining what indices should be used in the loss out of all indices in the bbox. Note
             # that the bbox is not the full min bounding volume of the indices, but only a random extraction
             # according to the chunk size. Thus, we need to select the valid indices within the chunk volume. We don't necessarily need to do this, since we can also used indices that were not updated by the feature net to train the weighting network, but for training consistency, I train both networks on the exact same indices.
