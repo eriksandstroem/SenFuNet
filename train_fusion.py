@@ -522,10 +522,10 @@ def train_fusion(args):
                 )
 
                 for sensor_ in config.DATA.input:
-                    wandb.log({"Val/mse " + sensor_: val_eval[sensor]["mse"]})
-                    wandb.log({"Val/acc " + sensor_: val_eval[sensor]["acc"]})
-                    wandb.log({"Val/iou " + sensor_: val_eval[sensor]["iou"]})
-                    wandb.log({"Val/mad " + sensor_: val_eval[sensor]["mad"]})
+                    wandb.log({"Val/mse " + sensor_: val_eval[sensor_]["mse"]})
+                    wandb.log({"Val/acc " + sensor_: val_eval[sensor_]["acc"]})
+                    wandb.log({"Val/iou " + sensor_: val_eval[sensor_]["iou"]})
+                    wandb.log({"Val/mad " + sensor_: val_eval[sensor_]["mad"]})
 
                 wandb.log({"Val/mse fused": val_eval_fused["mse"]})
                 wandb.log({"Val/acc fused": val_eval_fused["acc"]})
