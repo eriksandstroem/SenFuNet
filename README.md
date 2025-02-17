@@ -39,12 +39,12 @@ this codebase, there is also the option to set the path to the tranformation fol
 are stored which aligns the ground truth mesh and the predicted mesh before F-score evaluation.
 
 ### Replica
-Train Dataset: [**room 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/room_0.tar), 
-[**room 2**](https://data.vision.ee.ethz.ch/esandstroem/replica/room_2.tar), [**office 3**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_3.tar), [**office 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_1.tar), [**apartment 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/apartment_1.tar), [**frl apartment 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/frl_apartment_0.tar)
+Train Dataset: [**room 0**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/room_0.tar?sequence=9&isAllowed=y), 
+[**room 2**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/room_2.tar?sequence=10&isAllowed=y), [**office 3**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/office_3.tar?sequence=4&isAllowed=y), [**office 1**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/office_1.tar?sequence=7&isAllowed=y), [**apartment 1**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/apartment_1.tar?sequence=8&isAllowed=y), [**frl apartment 0**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/frl_apartment_0.tar?sequence=5&isAllowed=y)
 
-Validation Dataset: [**frl apartment 1**](https://data.vision.ee.ethz.ch/esandstroem/replica/frl_apartment_1.tar)
+Validation Dataset: [**frl apartment 1**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/frl_apartment_1.tar?sequence=6&isAllowed=y)
 
-Test Dataset: [**office 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_0.tar), [**hotel 0**](https://data.vision.ee.ethz.ch/esandstroem/replica/hotel_0.tar), [**office 4**](https://data.vision.ee.ethz.ch/esandstroem/replica/office_4.tar)
+Test Dataset: [**office 0**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/office_0.tar?sequence=3&isAllowed=y), [**hotel 0**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/hotel_0.tar?sequence=11&isAllowed=y), [**office 4**](https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/721215/office_4.tar?sequence=12&isAllowed=y)
 
 Important: Store your dataset at a location specified in the config variable <pre><code>DATA.root_dir</code></pre> of the <pre><code>ROOT_FOLDER/configs/fusion/replica.yaml</code></pre> config file.
 
